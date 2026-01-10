@@ -63,14 +63,11 @@ function App() {
     setState('uploading');
 
     const formData = new FormData();
-    formData.append('file', blob, 'recording.webm');
-    formData.append('metadata', JSON.stringify({
-      facility_id: 'poc-001',
-      recorded_at: new Date().toISOString()
-    }));
+    formData.append('audio', blob, 'recording.webm');  // Changed from 'file' to 'audio'
+    formData.append('facility_id', '00000000-0000-0000-0000-000000000001');  // Test facility ID
+    formData.append('child_id', '00000000-0000-0000-0000-000000000002');  // Test child ID
 
     try {
-      // TODO: Replace with actual API endpoint
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8052';
       const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
@@ -85,10 +82,11 @@ function App() {
       }
 
       const data = await response.json();
-      setState('processing');
+      console.log('Upload successful:', data);
 
-      // Poll for result
-      pollForResult(data.job_id);
+      // For Step 1, just show success (no processing yet)
+      setState('done');
+      setTranscription(`アップロード成功！\nセッションID: ${data.session_id}\nS3パス: ${data.s3_path}`);
     } catch (error) {
       console.error('Upload error:', error);
       setState('idle');
@@ -97,39 +95,10 @@ function App() {
     }
   };
 
-  const pollForResult = async (jobId: string) => {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8052';
-
-    const checkResult = async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/result/${jobId}`, {
-          headers: {
-            'X-API-Token': 'watchme-b2b-poc-2025'
-          }
-        });
-
-        const data = await response.json();
-
-        if (data.status === 'done') {
-          setTranscription(data.transcription || '文字起こし結果がありません');
-          setState('done');
-          setRecordingTime(0);
-        } else if (data.status === 'error') {
-          throw new Error('Processing failed');
-        } else {
-          // Continue polling
-          setTimeout(checkResult, 2000);
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-        setState('idle');
-        setRecordingTime(0);
-        alert('処理に失敗しました。もう一度お試しください。');
-      }
-    };
-
-    checkResult();
-  };
+  // Temporarily unused - will be implemented in Step 2
+  // const pollForResult = async (jobId: string) => {
+  //   // Will be implemented when we add transcription processing
+  // };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

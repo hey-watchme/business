@@ -1,166 +1,216 @@
 # 次のセッション用メモ
 
-最終更新: 2026-01-10
+最終更新: 2026-01-11
 
-## 🎯 次のセッションでやること
+## 🚨 現在の課題（優先度順）
 
-**フロントエンド実装（録音→アップロード→DB保存）**
+### 🔴 Issue 1: Vercel環境変数が反映されていない
+
+**問題**:
+- フロントエンド（Vercel）が `localhost:8052` に接続しようとしてエラー
+- `VITE_API_URL` 環境変数がビルドに含まれていない
+
+**原因**:
+- Vercelで環境変数を設定したが、その**後**に再デプロイしていない
+- 環境変数はビルド時に埋め込まれるため、設定後の再デプロイが必須
+
+**解決方法**:
+1. ✅ **完了**: Vercel Project Settings → Environment Variablesで `VITE_API_URL=https://api.hey-watch.me/business` を設定済み
+2. ⏳ **待機中**: 最新のデプロイ（commit: 9b3d1a9）が完了するまで待つ
+3. ✅ **確認方法**: デプロイ完了後、https://business-f914.vercel.app で録音テスト
+
+**確認コマンド**:
+```bash
+# Vercelデプロイ状況確認
+# → Vercel Dashboard > Deployments タブで確認
+
+# デプロイ完了後、環境変数が反映されているか確認
+curl -s https://business-f914.vercel.app/ | grep -i "api.hey-watch.me" && echo "環境変数反映済み" || echo "まだ反映されていない"
+```
 
 ---
 
-## 🚀 フロントエンド実装タスク
+### 🟡 Issue 2: カスタムドメイン設定
 
-### 0. Vercelデプロイ設定（最初に実施）
+**状況**:
+- ✅ Vercel自動生成URL: `business-f914.vercel.app` → 動作OK
+- ✅ DNS設定: `business.hey-watch.me` → `103e6ba9ee1a92b6.vercel-dns-017.com` (CNAME) → 設定済み
+- ⏳ SSL証明書: Vercel側で発行中（通常5-10分）
 
-**Vercel設定**:
-1. https://vercel.com にアクセス
-2. GitHub連携: `hey-watchme/business` リポジトリを選択
-3. Framework Preset: `Vite` を選択
-4. Root Directory: `frontend`
-5. 環境変数設定:
-   ```
-   VITE_API_URL=https://api.hey-watch.me/business
-   ```
-6. Deploy
-
-**カスタムドメイン設定**:
-1. Vercelプロジェクト > Settings > Domains
-2. `business.hey-watch.me` を追加
-3. Vercelが提示するDNS設定をメモ（例: `cname.vercel-dns.com`）
-
-**Cloudflare DNS設定**:
-1. https://dash.cloudflare.com にアクセス
-2. `hey-watch.me` ドメインを選択
-3. DNS > Records > Add record
-   - Type: `CNAME`
-   - Name: `business`
-   - Target: `cname.vercel-dns.com`（Vercelが提示した値）
-   - Proxy status: `DNS only`（⚪グレー雲）← **重要**
-4. Save
-
-**確認**:
+**確認方法**:
 ```bash
-# DNS伝播確認（数分待つ）
-host business.hey-watch.me
+# DNS確認
+dig business.hey-watch.me @1.1.1.1 +short
+# → 103e6ba9ee1a92b6.vercel-dns-017.com. が返ればOK
 
-# 期待される出力: business.hey-watch.me is an alias for cname.vercel-dns.com.
+# HTTPSアクセス確認
+curl -I https://business.hey-watch.me
+# → HTTP/2 200 が返ればOK
 ```
-
-**アクセス**: https://business.hey-watch.me
 
 ---
 
-### 1. ローカル起動
+### 🟢 Issue 3: バックエンドCORS設定
 
-```bash
-cd /Users/kaya.matsumoto/projects/watchme/business/frontend
-npm install
-npm run dev
-# → http://localhost:5174/
-```
+**状況**:
+- ✅ `business.hey-watch.me` をCORS許可リストに追加済み
+- ✅ バックエンドデプロイ済み（commit: 856a98f）
 
-### 2. 環境変数設定
-
-```bash
-# frontend/.env
-VITE_API_URL=https://api.hey-watch.me/business
-```
-
-### 3. 録音機能テスト
-
-**手順**:
-1. ブラウザで http://localhost:5174/ を開く
-2. 録音ボタンをクリック
-3. 1分程度話す
-4. 停止ボタンをクリック
-5. アップロードボタンをクリック
-
-**確認ポイント**:
-- ブラウザのコンソールでエラーがないか
-- Networkタブで `/api/upload` リクエストが成功しているか（200 OK）
-
-### 4. curlでアップロードテスト
-
-```bash
-cd /Users/kaya.matsumoto/projects/watchme/business
-echo "test audio" > test.webm
-
-curl -X POST https://api.hey-watch.me/business/api/upload \
-  -H "X-API-Token: watchme-b2b-poc-2025" \
-  -F "audio=@test.webm" \
-  -F "facility_id=00000000-0000-0000-0000-000000000001" \
-  -F "child_id=00000000-0000-0000-0000-000000000002"
-```
-
-**期待される出力**:
-```json
-{
-  "success": true,
-  "session_id": "uuid-here",
-  "s3_path": "recordings/...",
-  "message": "Audio uploaded successfully"
-}
-```
-
-### 5. S3確認
-
-```bash
-aws s3 ls s3://watchme-business/recordings/ --recursive --region ap-southeast-2
-```
-
-### 6. DB確認
-
-Supabaseダッシュボード:
-- https://supabase.com/dashboard/project/qvtlwotzuzbavrzqhyvt
-- テーブル: `business_interview_sessions`
-- 確認: 新しいレコードが作成されているか
-
----
-
-## ✅ 完了済み（前回のセッション）
-
-### バックエンドAPI
-- FastAPI実装完了（`backend/app.py`）
-- S3アップロード機能
-- Supabase DB保存機能
-- エンドポイント: `GET /health`, `POST /api/upload`, `GET /api/sessions/{session_id}`
-
-### デプロイ
-- GitHub Actions CI/CD設定完了
-- ECRリポジトリ作成（`watchme-business`）
-- EC2デプロイ成功（ポート8052）
-- Nginx設定追加（`/business/`）
-
-### 動作確認
+**確認済み**:
 ```bash
 curl https://api.hey-watch.me/business/health
-# → {"status":"healthy","service":"watchme-business-api","s3_bucket":"watchme-business","supabase_connected":true}
+# → {"status":"healthy",...} OK
 ```
+
+---
+
+## 📋 次のセッションでやること
+
+### 1. デプロイ完了確認（最優先）
+
+```bash
+# Vercelダッシュボードで確認
+# Deployments タブ → 最新デプロイが "Ready" になっているか
+
+# 完了後、録音テスト
+# https://business-f914.vercel.app または https://business.hey-watch.me
+```
+
+### 2. 録音機能の動作確認
+
+**テスト手順**:
+1. ブラウザで https://business-f914.vercel.app を開く
+2. ブラウザの開発者ツール（F12）→ **Network**タブを開く
+3. 「🎤 録音開始」をクリック
+4. マイクアクセスを許可
+5. 数秒話す
+6. 「⬛ 録音停止」をクリック
+7. **Networkタブ**で `/api/upload` リクエストを確認
+
+**期待される結果**:
+- Network: `POST https://api.hey-watch.me/business/api/upload` → `200 OK`
+- 画面: 「アップロード成功！」メッセージ
+
+**エラーが出た場合の確認ポイント**:
+```bash
+# 1. Consoleタブのエラーメッセージ
+# 2. Networkタブの失敗したリクエスト
+#    - Status code（401, 422, 500など）
+#    - Response body（エラー詳細）
+#    - Request payload（送信データ）
+```
+
+### 3. S3 & DB確認
+
+```bash
+# S3にファイルがアップロードされているか
+aws s3 ls s3://watchme-business/recordings/ --recursive --region ap-southeast-2
+
+# Supabaseでレコードが作成されているか
+# → https://supabase.com/dashboard/project/qvtlwotzuzbavrzqhyvt
+# → business_interview_sessions テーブル
+```
+
+---
+
+## ✅ 完了済み（今回のセッション）
+
+### Vercelデプロイ設定
+- ✅ GitHubリポジトリ連携（`hey-watchme/business`）
+- ✅ Root Directory設定（`frontend`）
+- ✅ TypeScript設定修正（`types: ["vite/client", "node"]`）
+- ✅ 環境変数設定（`VITE_API_URL`）
+- ✅ ビルド成功
+
+### Cloudflare DNS設定
+- ✅ `business.hey-watch.me` → `103e6ba9ee1a92b6.vercel-dns-017.com` (CNAME)
+- ✅ Proxy status: DNS only（⚪グレー雲）
+
+### バックエンドCORS修正
+- ✅ `business.hey-watch.me` を許可リストに追加
+- ✅ デプロイ成功
+
+### フロントエンド実装
+- ✅ 録音UI実装
+- ✅ S3アップロード機能
+- ✅ 環境変数対応
 
 ---
 
 ## 🔧 現在の構成
 
-**フロントエンド**: `https://business.hey-watch.me` (Vercel)
+**フロントエンド**:
+- Vercel URL: `https://business-f914.vercel.app`
+- カスタムドメイン: `https://business.hey-watch.me`（設定中）
+- 環境変数: `VITE_API_URL=https://api.hey-watch.me/business`
 
-**API**: `https://api.hey-watch.me/business/`
+**バックエンド**:
+- API: `https://api.hey-watch.me/business/`
+- EC2 コンテナ: `watchme-business-api` (ポート8052)
+- CORS: `localhost:5173`, `localhost:5174`, `*.vercel.app`, `business.hey-watch.me`
 
-**EC2**:
-- コンテナ: `watchme-business-api`
-- ポート: 8052
-- ディレクトリ: `/home/ubuntu/watchme-business-api/`
+**ストレージ**:
+- S3: `watchme-business` (ap-southeast-2)
+- Supabase: プロジェクト `qvtlwotzuzbavrzqhyvt`
 
-**S3**:
-- バケット: `watchme-business`
-- リージョン: `ap-southeast-2` (Sydney)
+---
 
-**Supabase**:
-- プロジェクト: `qvtlwotzuzbavrzqhyvt`
-- テーブル:
-  - `business_interview_sessions` - 録音セッション管理
-  - `business_transcriptions` - 文字起こし結果（将来）
-  - `business_support_plans` - 生成された計画書（将来）
-  - `business_api_logs` - APIログ
+## 🐛 トラブルシューティング
+
+### 環境変数が反映されない場合
+
+**症状**: フロントエンドが `localhost:8052` に接続しようとする
+
+**解決方法**:
+```bash
+# 1. Vercel環境変数を確認
+# Project Settings → Environment Variables
+# VITE_API_URL が設定されているか確認
+
+# 2. 再デプロイ（キャッシュなし）
+# Vercel Dashboard → Deployments → 最新デプロイの ... → Redeploy
+# ✅ "Use existing Build Cache" のチェックを外す
+
+# 3. GitHubから再デプロイ
+git commit --allow-empty -m "chore: force redeploy"
+git push origin main
+```
+
+### 録音時にエラーが出る場合
+
+**422 Unprocessable Entity**:
+- フォームデータのフィールド名が間違っている
+- 期待: `audio`, `facility_id`, `child_id`
+- ブラウザのNetworkタブ → Payload で確認
+
+**400 Bad Request "File must be audio format"**:
+- Content-Type が `audio/*` でない
+- ブラウザのNetworkタブ → Headers → Request Payload で確認
+
+**401 Unauthorized**:
+- APIトークンが間違っている
+- 期待: `X-API-Token: watchme-b2b-poc-2025`
+
+---
+
+## 💡 よく使うコマンド
+
+```bash
+# Vercelデプロイ確認
+# → Vercel Dashboard > Deploymentsで確認
+
+# バックエンドAPI確認
+curl https://api.hey-watch.me/business/health
+
+# DNS確認
+dig business.hey-watch.me @1.1.1.1 +short
+
+# S3確認
+aws s3 ls s3://watchme-business/recordings/ --recursive --region ap-southeast-2
+
+# バックエンドログ
+ssh -i ~/watchme-key.pem ubuntu@3.24.16.82 "docker logs watchme-business-api --tail 50"
+```
 
 ---
 
@@ -171,82 +221,11 @@ curl https://api.hey-watch.me/business/health
 | 企画・設計 | 100% | ✅ 完了 |
 | インフラ構築 | 100% | ✅ 完了 |
 | バックエンドAPI | 100% | ✅ 完了・稼働中 |
-| デプロイ環境 | 100% | ✅ 完了 |
-| Nginx設定 | 100% | ✅ 完了 |
-| **フロントエンド** | **0%** | **🚧 次のタスク** |
-| AI連携 | 0% | ⏸️ 未着手 |
+| フロントエンド構築 | 90% | 🚧 Vercel再デプロイ待ち |
+| **Step 1: 録音→S3→DB** | **90%** | **🚧 動作確認待ち** |
+| Step 2: Transcription | 0% | ⏸️ 未着手 |
+| Step 3: GPT統合 | 0% | ⏸️ 未着手 |
+| Step 4: UI表示 | 0% | ⏸️ 未着手 |
+| Step 5: Excel/PDF出力 | 0% | ⏸️ 未着手 |
 
-**全体進捗**: 約60%
-
----
-
-## 💡 コマンド集
-
-```bash
-# API健全性確認
-curl https://api.hey-watch.me/business/health
-
-# EC2接続
-ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
-
-# コンテナログ確認
-ssh -i ~/watchme-key.pem ubuntu@3.24.16.82 "docker logs watchme-business-api --tail 50"
-
-# S3確認
-aws s3 ls s3://watchme-business/recordings/ --recursive --region ap-southeast-2
-
-# デプロイ状況確認
-gh run list --repo hey-watchme/business --limit 3
-
-# フロントエンドローカル起動
-cd /Users/kaya.matsumoto/projects/watchme/business/frontend
-npm run dev
-```
-
----
-
-## ⚠️ トラブルシューティング
-
-### フロントエンドで CORS エラーが出る場合
-
-1. **APIのCORS設定確認**:
-   ```bash
-   curl -X OPTIONS https://api.hey-watch.me/business/api/upload \
-     -H "Origin: http://localhost:5174" \
-     -H "Access-Control-Request-Method: POST"
-   ```
-
-2. **Nginx設定確認**:
-   ```bash
-   ssh ubuntu@3.24.16.82 "grep -A 5 'CORS' /etc/nginx/sites-available/api.hey-watch.me | grep -A 5 'business'"
-   ```
-
-### アップロードが失敗する場合
-
-1. **APIトークン確認**:
-   ```bash
-   # backend/app.py の API_TOKEN を確認
-   # フロントエンドのリクエストヘッダーに "X-API-Token: watchme-b2b-poc-2025" が含まれているか
-   ```
-
-2. **S3アクセス権限確認**:
-   ```bash
-   ssh ubuntu@3.24.16.82 "docker exec watchme-business-api printenv | grep AWS"
-   ```
-
-3. **ログ確認**:
-   ```bash
-   docker logs watchme-business-api --tail 100
-   ```
-
----
-
-## 📝 参考情報
-
-**技術仕様**: `IMPLEMENTATION_PLAN.md`
-
-**DB定義**: `infrastructure/supabase/create_tables.sql`
-
-**CI/CD仕様**: `/Users/kaya.matsumoto/projects/watchme/server-configs/docs/CICD_STANDARD_SPECIFICATION.md`
-
-**既存のフロントエンドコード**: `frontend/src/App.tsx`
+**全体進捗**: 約70%
