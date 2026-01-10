@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  business-api:
+    image: 754724220380.dkr.ecr.ap-southeast-2.amazonaws.com/watchme-business:latest
+    container_name: watchme-business-api
+    ports:
+      - "127.0.0.1:8052:8052"  # localhost only (access via Nginx)
+    environment:
+      # Environment variables from .env file
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET=${S3_BUCKET}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - API_TOKEN=${API_TOKEN}
+      - PORT=8052
+    volumes:
+      # Log directory mount
+      - /var/log/watchme-business-api:/app/logs
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - watchme-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+networks:
+  watchme-network:
+    external: true
