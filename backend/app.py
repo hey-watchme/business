@@ -96,7 +96,7 @@ async def upload_audio(
                 'facility_id': facility_id,
                 'child_id': child_id,
                 's3_audio_path': s3_path,
-                'status': 'uploaded',
+                'status': 'completed',  # Changed from 'uploaded' to 'completed'
                 'duration_seconds': 0,  # To be calculated later
                 'recorded_at': datetime.now().isoformat()
             }).execute()
