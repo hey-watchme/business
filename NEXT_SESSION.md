@@ -10,6 +10,46 @@
 
 ## 🚀 フロントエンド実装タスク
 
+### 0. Vercelデプロイ設定（最初に実施）
+
+**Vercel設定**:
+1. https://vercel.com にアクセス
+2. GitHub連携: `hey-watchme/business` リポジトリを選択
+3. Framework Preset: `Vite` を選択
+4. Root Directory: `frontend`
+5. 環境変数設定:
+   ```
+   VITE_API_URL=https://api.hey-watch.me/business
+   ```
+6. Deploy
+
+**カスタムドメイン設定**:
+1. Vercelプロジェクト > Settings > Domains
+2. `business.hey-watch.me` を追加
+3. Vercelが提示するDNS設定をメモ（例: `cname.vercel-dns.com`）
+
+**Cloudflare DNS設定**:
+1. https://dash.cloudflare.com にアクセス
+2. `hey-watch.me` ドメインを選択
+3. DNS > Records > Add record
+   - Type: `CNAME`
+   - Name: `business`
+   - Target: `cname.vercel-dns.com`（Vercelが提示した値）
+   - Proxy status: `DNS only`（⚪グレー雲）← **重要**
+4. Save
+
+**確認**:
+```bash
+# DNS伝播確認（数分待つ）
+host business.hey-watch.me
+
+# 期待される出力: business.hey-watch.me is an alias for cname.vercel-dns.com.
+```
+
+**アクセス**: https://business.hey-watch.me
+
+---
+
 ### 1. ローカル起動
 
 ```bash
@@ -101,7 +141,9 @@ curl https://api.hey-watch.me/business/health
 
 ## 🔧 現在の構成
 
-**API URL**: `https://api.hey-watch.me/business/`
+**フロントエンド**: `https://business.hey-watch.me` (Vercel)
+
+**API**: `https://api.hey-watch.me/business/`
 
 **EC2**:
 - コンテナ: `watchme-business-api`
