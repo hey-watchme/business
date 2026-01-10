@@ -19,7 +19,12 @@ app = FastAPI(title="WatchMe Business API", version="1.0.0")
 # CORS settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "https://*.vercel.app"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://*.vercel.app",
+        "https://business.hey-watch.me"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
