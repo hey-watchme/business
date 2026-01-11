@@ -118,23 +118,13 @@ function App() {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8052';
 
-      // Generate presigned URL from S3
-      const s3Path = `test-audio/parent-interview-yoridokoro/${audioName}`;
-
-      // Fetch the audio file from S3 via presigned URL
-      // For now, we'll create a placeholder blob and upload it
-      // In production, you'd fetch from S3 presigned URL
-
-      const response = await fetch(`https://watchme-vault.s3.ap-southeast-2.amazonaws.com/${s3Path}`);
-      const blob = await response.blob();
-
-      // Upload to our API
+      // Call /api/upload-sample endpoint
       const formData = new FormData();
-      formData.append('audio', blob, audioName);
+      formData.append('sample_name', audioName);
       formData.append('facility_id', '00000000-0000-0000-0000-000000000001');
       formData.append('child_id', '00000000-0000-0000-0000-000000000002');
 
-      const uploadResponse = await fetch(`${API_URL}/api/upload`, {
+      const response = await fetch(`${API_URL}/api/upload-sample`, {
         method: 'POST',
         headers: {
           'X-API-Token': 'watchme-b2b-poc-2025'
@@ -142,11 +132,11 @@ function App() {
         body: formData
       });
 
-      if (!uploadResponse.ok) {
+      if (!response.ok) {
         throw new Error('Upload failed');
       }
 
-      const data = await uploadResponse.json();
+      const data = await response.json();
       console.log('Test audio upload successful:', data);
 
       setState('done');

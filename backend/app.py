@@ -138,6 +138,59 @@ async def upload_audio(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
+@app.post("/api/upload-sample", response_model=UploadResponse)
+async def upload_sample_audio(
+    sample_name: str = Form(...),
+    facility_id: str = Form(...),
+    child_id: str = Form(...),
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Upload test audio from samples/ folder to recordings/ and create session
+    """
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    try:
+        # Generate session ID and destination S3 path
+        session_id = str(uuid.uuid4())
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        dest_s3_path = f"recordings/{facility_id}/{child_id}/{timestamp}/{session_id}.wav"
+
+        # Source path in samples folder
+        source_s3_path = f"samples/{sample_name}"
+
+        # Copy from samples/ to recordings/
+        copy_source = {'Bucket': S3_BUCKET, 'Key': source_s3_path}
+        s3_client.copy_object(
+            CopySource=copy_source,
+            Bucket=S3_BUCKET,
+            Key=dest_s3_path
+        )
+
+        # Save to database
+        if supabase:
+            supabase.table('business_interview_sessions').insert({
+                'id': session_id,
+                'facility_id': facility_id,
+                'child_id': child_id,
+                's3_audio_path': dest_s3_path,
+                'status': 'completed',
+                'duration_seconds': 0,
+                'recorded_at': datetime.now().isoformat()
+            }).execute()
+
+        return UploadResponse(
+            success=True,
+            session_id=session_id,
+            s3_path=dest_s3_path,
+            message=f"Sample audio '{sample_name}' uploaded successfully"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sample upload failed: {str(e)}")
+
 @app.post("/api/transcribe", response_model=TranscribeResponse)
 async def transcribe_audio(
     request: TranscribeRequest,
