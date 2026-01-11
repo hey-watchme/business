@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 
 from services.asr_provider import DeepgramASRService
+from services.llm_providers import get_current_llm, CURRENT_PROVIDER, CURRENT_MODEL
 
 # Load environment variables
 load_dotenv()
@@ -61,6 +62,17 @@ class TranscribeResponse(BaseModel):
     processing_time: float
     confidence: float
     word_count: int
+    message: str
+
+class AnalyzeRequest(BaseModel):
+    session_id: str
+
+class AnalyzeResponse(BaseModel):
+    success: bool
+    session_id: str
+    summary: str
+    processing_time: float
+    model: str
     message: str
 
 @app.get("/health")
@@ -188,6 +200,106 @@ async def transcribe_audio(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+
+@app.post("/api/analyze", response_model=AnalyzeResponse)
+async def analyze_interview(
+    request: AnalyzeRequest,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Analyze interview transcription with LLM (POC: Synchronous)
+
+    Flow:
+    1. Get transcription from DB
+    2. Generate prompt
+    3. Call LLM (OpenAI GPT-4o)
+    4. Save result to DB
+    """
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        import time
+        start_time = time.time()
+
+        print(f"\nAnalyzing interview session: {request.session_id}")
+
+        # 1. Get session from DB
+        result = supabase.table('business_interview_sessions')\
+            .select('*')\
+            .eq('id', request.session_id)\
+            .single()\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = result.data
+        transcription = session.get('transcription')
+
+        if not transcription:
+            raise HTTPException(status_code=400, detail="Transcription not found. Please run /api/transcribe first.")
+
+        # 2. Generate prompt (POC: Simple summary)
+        prompt = f"""Please summarize the following parent interview content.
+
+Interview Content:
+{transcription}
+
+Please provide:
+1. Brief summary (2-3 sentences)
+2. Key points mentioned
+3. Child's current situation
+"""
+
+        # 3. Update DB status to 'analyzing'
+        supabase.table('business_interview_sessions').update({
+            'analysis_prompt': prompt,
+            'status': 'analyzing',
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', request.session_id).execute()
+
+        # 4. Call LLM
+        llm = get_current_llm()
+        print(f"Calling LLM: {llm.model_name}")
+
+        llm_response = llm.generate(prompt)
+
+        # 5. Update DB with result
+        supabase.table('business_interview_sessions').update({
+            'analysis_result': {'summary': llm_response},
+            'status': 'completed',
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', request.session_id).execute()
+
+        processing_time = time.time() - start_time
+        print(f"Analysis completed in {processing_time:.2f}s")
+
+        return AnalyzeResponse(
+            success=True,
+            session_id=request.session_id,
+            summary=llm_response,
+            processing_time=processing_time,
+            model=llm.model_name,
+            message="Analysis completed successfully"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Update DB with error
+        if supabase:
+            supabase.table('business_interview_sessions').update({
+                'status': 'failed',
+                'error_message': str(e),
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', request.session_id).execute()
+
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(

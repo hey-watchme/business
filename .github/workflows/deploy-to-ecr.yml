@@ -146,6 +146,7 @@ jobs:
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         API_TOKEN: ${{ secrets.API_TOKEN }}
         DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         echo "📝 Creating/Updating .env file on EC2..."
 
@@ -159,6 +160,7 @@ jobs:
           echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
           echo "API_TOKEN=${API_TOKEN}" >> .env
           echo "DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}" >> .env
+          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> .env
         ENDSSH
 
         ssh ${EC2_USER}@${EC2_HOST} "echo '✅ .env file created/updated successfully' && wc -l /home/ubuntu/watchme-business-api/.env"
