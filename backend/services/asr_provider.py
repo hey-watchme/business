@@ -7,7 +7,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DeepgramASRService:
-    """Deepgram Nova-2 ASR Service for Business API"""
+    """Deepgram ASR Service for Business API
+
+    Supported models:
+    - nova-2: Latest high-accuracy model (default)
+    - nova-3: Newest model (if available)
+    - whisper: OpenAI Whisper via Deepgram
+    """
 
     def __init__(self, model: str = "nova-2"):
         from deepgram import DeepgramClient
@@ -44,10 +50,13 @@ class DeepgramASRService:
             options = PrerecordedOptions(
                 model=self._model,
                 language="ja",  # Japanese
+                detect_language=False,  # Disable auto-detection (ja is specified)
                 punctuate=True,  # Auto punctuation
                 diarize=True,    # Speaker diarization
                 smart_format=True,  # Smart formatting (dates, numbers)
                 utterances=True,  # Utterance segmentation
+                paragraphs=True,  # Paragraph detection
+                filler_words=True,  # Detect filler words (um, uh, etc.)
             )
 
             # Call Deepgram API
@@ -91,14 +100,41 @@ class DeepgramASRService:
 
             transcript = alternatives[0].transcript
             confidence = alternatives[0].confidence
-            word_count = len(transcript.split()) if transcript else 0
+            word_count = len(transcript) if transcript else 0  # Character count for Japanese
+
+            # Extract utterances with speaker info
+            utterances = []
+            if hasattr(response.results, 'utterances') and response.results.utterances:
+                for utt in response.results.utterances:
+                    utterances.append({
+                        "start": round(utt.start, 2) if hasattr(utt, 'start') else 0,
+                        "end": round(utt.end, 2) if hasattr(utt, 'end') else 0,
+                        "confidence": round(utt.confidence, 2) if hasattr(utt, 'confidence') else 0,
+                        "transcript": utt.transcript if hasattr(utt, 'transcript') else "",
+                        "speaker": utt.speaker if hasattr(utt, 'speaker') else None,
+                    })
+
+            # Extract paragraphs
+            paragraphs = []
+            if hasattr(response.results, 'paragraphs') and response.results.paragraphs:
+                if hasattr(response.results.paragraphs, 'paragraphs'):
+                    for para in response.results.paragraphs.paragraphs:
+                        paragraphs.append({
+                            "start": round(para.start, 2) if hasattr(para, 'start') else 0,
+                            "end": round(para.end, 2) if hasattr(para, 'end') else 0,
+                            "transcript": para.text if hasattr(para, 'text') else "",
+                        })
 
             return {
                 "transcription": transcript,
                 "processing_time": round(processing_time, 2),
                 "confidence": round(confidence, 2),
                 "word_count": word_count,
-                "no_speech_detected": False
+                "utterances": utterances,
+                "paragraphs": paragraphs,
+                "speaker_count": len(set(u.get('speaker') for u in utterances if u.get('speaker') is not None)) if utterances else 0,
+                "no_speech_detected": False,
+                "model": self._model,
             }
 
         except Exception as e:
