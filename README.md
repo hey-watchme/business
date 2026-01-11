@@ -45,6 +45,31 @@ business/
 
 ---
 
+## ⚠️ ローカル開発環境について
+
+**現在、ローカルでのテストは不可**
+
+- ローカルDocker環境は未整備
+- フロントエンド⇔バックエンド間でCORSエラーが発生
+- **テスト・動作確認は本番環境（EC2）で実施すること**
+
+### 開発フロー
+
+1. コード修正（ローカル）
+2. 構文チェックのみ実施
+   ```bash
+   python3 -m py_compile backend/app.py
+   ```
+3. GitHub経由でデプロイ
+   ```bash
+   git push origin main
+   ```
+4. 本番環境で動作確認
+   - Frontend: https://business.hey-watch.me
+   - Backend: https://api.hey-watch.me/business
+
+---
+
 ## 🧪 テスト音源
 
 ### S3パス（watchme-vault バケット）
