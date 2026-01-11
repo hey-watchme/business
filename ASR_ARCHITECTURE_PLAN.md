@@ -185,28 +185,50 @@ categories = {
 }
 ```
 
-#### Phase 2: Google Speech-to-Text追加（調査完了・実装保留）
+#### Phase 2: Google Speech-to-Text追加（実装完了・話者分離不可により保留）
+
+##### 実装状況
 - ✅ **Google Cloud認証**: サービスアカウント作成、JSONキー生成完了
 - ✅ **プロバイダー実装**: `google_speech.py`作成完了
-- ⚠️ **課題発見**: 話者分離にはカスタムRecognizer事前作成が必要
-- 📝 **判明事項**:
-  - Chirp 2モデル: `us-central1`でGA利用可能
-  - `recognize()`メソッド: 話者分離未サポート
-  - 必要な手順: 事前にRecognizer作成 → 作成済みRecognizerを使用
+- ✅ **カスタムRecognizer作成**: `business-interview-recognizer`作成完了
+  ```bash
+  gcloud alpha ml speech recognizers create business-interview-recognizer \
+    --location=us-central1 \
+    --model=chirp_2 \
+    --language-codes=ja-JP
+  ```
+- ✅ **コード修正**: 作成済みRecognizerを使用するように修正完了
 
-**次回実装時のTODO**:
-1. カスタムRecognizer作成（gcloud CLIまたはConsole）
-   ```bash
-   gcloud speech recognizers create RECOGNIZER_ID \
-     --location=us-central1 \
-     --model=chirp_2 \
-     --language-codes=ja-JP \
-     --enable-speaker-diarization \
-     --min-speaker-count=1 \
-     --max-speaker-count=3
-   ```
-2. 作成したRecognizerを使った実装修正
-3. Deepgramとの精度・コスト比較
+##### 発見された制約（2026-01-12）
+
+**1. 話者分離（Diarization）の制約**
+- ❌ **chirp_2モデル**: 話者分離機能が**サポートされていない**
+  - エラー: `Recognizer does not support feature: speaker_diarization`
+  - Recognizer作成時に`--min-speaker-count`/`--max-speaker-count`を指定するとエラー
+  - リクエスト時に`diarization_config`を指定してもエラー
+
+- ❌ **latest_long/longモデル**: `us-central1`で日本語が**サポートされていない**
+  - エラー: `The language "ja-JP" is not supported by the model "latest_long" in the location named "us-central1"`
+
+**2. APIメソッドの制約**
+- ❌ **`recognize()`メソッド**: 60秒以上の音声が処理できない
+  - エラー: `Audio can be of a maximum of 60 seconds.`
+  - テスト音声（30秒）は処理可能だが、実際の用途（15分のインタビュー）では使用不可
+
+**3. 代替手段の制約**
+- `batch_recognize()`または`long_running_recognize()`が必要
+- しかし、これらのメソッドもRecognizerベースであり、話者分離は同様にサポートされていない可能性が高い
+
+##### 結論
+- **現時点では実装不可**
+- Google Cloud Speech-to-Text v2の`chirp_2`モデル（日本語対応）では、話者分離機能が提供されていない
+- 将来的にGoogleが話者分離機能を追加した場合、再度検討可能
+
+##### 現在の状態
+- ✅ Recognizer作成済み: `projects/587363366106/locations/us-central1/recognizers/business-interview-recognizer`
+- ✅ コード実装済み: `backend/services/asr_providers/google_speech.py`
+- ⚠️ **使用停止**: 話者分離が不可のため、現在は使用していない
+- 📦 **保存**: 将来の再検討のためコードは保持
 
 #### Phase 3: ダイアライゼーション活用
 1. 話者役割推定パイプライン
@@ -269,22 +291,108 @@ OPENAI_API_KEY=xxx
 - 新しいAPIは**必ず公式ドキュメントを先に読む**
 - エラーが続く場合は推測せず、ドキュメントに立ち返る
 
+---
+
+### 2026-01-12 午前: Google Speech話者分離検証 → 実装不可と判断
+
+**実施内容**:
+1. ✅ gcloud CLI alpha コンポーネントのインストール
+2. ✅ カスタムRecognizer作成（`business-interview-recognizer`）
+3. ✅ コード修正（Recognizer指定）
+4. ❌ 話者分離テスト → エラー（機能未サポート）
+5. ❌ 60秒制限エラー（実用不可）
+
+**判明した事実**:
+- Google Cloud Speech-to-Text v2の`chirp_2`モデルでは、日本語の話者分離が**サポートされていない**
+- `recognize()`メソッドは60秒制限があり、長時間音声（15分のインタビュー）には使用できない
+- 代替モデル（`latest_long`/`long`）は`us-central1`で日本語未サポート
+
+**決定事項**:
+- Google Speech-to-Textの実装は**保留**（話者分離が不可のため）
+- コードは保持（将来Googleが機能追加した場合に備えて）
+- 次は**Speechmatics**を試す
+
+---
+
+### 2026-01-12 午後: Speechmatics実装 → ほぼ完了（SSL証明書エラーのみ）
+
+**実施内容**:
+1. ✅ 正しいSDKのインストール（`speechmatics-batch`）
+2. ✅ プロバイダー実装完了（`speechmatics_provider.py`）
+3. ✅ 環境変数設定完了（APIキー: `5BDbDR6FO28R1ieD7J7KRAaxwcnBWdj6`）
+4. ✅ 新しいSDK（speechmatics-python-sdk）の仕様確認
+5. ⚠️ ローカルテストでSSL証明書エラー
+
+**実装の詳細**:
+- **SDK**: `speechmatics-batch` (新SDK、旧`speechmatics-python`は非推奨)
+- **ファイル**: `/Users/kaya.matsumoto/projects/watchme/business/backend/services/asr_providers/speechmatics_provider.py`
+- **設定**:
+  - 言語: `ja`
+  - Operating Point: `ENHANCED`
+  - Diarization: `speaker`（話者分離有効）
+  - Speaker Sensitivity: `0.5`
+
+**参考ドキュメント**:
+- `/Users/kaya.matsumoto/Desktop/Speechmatics` (README)
+- Batch APIサンプルコード（67-80行目）
+
+**現在の問題**:
+- ローカル環境でSSL証明書エラー: `[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain`
+- **原因**: Mac環境の証明書問題（Python環境固有）
+- **対策**: 本番環境（EC2）ではこの問題は発生しない可能性が高い
+
+**テスト音源**:
+- S3パス: `s3://watchme-business/samples/section001_raw.wav`（30秒、3.3MB）
+
+**次のアクション**:
+1. **本番環境でテスト**（推奨）
+   - EC2上でテストスクリプト実行
+   - SSL証明書問題は本番環境では発生しないはず
+
+2. **または、ローカルSSL証明書問題を解決**
+   ```bash
+   # Macの証明書問題の場合
+   /Applications/Python\ 3.12/Install\ Certificates.command
+   ```
+
+**次回セッションの開始手順**:
+```bash
+# 1. 本番環境にデプロイ
+cd /Users/kaya.matsumoto/projects/watchme/business/backend
+git add .
+git commit -m "feat: add Speechmatics ASR provider with speaker diarization"
+git push origin main
+
+# 2. GitHub Actionsでデプロイ確認
+gh run list --limit 1
+
+# 3. 本番環境でテスト
+ssh -i ~/watchme-key.pem ubuntu@3.24.16.82
+cd /home/ubuntu/watchme-business-api
+docker exec watchme-business-api python3 /path/to/test-speechmatics.py
+```
+
 ## 📝 次のアクション
 
 ### 優先度高
-1. **話者役割推定機能の実装**（Deepgramデータ活用）
+1. **Speechmatics実装・検証**（次のタスク）
+   - APIキー取得・認証設定
+   - プロバイダー実装（`speechmatics.py`）
+   - 話者分離（Diarization）対応確認
+   - 日本語長時間音声テスト
+
+2. **話者役割推定機能の実装**（Deepgramデータ活用）
    - LLM-miniで発話内容から役割推定（職員/母親/父親/子供）
    - 構造化対話の生成（【職員】【保護者】形式）
 
-2. **Google Speech-to-Text完全統合**（次回セッション）
-   - カスタムRecognizer作成
-   - 作成済みRecognizerを使った実装修正
-   - Deepgramとの精度・コスト比較
-
 ### 優先度中
 3. **プロバイダーマネージャー実装**
-   - 環境変数でDeepgram/Google切り替え
+   - 環境変数でDeepgram/Speechmatics切り替え
    - パフォーマンス比較レポート自動生成
 
-### 優先度低
-4. **AWS Transcribe / Azure Speech追加**（将来）
+### 優先度低（保留）
+4. **Google Speech-to-Text再検討**（将来）
+   - Googleが日本語話者分離機能を追加した場合
+   - 現在は実装不可のため保留
+
+5. **AWS Transcribe / Azure Speech追加**（将来）
