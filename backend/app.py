@@ -245,15 +245,15 @@ async def analyze_interview(
             raise HTTPException(status_code=400, detail="Transcription not found. Please run /api/transcribe first.")
 
         # 2. Generate prompt (POC: Simple summary)
-        prompt = f"""Please summarize the following parent interview content.
+        prompt = f"""以下の保護者ヒアリング内容を要約してください。
 
-Interview Content:
+ヒアリング内容:
 {transcription}
 
-Please provide:
-1. Brief summary (2-3 sentences)
-2. Key points mentioned
-3. Child's current situation
+以下の項目について、日本語で回答してください:
+1. 概要（2-3文）
+2. 主なポイント
+3. お子さまの現在の状況
 """
 
         # 3. Update DB status to 'analyzing'
