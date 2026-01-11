@@ -72,42 +72,27 @@ business/
 
 ## 🧪 テスト音源
 
-### S3パス（watchme-vault バケット）
+### S3パス
 
 ```
-s3://watchme-vault/test-audio/parent-interview-yoridokoro/
+s3://watchme-business/samples/
 ├── full_raw.wav           # フル版（87MB・約15分）
 ├── section001_raw.wav     # 抜粋版・生音声（3.1MB・約30秒）★推奨
 └── section001_clean.wav   # 抜粋版・ノイズ除去（3.1MB）
 ```
 
-### ローカルにダウンロード
+### 使い方
 
+**ローカルにダウンロード:**
 ```bash
-# 推奨: 本番環境に最も近い
-aws s3 cp s3://watchme-vault/test-audio/parent-interview-yoridokoro/section001_raw.wav . \
+aws s3 cp s3://watchme-business/samples/section001_raw.wav . \
   --region ap-southeast-2
-
-# または署名付きURL生成（1時間有効）
-aws s3 presign s3://watchme-vault/test-audio/parent-interview-yoridokoro/section001_raw.wav \
-  --region ap-southeast-2 --expires-in 3600
 ```
 
-### テストAPI呼び出し
-
+**署名付きURL生成（1時間有効）:**
 ```bash
-# 1. DBにテストセッション作成（手動またはフロントエンド）
-# 2. トランスクリプション実行
-curl -X POST https://api.hey-watch.me/business/api/transcribe \
-  -H "Content-Type: application/json" \
-  -H "X-API-Token: watchme-b2b-poc-2025" \
-  -d '{"session_id": "YOUR_SESSION_ID"}'
-
-# 3. 分析実行（日本語で返ってくる）
-curl -X POST https://api.hey-watch.me/business/api/analyze \
-  -H "Content-Type: application/json" \
-  -H "X-API-Token: watchme-b2b-poc-2025" \
-  -d '{"session_id": "YOUR_SESSION_ID"}'
+aws s3 presign s3://watchme-business/samples/section001_raw.wav \
+  --region ap-southeast-2 --expires-in 3600
 ```
 
 **音源について**:

@@ -112,82 +112,15 @@ function App() {
     setRecordingTime(0);
   };
 
-  const loadTestAudio = async (audioName: string, displayName: string) => {
-    setState('uploading');
-
-    try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8052';
-
-      // Call /api/upload-sample endpoint
-      const formData = new FormData();
-      formData.append('sample_name', audioName);
-      formData.append('facility_id', '00000000-0000-0000-0000-000000000001');
-      formData.append('child_id', '00000000-0000-0000-0000-000000000002');
-
-      const response = await fetch(`${API_URL}/api/upload-sample`, {
-        method: 'POST',
-        headers: {
-          'X-API-Token': 'watchme-b2b-poc-2025'
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-
-      const data = await response.json();
-      console.log('Test audio upload successful:', data);
-
-      setState('done');
-      setTranscription(`テスト音源（${displayName}）アップロード成功！\nセッションID: ${data.session_id}\nS3パス: ${data.s3_path}`);
-    } catch (error) {
-      console.error('Test audio upload error:', error);
-      setState('idle');
-      alert('テスト音源のアップロードに失敗しました');
-    }
-  };
-
   return (
     <div className="app">
       <h1>個別支援計画 ヒアリング録音ツール</h1>
       <div className="main-container">
 
         {state === 'idle' && (
-          <>
-            <button className="record-button" onClick={startRecording}>
-              🎤 録音開始
-            </button>
-
-            <div className="test-audio-section">
-              <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
-                テスト音源（開発用）
-              </p>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <button
-                  className="test-audio-button"
-                  onClick={() => loadTestAudio('section001_raw.wav', '抜粋・生音声')}
-                  style={{ fontSize: '12px', padding: '8px 12px', backgroundColor: '#4CAF50' }}
-                >
-                  🎵 抜粋・生音声 (30秒)
-                </button>
-                <button
-                  className="test-audio-button"
-                  onClick={() => loadTestAudio('section001_clean.wav', '抜粋・ノイズ除去')}
-                  style={{ fontSize: '12px', padding: '8px 12px', backgroundColor: '#2196F3' }}
-                >
-                  🎵 抜粋・クリーン (30秒)
-                </button>
-                <button
-                  className="test-audio-button"
-                  onClick={() => loadTestAudio('full_raw.wav', 'フル版')}
-                  style={{ fontSize: '12px', padding: '8px 12px', backgroundColor: '#FF9800' }}
-                >
-                  🎵 フル版 (15分)
-                </button>
-              </div>
-            </div>
-          </>
+          <button className="record-button" onClick={startRecording}>
+            🎤 録音開始
+          </button>
         )}
 
         {state === 'recording' && (
