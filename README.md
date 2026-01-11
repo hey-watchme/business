@@ -10,12 +10,17 @@
 
 ```
 business/
-├── backend/               # FastAPI (Python 3.11)
-├── frontend/              # React PWA (TypeScript)
+├── backend/               # FastAPI (Python 3.11) - Port 8052
+├── frontend/              # React PWA (TypeScript) - Port 5176
 ├── infrastructure/        # インフラ設定
 │   └── supabase/         # DB定義
 └── docs/                 # ドキュメント
 ```
+
+## 🌐 ポート番号
+
+- **Backend API**: 8052
+- **Frontend**: 5176
 
 ## 📚 ドキュメント
 
