@@ -28,6 +28,7 @@ COPY --from=builder /root/.local /home/appuser/.local
 
 # Copy application code
 COPY --chown=appuser:appuser app.py .
+COPY --chown=appuser:appuser services/ ./services/
 
 # Set Python path environment variable
 ENV PATH=/home/appuser/.local/bin:$PATH
