@@ -62,6 +62,10 @@ class TranscribeResponse(BaseModel):
     processing_time: float
     confidence: float
     word_count: int
+    utterances: list
+    paragraphs: list
+    speaker_count: int
+    model: str
     message: str
 
 class AnalyzeRequest(BaseModel):
@@ -179,9 +183,18 @@ async def transcribe_audio(
             filename=s3_audio_path
         )
 
-        # 4. Update DB with transcription
+        # 4. Update DB with transcription and extended data
         supabase.table('business_interview_sessions').update({
             'transcription': transcription_result['transcription'],
+            'transcription_metadata': {
+                'utterances': transcription_result.get('utterances', []),
+                'paragraphs': transcription_result.get('paragraphs', []),
+                'speaker_count': transcription_result.get('speaker_count', 0),
+                'confidence': transcription_result.get('confidence', 0.0),
+                'word_count': transcription_result.get('word_count', 0),
+                'model': transcription_result.get('model', 'unknown'),
+                'processing_time': transcription_result.get('processing_time', 0.0),
+            },
             'status': 'completed',
             'updated_at': datetime.now().isoformat()
         }).eq('id', request.session_id).execute()
@@ -193,6 +206,10 @@ async def transcribe_audio(
             processing_time=transcription_result['processing_time'],
             confidence=transcription_result['confidence'],
             word_count=transcription_result['word_count'],
+            utterances=transcription_result.get('utterances', []),
+            paragraphs=transcription_result.get('paragraphs', []),
+            speaker_count=transcription_result.get('speaker_count', 0),
+            model=transcription_result.get('model', 'unknown'),
             message="Transcription completed successfully"
         )
 
