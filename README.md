@@ -81,7 +81,24 @@ s3://watchme-business/samples/
 └── section001_clean.wav   # 抜粋版・ノイズ除去（3.1MB）
 ```
 
-### 使い方
+### テストスクリプト（推奨）
+
+**自動テスト実行:**
+```bash
+# プロジェクトルートで実行
+./test-transcription.sh section001_raw.wav
+./test-transcription.sh full_raw.wav
+```
+
+このスクリプトは以下を自動実行します：
+1. S3からテスト音源ダウンロード
+2. `/api/upload` でアップロード（DB登録・S3保存）
+3. `/api/transcribe` でトランスクリプション実行
+4. 結果をJSON形式で表示
+
+**本番同様のフルフローをテスト可能**（録音以外のすべてのプロセス）
+
+### 手動テスト
 
 **ローカルにダウンロード:**
 ```bash
@@ -95,10 +112,11 @@ aws s3 presign s3://watchme-business/samples/section001_raw.wav \
   --region ap-southeast-2 --expires-in 3600
 ```
 
-**音源について**:
-- シチュエーション: 保護者ヒアリング（児童発達支援）
-- 録音日: 2025-05-08
-- 推奨: `section001_raw.wav`（スマホ録音・ノイズ除去なし）
+### 音源について
+
+- **シチュエーション**: 保護者ヒアリング（児童発達支援）
+- **録音日**: 2025-05-08
+- **推奨**: `section001_raw.wav`（スマホ録音・ノイズ除去なし）
 
 ---
 
