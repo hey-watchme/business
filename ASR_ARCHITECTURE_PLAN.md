@@ -167,17 +167,46 @@ categories = {
 
 ### 5. 実装優先順位
 
-#### Phase 1: 基盤整備（実装中）
-- ✅ Deepgram拡張データ取得
-- ✅ DBカラム追加（transcription_metadata）
-- 🔄 ASRプロバイダー基底クラス作成
-- 🔄 Deepgramプロバイダーのリファクタリング
+#### Phase 1: Deepgram実装（完了）✅
+- ✅ **Deepgram拡張データ取得**: utterances、paragraphs、speaker_count取得成功
+- ✅ **DBカラム追加**: `transcription_metadata`カラム（JSONB）追加
+- ✅ **テスト成功**: section001_raw.wavで話者分離（2名）確認
+- ✅ **本番デプロイ**: EC2で稼働中
 
-#### Phase 2: Google Speech-to-Text追加
-1. Google Cloud認証設定
-2. Google Speechプロバイダー実装
-3. プロバイダー切り替え機能
-4. コスト・精度比較機能
+**実績データ（2026-01-11）**:
+```json
+{
+  "provider": "deepgram",
+  "model": "nova-2",
+  "processing_time": 2.19,
+  "confidence": 0.99,
+  "speaker_count": 2,
+  "utterances": 17
+}
+```
+
+#### Phase 2: Google Speech-to-Text追加（調査完了・実装保留）
+- ✅ **Google Cloud認証**: サービスアカウント作成、JSONキー生成完了
+- ✅ **プロバイダー実装**: `google_speech.py`作成完了
+- ⚠️ **課題発見**: 話者分離にはカスタムRecognizer事前作成が必要
+- 📝 **判明事項**:
+  - Chirp 2モデル: `us-central1`でGA利用可能
+  - `recognize()`メソッド: 話者分離未サポート
+  - 必要な手順: 事前にRecognizer作成 → 作成済みRecognizerを使用
+
+**次回実装時のTODO**:
+1. カスタムRecognizer作成（gcloud CLIまたはConsole）
+   ```bash
+   gcloud speech recognizers create RECOGNIZER_ID \
+     --location=us-central1 \
+     --model=chirp_2 \
+     --language-codes=ja-JP \
+     --enable-speaker-diarization \
+     --min-speaker-count=1 \
+     --max-speaker-count=3
+   ```
+2. 作成したRecognizerを使った実装修正
+3. Deepgramとの精度・コスト比較
 
 #### Phase 3: ダイアライゼーション活用
 1. 話者役割推定パイプライン
@@ -220,10 +249,42 @@ DEFAULT_ASR_PROVIDER=deepgram  # deepgram|google|aws|azure
 OPENAI_API_KEY=xxx
 ```
 
+## 📝 セッション履歴
+
+### 2026-01-11: Deepgram最適化 + Google Speech調査
+
+**完了**:
+- ✅ Deepgramの拡張データ取得実装（utterances, paragraphs, speaker_count）
+- ✅ データベースマイグレーション（`transcription_metadata`カラム追加）
+- ✅ 本番環境デプロイ・動作確認成功
+- ✅ Google Cloud認証設定完了（サービスアカウント、JSONキー）
+- ✅ Google Speech-to-Text v2プロバイダー実装（`google_speech.py`）
+
+**課題**:
+- ⚠️ Google Speech v2の`recognize()`は話者分離未サポート
+- ⚠️ カスタムRecognizerの事前作成が必要（当てずっぽうで試行して時間を浪費）
+- ⚠️ ドキュメント確認を優先すべきだった
+
+**教訓**:
+- 新しいAPIは**必ず公式ドキュメントを先に読む**
+- エラーが続く場合は推測せず、ドキュメントに立ち返る
+
 ## 📝 次のアクション
 
-1. **ASRプロバイダー基底クラス実装**
-2. **Deepgramプロバイダーのリファクタリング**
+### 優先度高
+1. **話者役割推定機能の実装**（Deepgramデータ活用）
+   - LLM-miniで発話内容から役割推定（職員/母親/父親/子供）
+   - 構造化対話の生成（【職員】【保護者】形式）
+
+2. **Google Speech-to-Text完全統合**（次回セッション）
+   - カスタムRecognizer作成
+   - 作成済みRecognizerを使った実装修正
+   - Deepgramとの精度・コスト比較
+
+### 優先度中
 3. **プロバイダーマネージャー実装**
-4. **Google Speech-to-Text統合**
-5. **話者役割推定機能の実装**
+   - 環境変数でDeepgram/Google切り替え
+   - パフォーマンス比較レポート自動生成
+
+### 優先度低
+4. **AWS Transcribe / Azure Speech追加**（将来）
