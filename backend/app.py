@@ -170,7 +170,7 @@ async def transcribe_audio(
         # 4. Update DB with transcription
         supabase.table('business_interview_sessions').update({
             'transcription': transcription_result['transcription'],
-            'status': 'transcribed',
+            'status': 'completed',
             'updated_at': datetime.now().isoformat()
         }).eq('id', request.session_id).execute()
 
