@@ -2,215 +2,101 @@
 
 最終更新: 2026-01-11
 
-## 🚨 現在の課題（優先度順）
+## ✅ CORS問題解決完了！
 
-### 🔴 Issue 1: Vercel環境変数が反映されていない
+### 🎉 解決した問題
+- NginxでOPTIONSを直接204返却していた → FastAPIに処理を委譲
+- FastAPIでワイルドカード使用 → 具体的なドメインに変更
+- **録音機能が正常に動作するようになった**
 
-**問題**:
-- フロントエンド（Vercel）が `localhost:8052` に接続しようとしてエラー
-- `VITE_API_URL` 環境変数がビルドに含まれていない
+---
 
-**原因**:
-- Vercelで環境変数を設定したが、その**後**に再デプロイしていない
-- 環境変数はビルド時に埋め込まれるため、設定後の再デプロイが必須
+## 📋 現在の実装状況
 
-**解決方法**:
-1. ✅ **完了**: Vercel Project Settings → Environment Variablesで `VITE_API_URL=https://api.hey-watch.me/business` を設定済み
-2. ⏳ **待機中**: 最新のデプロイ（commit: 9b3d1a9）が完了するまで待つ
-3. ✅ **確認方法**: デプロイ完了後、https://business-f914.vercel.app で録音テスト
+### ✅ 完了済み（Step 1）
+- 録音機能 → S3アップロード → DB保存
+- 3件のテスト録音データがS3に保存済み
+- CORS問題を解決（トラブルシューティング手法を文書化）
 
-**確認コマンド**:
+### 🚀 次の実装：Step 2 - 文字起こし機能
+
+**実装計画書**: `/Users/kaya.matsumoto/projects/watchme/business/TRANSCRIPTION_IMPLEMENTATION_PLAN.md`
+
+---
+
+## 🎯 文字起こし機能の実装ステップ
+
+### アーキテクチャ
+```
+Business Backend (:8052)
+  ↓ POST /api/transcribe (新規エンドポイント)
+  ↓ 1. DB.select() → s3_audio_path取得
+  ↓ 2. S3.get_object() → 音声ダウンロード
+  ↓ 3. Deepgram API呼び出し（nova-2）
+  ↓ 4. DB.update() → transcription保存
+Supabase
+  ✅ transcription: "文字起こし結果"
+  ✅ status: 'transcribed'
+```
+
+### 実装タスク
+
+#### 1. パッケージ追加
 ```bash
-# Vercelデプロイ状況確認
-# → Vercel Dashboard > Deployments タブで確認
+# requirements.txt に追加
+deepgram-sdk==3.7.0
+tenacity>=8.2.0
+```
 
-# デプロイ完了後、環境変数が反映されているか確認
-curl -s https://business-f914.vercel.app/ | grep -i "api.hey-watch.me" && echo "環境変数反映済み" || echo "まだ反映されていない"
+#### 2. ASRサービスモジュール作成
+```
+新規ファイル: backend/services/asr_provider.py
+- DeepgramASRService クラス
+- transcribe_audio() メソッド（リトライ機能付き）
+```
+
+#### 3. エンドポイント追加
+```
+backend/app.py に追加:
+- POST /api/transcribe
+- TranscribeRequest/Response モデル
+- S3ダウンロード → Deepgram呼び出し → DB保存
+```
+
+#### 4. 環境変数設定（3箇所セット）
+```
+✅ GitHub Secrets: DEEPGRAM_API_KEY
+✅ docker-compose.prod.yml: environment追加
+✅ .github/workflows/deploy-to-ecr.yml: env追加
 ```
 
 ---
 
-### 🟡 Issue 2: カスタムドメイン設定
+## 📝 重要な参考資料
 
-**状況**:
-- ✅ Vercel自動生成URL: `business-f914.vercel.app` → 動作OK
-- ✅ DNS設定: `business.hey-watch.me` → `103e6ba9ee1a92b6.vercel-dns-017.com` (CNAME) → 設定済み
-- ⏳ SSL証明書: Vercel側で発行中（通常5-10分）
+### 既存の実装
+- **Deepgram実装**: `/Users/kaya.matsumoto/projects/watchme/api/vibe-analysis/transcriber-v2/app/asr_providers.py`
+- **使用モデル**: Deepgram Nova-2（日本語対応）
+- **SDK**: deepgram-sdk==3.7.0
 
-**確認方法**:
-```bash
-# DNS確認
-dig business.hey-watch.me @1.1.1.1 +short
-# → 103e6ba9ee1a92b6.vercel-dns-017.com. が返ればOK
-
-# HTTPSアクセス確認
-curl -I https://business.hey-watch.me
-# → HTTP/2 200 が返ればOK
-```
+### 環境変数管理
+- **CLAUDE.md**: 環境変数追加時は必ず3箇所セットで設定
+- **参考**: CICD_STANDARD_SPECIFICATION.md の環境変数セクション
 
 ---
 
-### 🟢 Issue 3: バックエンドCORS設定
+## ⚠️ 注意事項
 
-**状況**:
-- ✅ `business.hey-watch.me` をCORS許可リストに追加済み
-- ✅ バックエンドデプロイ済み（commit: 856a98f）
+### 開発フロー
+1. ローカルでコード作成
+2. 構文チェック（`python3 -m py_compile`, `file`コマンド）
+3. GitHub push → 自動デプロイ
+4. 本番環境でテスト
 
-**確認済み**:
-```bash
-curl https://api.hey-watch.me/business/health
-# → {"status":"healthy",...} OK
-```
-
----
-
-## 📋 次のセッションでやること
-
-### 1. デプロイ完了確認（最優先）
-
-```bash
-# Vercelダッシュボードで確認
-# Deployments タブ → 最新デプロイが "Ready" になっているか
-
-# 完了後、録音テスト
-# https://business-f914.vercel.app または https://business.hey-watch.me
-```
-
-### 2. 録音機能の動作確認
-
-**テスト手順**:
-1. ブラウザで https://business-f914.vercel.app を開く
-2. ブラウザの開発者ツール（F12）→ **Network**タブを開く
-3. 「🎤 録音開始」をクリック
-4. マイクアクセスを許可
-5. 数秒話す
-6. 「⬛ 録音停止」をクリック
-7. **Networkタブ**で `/api/upload` リクエストを確認
-
-**期待される結果**:
-- Network: `POST https://api.hey-watch.me/business/api/upload` → `200 OK`
-- 画面: 「アップロード成功！」メッセージ
-
-**エラーが出た場合の確認ポイント**:
-```bash
-# 1. Consoleタブのエラーメッセージ
-# 2. Networkタブの失敗したリクエスト
-#    - Status code（401, 422, 500など）
-#    - Response body（エラー詳細）
-#    - Request payload（送信データ）
-```
-
-### 3. S3 & DB確認
-
-```bash
-# S3にファイルがアップロードされているか
-aws s3 ls s3://watchme-business/recordings/ --recursive --region ap-southeast-2
-
-# Supabaseでレコードが作成されているか
-# → https://supabase.com/dashboard/project/qvtlwotzuzbavrzqhyvt
-# → business_interview_sessions テーブル
-```
-
----
-
-## ✅ 完了済み（今回のセッション）
-
-### Vercelデプロイ設定
-- ✅ GitHubリポジトリ連携（`hey-watchme/business`）
-- ✅ Root Directory設定（`frontend`）
-- ✅ TypeScript設定修正（`types: ["vite/client", "node"]`）
-- ✅ 環境変数設定（`VITE_API_URL`）
-- ✅ ビルド成功
-
-### Cloudflare DNS設定
-- ✅ `business.hey-watch.me` → `103e6ba9ee1a92b6.vercel-dns-017.com` (CNAME)
-- ✅ Proxy status: DNS only（⚪グレー雲）
-
-### バックエンドCORS修正
-- ✅ `business.hey-watch.me` を許可リストに追加
-- ✅ デプロイ成功
-
-### フロントエンド実装
-- ✅ 録音UI実装
-- ✅ S3アップロード機能
-- ✅ 環境変数対応
-
----
-
-## 🔧 現在の構成
-
-**フロントエンド**:
-- Vercel URL: `https://business-f914.vercel.app`
-- カスタムドメイン: `https://business.hey-watch.me`（設定中）
-- 環境変数: `VITE_API_URL=https://api.hey-watch.me/business`
-
-**バックエンド**:
-- API: `https://api.hey-watch.me/business/`
-- EC2 コンテナ: `watchme-business-api` (ポート8052)
-- CORS: `localhost:5173`, `localhost:5174`, `*.vercel.app`, `business.hey-watch.me`
-
-**ストレージ**:
-- S3: `watchme-business` (ap-southeast-2)
-- Supabase: プロジェクト `qvtlwotzuzbavrzqhyvt`
-
----
-
-## 🐛 トラブルシューティング
-
-### 環境変数が反映されない場合
-
-**症状**: フロントエンドが `localhost:8052` に接続しようとする
-
-**解決方法**:
-```bash
-# 1. Vercel環境変数を確認
-# Project Settings → Environment Variables
-# VITE_API_URL が設定されているか確認
-
-# 2. 再デプロイ（キャッシュなし）
-# Vercel Dashboard → Deployments → 最新デプロイの ... → Redeploy
-# ✅ "Use existing Build Cache" のチェックを外す
-
-# 3. GitHubから再デプロイ
-git commit --allow-empty -m "chore: force redeploy"
-git push origin main
-```
-
-### 録音時にエラーが出る場合
-
-**422 Unprocessable Entity**:
-- フォームデータのフィールド名が間違っている
-- 期待: `audio`, `facility_id`, `child_id`
-- ブラウザのNetworkタブ → Payload で確認
-
-**400 Bad Request "File must be audio format"**:
-- Content-Type が `audio/*` でない
-- ブラウザのNetworkタブ → Headers → Request Payload で確認
-
-**401 Unauthorized**:
-- APIトークンが間違っている
-- 期待: `X-API-Token: watchme-b2b-poc-2025`
-
----
-
-## 💡 よく使うコマンド
-
-```bash
-# Vercelデプロイ確認
-# → Vercel Dashboard > Deploymentsで確認
-
-# バックエンドAPI確認
-curl https://api.hey-watch.me/business/health
-
-# DNS確認
-dig business.hey-watch.me @1.1.1.1 +short
-
-# S3確認
-aws s3 ls s3://watchme-business/recordings/ --recursive --region ap-southeast-2
-
-# バックエンドログ
-ssh -i ~/watchme-key.pem ubuntu@3.24.16.82 "docker logs watchme-business-api --tail 50"
-```
+### コーディング規約
+- コード内コメント: 英語のみ
+- ドキュメント: 日本語OK
+- エンコーディング検証を必ず実施
 
 ---
 
@@ -220,12 +106,45 @@ ssh -i ~/watchme-key.pem ubuntu@3.24.16.82 "docker logs watchme-business-api --t
 |---------|------|------|
 | 企画・設計 | 100% | ✅ 完了 |
 | インフラ構築 | 100% | ✅ 完了 |
-| バックエンドAPI | 100% | ✅ 完了・稼働中 |
-| フロントエンド構築 | 90% | 🚧 Vercel再デプロイ待ち |
-| **Step 1: 録音→S3→DB** | **90%** | **🚧 動作確認待ち** |
-| Step 2: Transcription | 0% | ⏸️ 未着手 |
+| バックエンドAPI | 100% | ✅ 完了 |
+| フロントエンド構築 | 100% | ✅ 完了 |
+| **Step 1: 録音→S3→DB** | **100%** | **✅ 完了** |
+| **Step 2: Transcription** | **0%** | **🚧 次のタスク** |
 | Step 3: GPT統合 | 0% | ⏸️ 未着手 |
 | Step 4: UI表示 | 0% | ⏸️ 未着手 |
 | Step 5: Excel/PDF出力 | 0% | ⏸️ 未着手 |
 
-**全体進捗**: 約70%
+**全体進捗**: 約50%（基盤完成、文字起こしから実装開始）
+
+---
+
+## 🔗 参考リンク
+
+- **実装計画書**: `/Users/kaya.matsumoto/projects/watchme/business/TRANSCRIPTION_IMPLEMENTATION_PLAN.md`
+- **Vercel**: https://vercel.com/dashboard
+- **Supabase**: https://supabase.com/dashboard/project/qvtlwotzuzbavrzqhyvt
+- **GitHub Actions**: https://github.com/hey-watchme/business/actions
+- **S3バケット**: s3://watchme-business/
+
+---
+
+## 💡 次のセッションの最初のアクション
+
+1. **実装計画書を確認**
+   ```bash
+   cat /Users/kaya.matsumoto/projects/watchme/business/TRANSCRIPTION_IMPLEMENTATION_PLAN.md
+   ```
+
+2. **ステップバイステップで実装開始**
+   - Step 1: requirements.txt にパッケージ追加
+   - Step 2: services/asr_provider.py 作成
+   - Step 3: app.py にエンドポイント追加
+   - Step 4: 環境変数設定（3箇所）
+   - Step 5: デプロイ＆テスト
+
+3. **テストデータ**
+   ```
+   既存の録音データ:
+   - session_id: 8f512662-6881-49dd-ba2f-a280f0206822
+   - S3パス: recordings/.../2026-01-11/8f512662-6881-49dd-ba2f-a280f0206822.webm
+   ```

@@ -15,6 +15,7 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
       - API_TOKEN=${API_TOKEN}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - PORT=8052
     volumes:
       # Log directory mount

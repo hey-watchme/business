@@ -1,5 +1,6 @@
 import os
 import uuid
+import io
 from datetime import datetime
 from typing import Optional
 
@@ -9,6 +10,8 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
+
+from services.asr_provider import DeepgramASRService
 
 # Load environment variables
 load_dotenv()
@@ -46,6 +49,18 @@ class UploadResponse(BaseModel):
     success: bool
     session_id: str
     s3_path: str
+    message: str
+
+class TranscribeRequest(BaseModel):
+    session_id: str
+
+class TranscribeResponse(BaseModel):
+    success: bool
+    session_id: str
+    transcription: str
+    processing_time: float
+    confidence: float
+    word_count: int
     message: str
 
 @app.get("/health")
@@ -110,6 +125,69 @@ async def upload_audio(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.post("/api/transcribe", response_model=TranscribeResponse)
+async def transcribe_audio(
+    request: TranscribeRequest,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # 1. Get session from DB
+        result = supabase.table('business_interview_sessions')\
+            .select('*')\
+            .eq('id', request.session_id)\
+            .single()\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = result.data
+        s3_audio_path = session.get('s3_audio_path')
+
+        if not s3_audio_path:
+            raise HTTPException(status_code=400, detail="No audio file path found")
+
+        # 2. Download audio from S3
+        s3_response = s3_client.get_object(Bucket=S3_BUCKET, Key=s3_audio_path)
+        audio_content = s3_response['Body'].read()
+        audio_file = io.BytesIO(audio_content)
+
+        # 3. Transcribe with Deepgram
+        asr_service = DeepgramASRService()
+        transcription_result = await asr_service.transcribe_audio(
+            audio_file=audio_file,
+            filename=s3_audio_path
+        )
+
+        # 4. Update DB with transcription
+        supabase.table('business_interview_sessions').update({
+            'transcription': transcription_result['transcription'],
+            'status': 'transcribed',
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', request.session_id).execute()
+
+        return TranscribeResponse(
+            success=True,
+            session_id=request.session_id,
+            transcription=transcription_result['transcription'],
+            processing_time=transcription_result['processing_time'],
+            confidence=transcription_result['confidence'],
+            word_count=transcription_result['word_count'],
+            message="Transcription completed successfully"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(
