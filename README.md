@@ -34,8 +34,40 @@ business/
 - **Backend**: FastAPI (Python 3.11)
 - **Storage**: AWS S3 (watchme-business)
 - **Database**: Supabase (`business_*` テーブル)
-- **AI**: Groq Whisper v3 + OpenAI GPT-4o
+- **ASR (文字起こし)**: Speechmatics Batch API（話者分離対応）
+- **LLM (分析)**: OpenAI GPT-4o
 - **Deploy**: GitHub Actions → ECR → EC2 (Sydney)
+
+### 🎙️ ASR（文字起こし）プロバイダー
+
+**現在の設定**: Speechmatics（デフォルト）
+
+| プロバイダー | 状態 | 話者分離精度 | 処理速度 |
+|------------|------|------------|---------|
+| **Speechmatics** | ✅ 採用中 | **高精度**（3名検出） | 普通（26秒/30秒音声） |
+| Deepgram | 待機中 | 普通（2名検出） | 高速 |
+| Google Speech | 保留 | 未サポート | - |
+
+#### プロバイダー切り替え方法
+
+**環境変数で指定**:
+```env
+# デフォルト（指定なしでもSpeechmaticsが使われます）
+ASR_PROVIDER=speechmatics
+
+# Deepgramに変更する場合
+ASR_PROVIDER=deepgram
+```
+
+**実装箇所**: `backend/app.py` の `get_asr_provider()` 関数
+
+**切り替え手順**:
+1. ローカルの`.env`に `ASR_PROVIDER=deepgram` を追加
+2. 本番環境は自動的にSpeechmaticsを使用（環境変数未設定のため）
+3. 本番でも変更する場合：
+   - GitHub Secrets に `ASR_PROVIDER` を追加
+   - `.github/workflows/deploy-to-ecr.yml` の env セクションに追加
+   - docker-compose.prod.yml に環境変数を追加
 
 ## 🔧 開発状況
 
