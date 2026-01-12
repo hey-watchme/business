@@ -1,12 +1,13 @@
 import os
 import uuid
 import io
+import threading
 from datetime import datetime
 from typing import Optional
 
 import boto3
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -58,6 +59,8 @@ S3_BUCKET = os.getenv("S3_BUCKET", "watchme-business")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 API_TOKEN = os.getenv("API_TOKEN", "watchme-b2b-poc-2025")
+SQS_TRANSCRIPTION_QUEUE_URL = os.getenv("SQS_TRANSCRIPTION_QUEUE_URL")
+SQS_ANALYSIS_QUEUE_URL = os.getenv("SQS_ANALYSIS_QUEUE_URL")
 
 # Initialize services
 s3_client = boto3.client('s3', region_name=AWS_REGION)
@@ -160,11 +163,20 @@ async def upload_audio(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
-@app.post("/api/transcribe", response_model=TranscribeResponse)
+@app.post("/api/transcribe")
 async def transcribe_audio(
     request: TranscribeRequest,
     x_api_token: str = Header(None, alias="X-API-Token")
 ):
+    """
+    Asynchronous transcription endpoint (returns 202 Accepted)
+
+    Flow:
+    1. Validate request
+    2. Update DB status to 'transcribing'
+    3. Start background task
+    4. Return 202 Accepted immediately
+    """
     # Validate token
     if x_api_token != API_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid API token")
@@ -172,8 +184,11 @@ async def transcribe_audio(
     if not supabase:
         raise HTTPException(status_code=500, detail="Database not configured")
 
+    if not SQS_TRANSCRIPTION_QUEUE_URL:
+        raise HTTPException(status_code=500, detail="SQS queue not configured")
+
     try:
-        # 1. Get session from DB
+        # Get session from DB
         result = supabase.table('business_interview_sessions')\
             .select('*')\
             .eq('id', request.session_id)\
@@ -189,66 +204,52 @@ async def transcribe_audio(
         if not s3_audio_path:
             raise HTTPException(status_code=400, detail="No audio file path found")
 
-        # 2. Download audio from S3
-        s3_response = s3_client.get_object(Bucket=S3_BUCKET, Key=s3_audio_path)
-        audio_content = s3_response['Body'].read()
-        audio_file = io.BytesIO(audio_content)
+        # Start background task
+        from services.background_tasks import transcribe_background
 
-        # 3. Transcribe with selected ASR provider (default: Speechmatics)
         asr_service = get_asr_provider()
-        transcription_result = await asr_service.transcribe_audio(
-            audio_file=audio_file,
-            filename=s3_audio_path
+
+        thread = threading.Thread(
+            target=transcribe_background,
+            args=(
+                request.session_id,
+                s3_audio_path,
+                s3_client,
+                S3_BUCKET,
+                supabase,
+                asr_service,
+                SQS_TRANSCRIPTION_QUEUE_URL
+            )
         )
+        thread.daemon = True
+        thread.start()
 
-        # 4. Update DB with transcription and extended data
-        supabase.table('business_interview_sessions').update({
-            'transcription': transcription_result['transcription'],
-            'transcription_metadata': {
-                'utterances': transcription_result.get('utterances', []),
-                'paragraphs': transcription_result.get('paragraphs', []),
-                'speaker_count': transcription_result.get('speaker_count', 0),
-                'confidence': transcription_result.get('confidence', 0.0),
-                'word_count': transcription_result.get('word_count', 0),
-                'model': transcription_result.get('model', 'unknown'),
-                'processing_time': transcription_result.get('processing_time', 0.0),
-            },
-            'status': 'completed',
-            'updated_at': datetime.now().isoformat()
-        }).eq('id', request.session_id).execute()
+        print(f"Started background transcription for session: {request.session_id}")
 
-        return TranscribeResponse(
-            success=True,
-            session_id=request.session_id,
-            transcription=transcription_result['transcription'],
-            processing_time=transcription_result['processing_time'],
-            confidence=transcription_result['confidence'],
-            word_count=transcription_result['word_count'],
-            utterances=transcription_result.get('utterances', []),
-            paragraphs=transcription_result.get('paragraphs', []),
-            speaker_count=transcription_result.get('speaker_count', 0),
-            model=transcription_result.get('model', 'unknown'),
-            message="Transcription completed successfully"
+        return Response(
+            status_code=202,
+            content='{"status": "processing", "message": "Transcription started"}',
+            media_type="application/json"
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start transcription: {str(e)}")
 
-@app.post("/api/analyze", response_model=AnalyzeResponse)
+@app.post("/api/analyze")
 async def analyze_interview(
     request: AnalyzeRequest,
     x_api_token: str = Header(None, alias="X-API-Token")
 ):
     """
-    Analyze interview transcription with LLM (POC: Synchronous)
+    Asynchronous analysis endpoint (returns 202 Accepted)
 
     Flow:
-    1. Get transcription from DB
-    2. Generate prompt
-    3. Call LLM (OpenAI GPT-4o)
-    4. Save result to DB
+    1. Validate request
+    2. Update DB status to 'analyzing'
+    3. Start background task
+    4. Return 202 Accepted immediately
     """
     # Validate token
     if x_api_token != API_TOKEN:
@@ -258,12 +259,7 @@ async def analyze_interview(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        import time
-        start_time = time.time()
-
-        print(f"\nAnalyzing interview session: {request.session_id}")
-
-        # 1. Get session from DB
+        # Get session from DB
         result = supabase.table('business_interview_sessions')\
             .select('*')\
             .eq('id', request.session_id)\
@@ -279,62 +275,36 @@ async def analyze_interview(
         if not transcription:
             raise HTTPException(status_code=400, detail="Transcription not found. Please run /api/transcribe first.")
 
-        # 2. Generate prompt (POC: Simple summary)
-        prompt = f"""以下の保護者ヒアリング内容を要約してください。
+        # Start background task
+        from services.background_tasks import analyze_background
+        from services.llm_providers import get_current_llm
 
-ヒアリング内容:
-{transcription}
+        llm_service = get_current_llm()
 
-以下の項目について、日本語で回答してください:
-1. 概要（2-3文）
-2. 主なポイント
-3. お子さまの現在の状況
-"""
+        thread = threading.Thread(
+            target=analyze_background,
+            args=(
+                request.session_id,
+                supabase,
+                llm_service,
+                SQS_ANALYSIS_QUEUE_URL
+            )
+        )
+        thread.daemon = True
+        thread.start()
 
-        # 3. Update DB status to 'analyzing'
-        supabase.table('business_interview_sessions').update({
-            'analysis_prompt': prompt,
-            'status': 'analyzing',
-            'updated_at': datetime.now().isoformat()
-        }).eq('id', request.session_id).execute()
+        print(f"Started background analysis for session: {request.session_id}")
 
-        # 4. Call LLM
-        llm = get_current_llm()
-        print(f"Calling LLM: {llm.model_name}")
-
-        llm_response = llm.generate(prompt)
-
-        # 5. Update DB with result
-        supabase.table('business_interview_sessions').update({
-            'analysis_result': {'summary': llm_response},
-            'status': 'completed',
-            'updated_at': datetime.now().isoformat()
-        }).eq('id', request.session_id).execute()
-
-        processing_time = time.time() - start_time
-        print(f"Analysis completed in {processing_time:.2f}s")
-
-        return AnalyzeResponse(
-            success=True,
-            session_id=request.session_id,
-            summary=llm_response,
-            processing_time=processing_time,
-            model=llm.model_name,
-            message="Analysis completed successfully"
+        return Response(
+            status_code=202,
+            content='{"status": "processing", "message": "Analysis started"}',
+            media_type="application/json"
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        # Update DB with error
-        if supabase:
-            supabase.table('business_interview_sessions').update({
-                'status': 'failed',
-                'error_message': str(e),
-                'updated_at': datetime.now().isoformat()
-            }).eq('id', request.session_id).execute()
-
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start analysis: {str(e)}")
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(

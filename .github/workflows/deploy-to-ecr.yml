@@ -148,6 +148,8 @@ jobs:
         DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         SPEECHMATICS_API_KEY: ${{ secrets.SPEECHMATICS_API_KEY }}
+        SQS_TRANSCRIPTION_QUEUE_URL: ${{ secrets.SQS_TRANSCRIPTION_QUEUE_URL }}
+        SQS_ANALYSIS_QUEUE_URL: ${{ secrets.SQS_ANALYSIS_QUEUE_URL }}
       run: |
         echo "📝 Creating/Updating .env file on EC2..."
 
@@ -163,6 +165,8 @@ jobs:
           echo "DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}" >> .env
           echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> .env
           echo "SPEECHMATICS_API_KEY=${SPEECHMATICS_API_KEY}" >> .env
+          echo "SQS_TRANSCRIPTION_QUEUE_URL=${SQS_TRANSCRIPTION_QUEUE_URL}" >> .env
+          echo "SQS_ANALYSIS_QUEUE_URL=${SQS_ANALYSIS_QUEUE_URL}" >> .env
         ENDSSH
 
         ssh ${EC2_USER}@${EC2_HOST} "echo '✅ .env file created/updated successfully' && wc -l /home/ubuntu/watchme-business-api/.env"
