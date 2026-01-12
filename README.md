@@ -32,17 +32,11 @@ business/
 
 ### 実装ドキュメント
 
-- **[文字起こし実装](./docs/TRANSCRIPTION_IMPLEMENTATION_PLAN.md)** - ASR実装詳細
 - **[分析実装](./docs/ANALYSIS_IMPLEMENTATION_PLAN.md)** - LLM分析実装詳細
-- **[ASRアーキテクチャ](./docs/ASR_ARCHITECTURE_PLAN.md)** - ASRプロバイダー選定・実装
 
-### 運用ドキュメント
+### 運用・テスト
 
 - **[テストガイド](./docs/TESTING_GUIDE.md)** - テスト手順
-- **[開発進捗](./docs/NEXT_SESSION.md)** - 現在の進捗・次のタスク
-
-### データベース
-
 - **[DB定義](./infrastructure/supabase/create_tables.sql)** - Supabaseテーブル定義
 
 ## 🚀 技術スタック
