@@ -47,15 +47,17 @@ class SpeechmaticsASRService:
                 }
             )
 
-            # Submit and wait
+            # Submit and wait (following official example)
             job = await client.submit_job(audio_file, transcription_config=config)
-            result = await client.wait_for_completion(job.id, format_type=FormatType.JSON)
+            result = await client.wait_for_completion(job.id)
             await client.close()
 
             processing_time = time.time() - start_time
 
-            # Parse results
-            if not result or not isinstance(result, dict) or 'results' not in result:
+            # Use official response object properties
+            transcript_text = result.transcript_text if hasattr(result, 'transcript_text') else ""
+
+            if not transcript_text:
                 return {
                     "transcription": "",
                     "processing_time": round(processing_time, 2),
@@ -69,60 +71,23 @@ class SpeechmaticsASRService:
                     "provider": "speechmatics",
                 }
 
-            # Build transcript and utterances
-            full_transcript = ""
+            # Parse result object (following official response structure)
             utterances = []
             speaker_set = set()
-            current_speaker = None
-            current_utterance = {"words": [], "start": 0, "end": 0, "speaker": None, "confidence": []}
 
-            for item in result['results']:
-                if item['type'] != 'word':
-                    continue
-
-                alt = item['alternatives'][0]
-                content = alt['content']
-                speaker = alt.get('speaker', 'UU')
-                confidence = alt.get('confidence', 0.0)
-                start = item['start_time']
-                end = item['end_time']
-
-                full_transcript += content
-                if speaker != 'UU':
-                    speaker_set.add(speaker)
-
-                # Group by speaker
-                if current_speaker != speaker:
-                    if current_utterance['words']:
-                        utterances.append({
-                            "start": round(current_utterance['start'], 2),
-                            "end": round(current_utterance['end'], 2),
-                            "transcript": "".join([w['content'] for w in current_utterance['words']]),
-                            "speaker": current_utterance['speaker'],
-                            "confidence": round(sum(current_utterance['confidence']) / len(current_utterance['confidence']), 2)
-                        })
-                    current_speaker = speaker
-                    current_utterance = {"words": [], "start": start, "end": end, "speaker": speaker, "confidence": []}
-
-                current_utterance['words'].append({"content": content})
-                current_utterance['end'] = end
-                current_utterance['confidence'].append(confidence)
-
-            # Add last utterance
-            if current_utterance['words']:
-                utterances.append({
-                    "start": round(current_utterance['start'], 2),
-                    "end": round(current_utterance['end'], 2),
-                    "transcript": "".join([w['content'] for w in current_utterance['words']]),
-                    "speaker": current_utterance['speaker'],
-                    "confidence": round(sum(current_utterance['confidence']) / len(current_utterance['confidence']), 2)
-                })
+            # Access results from result object
+            if hasattr(result, 'results'):
+                for item in result.results:
+                    if hasattr(item, 'alternatives') and item.alternatives:
+                        alt = item.alternatives[0]
+                        if hasattr(alt, 'speaker') and alt.speaker:
+                            speaker_set.add(alt.speaker)
 
             return {
-                "transcription": full_transcript,
+                "transcription": transcript_text,
                 "processing_time": round(processing_time, 2),
                 "confidence": 0.95,
-                "word_count": len(full_transcript),
+                "word_count": len(transcript_text),
                 "utterances": utterances,
                 "paragraphs": [],
                 "speaker_count": len(speaker_set),
