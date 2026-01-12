@@ -24,11 +24,11 @@ business/
 
 ## 📚 ドキュメント
 
-### 設計ドキュメント
+### アーキテクチャ・設計
 
-- **[認証・アカウント設計](./docs/AUTHENTICATION_DESIGN.md)** - 認証体系・Organization/Facility設計
-- **[実装計画書](./docs/IMPLEMENTATION_PLAN.md)** - 全体設計・技術仕様
-- **[非同期処理設計](./docs/ASYNC_PROCESSING_PLAN.md)** - SQS + Lambda イベント駆動型アーキテクチャ
+- **[システムアーキテクチャ](./docs/ARCHITECTURE.md)** - 全体構成・データフロー・技術仕様
+- **[認証・アカウント設計](./docs/AUTHENTICATION_DESIGN.md)** - Organization/Facility設計・認証体系
+- **[実装計画書](./docs/IMPLEMENTATION_PLAN.md)** - 初期実装計画（参考）
 
 ### 実装ドキュメント
 
