@@ -49,7 +49,7 @@ class SpeechmaticsASRService:
 
             # Submit and wait
             job = await client.submit_job(audio_file, transcription_config=config)
-            result = await client.wait_for_completion(job.id, format_type=FormatType.JSON_V2)
+            result = await client.wait_for_completion(job.id, format_type=FormatType.JSON)
             await client.close()
 
             processing_time = time.time() - start_time
