@@ -2,6 +2,7 @@ import os
 import json
 import io
 import time
+import asyncio
 from datetime import datetime
 import boto3
 from supabase import Client
@@ -43,10 +44,12 @@ def transcribe_background(
         audio_content = s3_response['Body'].read()
         audio_file = io.BytesIO(audio_content)
 
-        # Transcribe with ASR provider
-        transcription_result = asr_service.transcribe_audio(
-            audio_file=audio_file,
-            filename=s3_audio_path
+        # Transcribe with ASR provider (async function)
+        transcription_result = asyncio.run(
+            asr_service.transcribe_audio(
+                audio_file=audio_file,
+                filename=s3_audio_path
+            )
         )
 
         # Update DB with transcription
