@@ -28,7 +28,7 @@ class SpeechmaticsASRService:
     ) -> Dict[str, Any]:
         """Transcribe audio file using Speechmatics Batch API"""
         try:
-            from speechmatics.batch import AsyncClient, TranscriptionConfig, FormatType, OperatingPoint
+            from speechmatics.batch import AsyncClient, TranscriptionConfig, FormatType
 
             start_time = time.time()
             audio_file.seek(0)
@@ -36,13 +36,14 @@ class SpeechmaticsASRService:
             # Create client
             client = AsyncClient(api_key=self.api_key)
 
-            # Configure with diarization
+            # Configure with diarization (following official example)
             config = TranscriptionConfig(
                 language="ja",
-                operating_point=OperatingPoint.ENHANCED,
                 diarization="speaker",
-                enable_entities=True,
-                speaker_diarization_config={"sensitivity": 0.5}
+                speaker_diarization_config={
+                    "speaker_sensitivity": 0.5,
+                    "prefer_current_speaker": False
+                }
             )
 
             # Submit and wait
