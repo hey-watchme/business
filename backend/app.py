@@ -11,7 +11,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
 
-from services.asr_provider import DeepgramASRService
+# ASR provider selection (environment variable)
+def get_asr_provider():
+    """Get ASR provider based on environment variable
+
+    Supported providers:
+    - speechmatics (default): High accuracy speaker diarization
+    - deepgram: Fast processing
+    """
+    provider_name = os.getenv("ASR_PROVIDER", "speechmatics").lower()
+
+    if provider_name == "deepgram":
+        from services.asr_provider import DeepgramASRService
+        return DeepgramASRService()
+    elif provider_name == "speechmatics":
+        from services.asr_providers.speechmatics_provider import SpeechmaticsASRService
+        return SpeechmaticsASRService()
+    else:
+        raise ValueError(f"Unknown ASR provider: {provider_name}. Supported: deepgram, speechmatics")
+
 from services.llm_providers import get_current_llm, CURRENT_PROVIDER, CURRENT_MODEL
 
 # Load environment variables
@@ -176,8 +194,8 @@ async def transcribe_audio(
         audio_content = s3_response['Body'].read()
         audio_file = io.BytesIO(audio_content)
 
-        # 3. Transcribe with Deepgram
-        asr_service = DeepgramASRService()
+        # 3. Transcribe with selected ASR provider (default: Speechmatics)
+        asr_service = get_asr_provider()
         transcription_result = await asr_service.transcribe_audio(
             audio_file=audio_file,
             filename=s3_audio_path
