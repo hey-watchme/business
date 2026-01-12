@@ -59,8 +59,14 @@ S3_BUCKET = os.getenv("S3_BUCKET", "watchme-business")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 API_TOKEN = os.getenv("API_TOKEN", "watchme-b2b-poc-2025")
-SQS_TRANSCRIPTION_QUEUE_URL = os.getenv("SQS_TRANSCRIPTION_QUEUE_URL")
-SQS_ANALYSIS_QUEUE_URL = os.getenv("SQS_ANALYSIS_QUEUE_URL")
+SQS_TRANSCRIPTION_QUEUE_URL = os.getenv(
+    "SQS_TRANSCRIPTION_QUEUE_URL",
+    "https://sqs.ap-southeast-2.amazonaws.com/754724220380/business-transcription-completed-queue.fifo"
+)
+SQS_ANALYSIS_QUEUE_URL = os.getenv(
+    "SQS_ANALYSIS_QUEUE_URL",
+    "https://sqs.ap-southeast-2.amazonaws.com/754724220380/business-analysis-completed-queue.fifo"
+)
 
 # Initialize services
 s3_client = boto3.client('s3', region_name=AWS_REGION)
