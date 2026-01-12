@@ -13,3 +13,4 @@ openai==1.14.0
 deepgram-sdk==3.7.0
 tenacity==9.0.0
 google-cloud-speech==2.27.0
+speechmatics-batch==3.0.0
