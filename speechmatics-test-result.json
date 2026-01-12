@@ -1,0 +1,29 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8)
+🎙️  Testing Speechmatics ASR...
+API Key: 5BDbDR6FO2...
+Downloaded audio: 3258994 bytes
+
+⏳ Transcribing...
+
+📝 Result:
+{
+  "transcription": "SPEAKER S1: 得意な遊びとかは。得意なことってどんなことですか。\nSPEAKER S2: 得意というほど目立って得意はないんですが、好きなのはやっぱり普通にゲームをしたりとかは好きですし。公園に行くとアスレチック的な道具ですかね。遊具系は大好きですね。あとはなんか木の枝を集めてきたりとか、そういうあの何かこう落ちているものを使った遊びみたいなのは結構好きですね。\nSPEAKER S1: それの遊びはどんな遊び展開されるんですか。集めてきた枝とかで。\nSPEAKER S2: なんか秘密基地じゃないですけど。なんかどこか1か所に集めたりとか、キャンプごっこみたいなこと。焚き火とか行って木を組み立てたりとかですね。そういうことはやってます。\nSPEAKER S3: それで言うと、廃材遊び、空き箱とかいらないものを使って自分の創造するものを自由に組み立てたり。作るっていう事が。結構得意だっていう風に幼稚園からも。言われてますので。ブロック遊びも好きですね。\nSPEAKER S2: まあなんか機械的な構造とか。メカ的なものに対する関心は。結構一番ちっちゃい頃というか。物心つき始めから。ずっと変わらずありますね。プロペラ回転するものとか。\nSPEAKER S1: モノの構造とかが気になるんですかね。\nSPEAKER S2: そうですね。はい。",
+  "processing_time": 26.11,
+  "confidence": 0.95,
+  "word_count": 579,
+  "utterances": [],
+  "paragraphs": [],
+  "speaker_count": 3,
+  "no_speech_detected": false,
+  "model": "speechmatics-batch",
+  "provider": "speechmatics"
+}
+
+✅ Success!
+   Provider: speechmatics
+   Model: speechmatics-batch
+   Processing time: 26.11s
+   Confidence: 0.95
+   Speaker count: 3
+   Utterances: 0
+   Word count: 579

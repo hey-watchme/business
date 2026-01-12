@@ -65,15 +65,11 @@ class GoogleSpeechASRService:
                     enable_automatic_punctuation=True,
                     enable_word_time_offsets=True,
                     enable_word_confidence=True,
-                    diarization_config=speech_v2.SpeakerDiarizationConfig(
-                        min_speaker_count=1,
-                        max_speaker_count=3,
-                    )
                 )
             )
 
             request = speech_v2.RecognizeRequest(
-                recognizer=f"projects/{self._project_id}/locations/{self._location}/recognizers/_",
+                recognizer=f"projects/{self._project_id}/locations/{self._location}/recognizers/business-interview-recognizer",
                 config=config,
                 content=audio_data,
             )

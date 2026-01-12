@@ -24,8 +24,25 @@ business/
 
 ## 📚 ドキュメント
 
-- **[実装計画書](./IMPLEMENTATION_PLAN.md)** - 全体設計・技術仕様
-- **[開発進捗](./STATUS.md)** - 現在の進捗・次のタスク
+### 設計ドキュメント
+
+- **[認証・アカウント設計](./docs/AUTHENTICATION_DESIGN.md)** - 認証体系・Organization/Facility設計
+- **[実装計画書](./docs/IMPLEMENTATION_PLAN.md)** - 全体設計・技術仕様
+- **[非同期処理設計](./docs/ASYNC_PROCESSING_PLAN.md)** - SQS + Lambda イベント駆動型アーキテクチャ
+
+### 実装ドキュメント
+
+- **[文字起こし実装](./docs/TRANSCRIPTION_IMPLEMENTATION_PLAN.md)** - ASR実装詳細
+- **[分析実装](./docs/ANALYSIS_IMPLEMENTATION_PLAN.md)** - LLM分析実装詳細
+- **[ASRアーキテクチャ](./docs/ASR_ARCHITECTURE_PLAN.md)** - ASRプロバイダー選定・実装
+
+### 運用ドキュメント
+
+- **[テストガイド](./docs/TESTING_GUIDE.md)** - テスト手順
+- **[開発進捗](./docs/NEXT_SESSION.md)** - 現在の進捗・次のタスク
+
+### データベース
+
 - **[DB定義](./infrastructure/supabase/create_tables.sql)** - Supabaseテーブル定義
 
 ## 🚀 技術スタック
