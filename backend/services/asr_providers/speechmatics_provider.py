@@ -40,6 +40,7 @@ class SpeechmaticsASRService:
             config = TranscriptionConfig(
                 language="ja",
                 diarization="speaker",
+                enable_entities=True,
                 speaker_diarization_config={
                     "speaker_sensitivity": 0.5,
                     "prefer_current_speaker": False
