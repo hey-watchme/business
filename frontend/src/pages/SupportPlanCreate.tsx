@@ -261,7 +261,10 @@ const SupportPlanCreate: React.FC = () => {
             <div
               key={session.id}
               className={`session-card ${session.status} ${selectedSession?.id === session.id ? 'selected' : ''}`}
-              onClick={() => setSelectedSession(session)}
+              onClick={() => {
+                console.log('Session clicked:', session);
+                setSelectedSession(session);
+              }}
               style={{ cursor: 'pointer' }}
             >
               <div className="session-status">
@@ -336,7 +339,7 @@ const SupportPlanCreate: React.FC = () => {
             overflowY: 'auto'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>詳細情報</h2>
+              <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>詳細情報</h2>
               <button
                 onClick={() => setSelectedSession(null)}
                 style={{
@@ -359,21 +362,21 @@ const SupportPlanCreate: React.FC = () => {
               <div style={{ display: 'grid', gap: '12px' }}>
                 <div>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>セッションID</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', fontFamily: 'monospace' }}>{selectedSession.id}</p>
+                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{selectedSession.id}</p>
                 </div>
                 <div>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>サブジェクト（子供）</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0' }}>{selectedSession.child_id}</p>
+                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selectedSession.child_id}</p>
                 </div>
                 {selectedSession.staff_id && (
                   <div>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>担当者</span>
-                    <p style={{ fontSize: '14px', margin: '4px 0 0 0' }}>{selectedSession.staff_id}</p>
+                    <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selectedSession.staff_id}</p>
                   </div>
                 )}
                 <div>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>録音日時</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0' }}>{formatDate(selectedSession.recorded_at)}</p>
+                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{formatDate(selectedSession.recorded_at)}</p>
                 </div>
                 <div>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ステータス</span>
@@ -386,7 +389,7 @@ const SupportPlanCreate: React.FC = () => {
                 {selectedSession.duration_seconds && (
                   <div>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>録音時間</span>
-                    <p style={{ fontSize: '14px', margin: '4px 0 0 0' }}>{formatDuration(selectedSession.duration_seconds)}</p>
+                    <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{formatDuration(selectedSession.duration_seconds)}</p>
                   </div>
                 )}
               </div>
@@ -404,7 +407,8 @@ const SupportPlanCreate: React.FC = () => {
                   lineHeight: '1.6',
                   whiteSpace: 'pre-wrap',
                   maxHeight: '300px',
-                  overflowY: 'auto'
+                  overflowY: 'auto',
+                  color: 'var(--text-primary)'
                 }}>
                   {selectedSession.transcription}
                 </div>
@@ -423,13 +427,16 @@ const SupportPlanCreate: React.FC = () => {
                   lineHeight: '1.6',
                   whiteSpace: 'pre-wrap',
                   maxHeight: '300px',
-                  overflowY: 'auto'
+                  overflowY: 'auto',
+                  color: 'var(--text-primary)'
                 }}>
                   {(() => {
                     try {
+                      if (!selectedSession.analysis_result) return '分析結果がありません';
                       const result = JSON.parse(selectedSession.analysis_result);
-                      return result.summary || selectedSession.analysis_result;
-                    } catch {
+                      return result.summary || JSON.stringify(result, null, 2);
+                    } catch (e) {
+                      console.error('Failed to parse analysis_result:', e);
                       return selectedSession.analysis_result;
                     }
                   })()}
@@ -450,13 +457,16 @@ const SupportPlanCreate: React.FC = () => {
                   whiteSpace: 'pre-wrap',
                   maxHeight: '200px',
                   overflowY: 'auto',
-                  fontFamily: 'monospace'
+                  fontFamily: 'monospace',
+                  color: 'var(--text-primary)'
                 }}>
                   {(() => {
                     try {
+                      if (!selectedSession.transcription_metadata) return 'メタデータがありません';
                       const metadata = JSON.parse(selectedSession.transcription_metadata);
                       return JSON.stringify(metadata, null, 2);
-                    } catch {
+                    } catch (e) {
+                      console.error('Failed to parse transcription_metadata:', e);
                       return selectedSession.transcription_metadata;
                     }
                   })()}
