@@ -133,18 +133,27 @@ ASR_PROVIDER=deepgram
   → 文字起こし結果
 ```
 
-## ⚙️ Lambda関数（イベント駆動型）
+## ⚙️ Lambda関数（イベント駆動型）✅ 完全自動化
 
 | 関数名 | トリガー | 処理 | 状態 |
 |--------|---------|------|------|
-| `business-audio-upload-handler` | S3 Upload | 文字起こし自動開始 | ✅ 実装完了（未デプロイ） |
+| `business-audio-upload-handler` | S3 Upload | 文字起こし自動開始 | ✅ **デプロイ済み（2026-01-13）** |
 | `business-transcription-completed-handler` | SQS | 分析自動開始 | ✅ デプロイ済み |
+
+**録音から分析まで完全自動**: S3アップロード後、手動操作なしで文字起こし・LLM分析まで自動実行されます。
 
 詳細: [lambda/audio-upload-handler/README.md](./lambda/audio-upload-handler/README.md)
 
 ## 🔧 開発状況
 
-**進捗**: 約60% (トランスクリプション・分析・自動化完了)
+**進捗**: 約65% (トランスクリプション・分析・完全自動化完了)
+
+**✅ 完了機能:**
+- 音声アップロード（webm）
+- 自動文字起こし（Speechmatics）
+- 自動LLM分析（GPT-4o）
+- イベント駆動型完全自動化
+- ステータス管理（uploaded → transcribing → transcribed → analyzing → completed）
 
 詳細は [NEXT_SESSION.md](./NEXT_SESSION.md) 参照
 

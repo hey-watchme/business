@@ -32,4 +32,5 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-temp/
+temp/lambda/audio-upload-handler/urllib3*
+lambda/audio-upload-handler/*.dist-info
