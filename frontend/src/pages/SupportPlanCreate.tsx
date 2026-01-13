@@ -217,8 +217,8 @@ const SupportPlanCreate: React.FC = () => {
         </div>
       </div>
 
-      {/* Sessions List with Detail Panel */}
-      <div className="sessions-container" style={{ display: 'grid', gridTemplateColumns: selectedSession ? '1fr 1fr' : '1fr', gap: '24px' }}>
+      {/* Sessions List */}
+      <div className="sessions-container">
         <div className="sessions-section">
           <div className="section-header">
             <h2 className="section-title">最近のヒアリングセッション</h2>
@@ -328,35 +328,82 @@ const SupportPlanCreate: React.FC = () => {
         </div>
       </div>
 
-      {/* Detail Panel */}
+      {/* Drawer Overlay */}
       {selectedSession && (
-        <div className="session-detail-panel" style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-primary)',
-            borderRadius: '12px',
-            padding: '24px',
-            maxHeight: '800px',
-            overflowY: 'auto'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>詳細情報</h2>
-              <button
-                onClick={() => setSelectedSession(null)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '8px',
-                  color: 'var(--text-secondary)'
-                }}
-                title="閉じる"
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
+        <>
+          <div
+            className="drawer-overlay"
+            onClick={() => setSelectedSession(null)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 1000,
+              animation: 'fadeIn 0.2s ease-out'
+            }}
+          />
+          <div
+            className="session-detail-drawer"
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: '700px',
+              maxWidth: '90vw',
+              background: 'var(--bg-secondary)',
+              boxShadow: '-4px 0 24px rgba(0, 0, 0, 0.3)',
+              zIndex: 1001,
+              overflowY: 'auto',
+              animation: 'slideInRight 0.3s ease-out'
+            }}
+          >
+            <div style={{
+              position: 'sticky',
+              top: 0,
+              background: 'var(--bg-secondary)',
+              zIndex: 10,
+              padding: '24px 24px 16px 24px',
+              borderBottom: '1px solid var(--border-primary)',
+              marginBottom: '24px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>詳細情報</h2>
+                <button
+                  onClick={() => setSelectedSession(null)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-hover)';
+                    e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-tertiary)';
+                    e.currentTarget.style.borderColor = 'var(--border-primary)';
+                  }}
+                  title="閉じる"
+                >
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
             </div>
 
+            <div style={{ padding: '0 24px 24px 24px' }}>
             <div style={{ marginBottom: '24px' }}>
               <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-secondary)' }}>基本情報</h3>
               <div style={{ display: 'grid', gap: '12px' }}>
@@ -504,8 +551,10 @@ const SupportPlanCreate: React.FC = () => {
                 </div>
               </div>
             )}
+            </div>
           </div>
-        )}
+        </>
+      )}
       </div>
     </div>
   );

@@ -415,3 +415,20 @@
   box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
   background: linear-gradient(135deg, rgba(124, 77, 255, 0.05), rgba(111, 90, 229, 0.05));
 }
+
+/* Drawer Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
