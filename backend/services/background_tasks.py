@@ -52,6 +52,14 @@ def transcribe_background(
             )
         )
 
+        # Calculate audio duration from transcription result
+        duration_seconds = 0
+        utterances = transcription_result.get('utterances', [])
+        if utterances and len(utterances) > 0:
+            # Get the end time of the last utterance
+            last_utterance = utterances[-1]
+            duration_seconds = int(last_utterance.get('end', 0))
+
         # Update DB with transcription
         supabase.table('business_interview_sessions').update({
             'transcription': transcription_result['transcription'],
@@ -64,6 +72,7 @@ def transcribe_background(
                 'model': transcription_result.get('model', 'unknown'),
                 'processing_time': transcription_result.get('processing_time', 0.0),
             },
+            'duration_seconds': duration_seconds,
             'status': 'transcribed',
             'updated_at': datetime.now().isoformat()
         }).eq('id', session_id).execute()
