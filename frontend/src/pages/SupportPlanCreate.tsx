@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import RecordingSetup from '../components/RecordingSetup';
+import RecordingSession from '../components/RecordingSession';
 import './SupportPlanCreate.css';
 
 interface Session {
@@ -10,7 +12,11 @@ interface Session {
   progress?: number;
 }
 
+type RecordingMode = 'none' | 'setup' | 'recording';
+
 const SupportPlanCreate: React.FC = () => {
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>('none');
+  const [selectedChild, setSelectedChild] = useState('田中太郎');
   const [sessions] = useState<Session[]>([
     {
       id: '1',
@@ -76,6 +82,43 @@ const SupportPlanCreate: React.FC = () => {
     }
   };
 
+  const handleStartRecording = () => {
+    setRecordingMode('setup');
+  };
+
+  const handleRecordingStart = (childName: string) => {
+    setSelectedChild(childName);
+    setRecordingMode('recording');
+  };
+
+  const handleRecordingStop = () => {
+    setRecordingMode('none');
+    // TODO: Add session to list after recording
+  };
+
+  const handleRecordingCancel = () => {
+    setRecordingMode('none');
+  };
+
+  // Show recording modes
+  if (recordingMode === 'setup') {
+    return (
+      <RecordingSetup
+        onStart={handleRecordingStart}
+        onCancel={handleRecordingCancel}
+      />
+    );
+  }
+
+  if (recordingMode === 'recording') {
+    return (
+      <RecordingSession
+        childName={selectedChild}
+        onStop={handleRecordingStop}
+      />
+    );
+  }
+
   return (
     <div className="support-plan-create">
       <div className="page-header">
@@ -83,7 +126,7 @@ const SupportPlanCreate: React.FC = () => {
           <h1 className="page-title">個別支援計画作成</h1>
           <p className="page-subtitle">保護者ヒアリング録音から個別支援計画書を自動生成</p>
         </div>
-        <button className="primary-button">
+        <button className="primary-button" onClick={handleStartRecording}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
