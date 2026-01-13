@@ -312,6 +312,30 @@ async def analyze_interview(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start analysis: {str(e)}")
 
+@app.get("/api/sessions")
+async def get_sessions(
+    x_api_token: str = Header(None, alias="X-API-Token"),
+    limit: Optional[int] = 50
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        result = supabase.table('business_interview_sessions')\
+            .select('*')\
+            .order('recorded_at', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        return {"sessions": result.data, "count": len(result.data)}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch sessions: {str(e)}")
+
 @app.get("/api/sessions/{session_id}")
 async def get_session(
     session_id: str,
