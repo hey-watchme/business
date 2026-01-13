@@ -433,11 +433,20 @@ const SupportPlanCreate: React.FC = () => {
                   {(() => {
                     try {
                       if (!selectedSession.analysis_result) return '分析結果がありません';
-                      const result = JSON.parse(selectedSession.analysis_result);
-                      return result.summary || JSON.stringify(result, null, 2);
+
+                      let result = selectedSession.analysis_result;
+                      if (typeof result === 'string') {
+                        result = JSON.parse(result);
+                      }
+
+                      if (typeof result === 'object' && result.summary) {
+                        return typeof result.summary === 'string' ? result.summary : JSON.stringify(result.summary, null, 2);
+                      }
+
+                      return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
                     } catch (e) {
                       console.error('Failed to parse analysis_result:', e);
-                      return selectedSession.analysis_result;
+                      return String(selectedSession.analysis_result);
                     }
                   })()}
                 </div>
@@ -463,11 +472,16 @@ const SupportPlanCreate: React.FC = () => {
                   {(() => {
                     try {
                       if (!selectedSession.transcription_metadata) return 'メタデータがありません';
-                      const metadata = JSON.parse(selectedSession.transcription_metadata);
-                      return JSON.stringify(metadata, null, 2);
+
+                      let metadata = selectedSession.transcription_metadata;
+                      if (typeof metadata === 'string') {
+                        metadata = JSON.parse(metadata);
+                      }
+
+                      return typeof metadata === 'string' ? metadata : JSON.stringify(metadata, null, 2);
                     } catch (e) {
                       console.error('Failed to parse transcription_metadata:', e);
-                      return selectedSession.transcription_metadata;
+                      return String(selectedSession.transcription_metadata);
                     }
                   })()}
                 </div>
