@@ -4,7 +4,7 @@ import './Sidebar.css';
 interface MenuItem {
   id: string;
   label: string;
-  icon: JSX.Element;
+  icon: React.ReactElement;
   badge?: number | string;
   active?: boolean;
   subItems?: MenuItem[];
