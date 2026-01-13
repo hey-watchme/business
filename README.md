@@ -173,16 +173,28 @@ ASR_PROVIDER=deepgram
 
 ### 開発フロー
 
-1. コード修正（ローカル）
-2. 構文チェックのみ実施
+1. **コード修正（ローカル）**
+   - `backend/app.py` や `frontend/src/**` を修正
+
+2. **構文チェックのみ実施**
    ```bash
+   # Python（backend）
    python3 -m py_compile backend/app.py
+
+   # TypeScript（frontend）は自動チェック
    ```
-3. GitHub経由でデプロイ
+
+3. **Git操作（⚠️ モノレポ構成）**
    ```bash
+   # リポジトリルート（business/）で実行
+   cd /Users/kaya.matsumoto/projects/watchme/business
+   git add .
+   git commit -m "feat: 機能説明"
    git push origin main
    ```
-4. 本番環境で動作確認
+   **注意**: backend/ や frontend/ 内で個別に git 操作しない（GitHub Actions が2回実行される）
+
+4. **本番環境で動作確認**
    - Frontend: https://business.hey-watch.me
    - Backend: https://api.hey-watch.me/business
 
