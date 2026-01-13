@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import RecordingSetup from '../components/RecordingSetup';
 import RecordingSession from '../components/RecordingSession';
-import { api, InterviewSession } from '../api/client';
+import { api, type InterviewSession } from '../api/client';
 import './SupportPlanCreate.css';
 
 type RecordingMode = 'none' | 'setup' | 'recording';
@@ -323,11 +323,11 @@ const SupportPlanCreate: React.FC = () => {
             </div>
           ))}
         </div>
-        </div>
+      </div>
 
-        {/* Detail Panel */}
-        {selectedSession && (
-          <div className="session-detail-panel" style={{
+      {/* Detail Panel */}
+      {selectedSession && (
+        <div className="session-detail-panel" style={{
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-primary)',
             borderRadius: '12px',
