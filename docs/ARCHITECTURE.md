@@ -46,37 +46,41 @@
 
 ## 🔄 データフロー（非同期処理）
 
-### 全体フロー
+### 全体フロー（完全自動化）✅
 
 ```
 1. 録音完了
    ↓
 2. POST /api/upload
-   - S3にアップロード
-   - DBにセッション作成 (status: 'uploaded')
+   - S3にアップロード (webm)
+   - DBにセッション作成 (status: 'completed')
    ↓
-3. POST /api/transcribe → 202 Accepted (即座に返却)
+3. S3イベント → Lambda: business-audio-upload-handler
+   - s3_audio_path から session_id を取得
+   - POST /api/transcribe 自動呼び出し
+   ↓
+4. POST /api/transcribe → 202 Accepted (即座に返却)
    - status: 'transcribing'
    - バックグラウンドで Speechmatics API 呼び出し
    ↓
-4. 文字起こし完了 (15分の音声でもOK)
+5. 文字起こし完了 (15分の音声でもOK)
    - DB更新: transcription 保存
    - status: 'transcribed'
    - SQS送信: business-transcription-completed-queue.fifo
    ↓
-5. Lambda: business-transcription-completed-handler
+6. Lambda: business-transcription-completed-handler
    - SQS通知を受信
    - POST /api/analyze 呼び出し
    ↓
-6. POST /api/analyze → 202 Accepted (即座に返却)
+7. POST /api/analyze → 202 Accepted (即座に返却)
    - status: 'analyzing'
    - バックグラウンドで GPT-4o 分析
    ↓
-7. 分析完了
+8. 分析完了
    - DB更新: analysis_result 保存
    - status: 'completed'
    ↓
-8. フロントエンド: ポーリングまたはWebSocketで結果取得
+9. フロントエンド: ポーリングまたはWebSocketで結果取得
 ```
 
 ### なぜ非同期処理か
@@ -126,8 +130,8 @@ CREATE TABLE business_interview_sessions (
 #### ステータス遷移
 
 ```
-uploaded
-  ↓ (POST /api/transcribe)
+completed (POST /api/upload完了時)
+  ↓ (S3イベント → Lambda → POST /api/transcribe)
 transcribing
   ↓ (Speechmatics完了)
 transcribed
@@ -238,9 +242,10 @@ Content-Type: multipart/form-data
 
 ### Lambda関数
 
-| 関数名 | トリガー | 処理 |
-|--------|---------|------|
-| `business-transcription-completed-handler` | SQS | POST /api/analyze 呼び出し |
+| 関数名 | トリガー | 処理 | 状態 |
+|--------|---------|------|------|
+| `business-audio-upload-handler` | S3 Upload | POST /api/transcribe 呼び出し | ✅ 実装完了（未デプロイ） |
+| `business-transcription-completed-handler` | SQS | POST /api/analyze 呼び出し | ✅ デプロイ済み |
 
 ### EC2
 

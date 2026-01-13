@@ -24,19 +24,26 @@ business/
 
 ## 📚 ドキュメント
 
-### アーキテクチャ・設計
+### 🔍 処理フローを知りたい方へ
 
-- **[システムアーキテクチャ](./docs/ARCHITECTURE.md)** - 全体構成・データフロー・技術仕様
+**👉 [システムアーキテクチャ](./docs/ARCHITECTURE.md)** を参照してください
+
+- 録音からLLM分析までの全体フロー
+- イベント駆動型の非同期処理
+- ステータス遷移（uploaded → transcribing → transcribed → analyzing → completed）
+- API仕様・AWS構成・環境変数
+
+### 🧪 テスト方法を知りたい方へ
+
+**👉 [テストガイド](./docs/TESTING_GUIDE.md)** を参照してください
+
+⚠️ **注意**: このドキュメントは一部古い内容を含みます（Deepgram前提、現在はSpeechmaticsがデフォルト）
+
+### その他のドキュメント
+
 - **[認証・アカウント設計](./docs/AUTHENTICATION_DESIGN.md)** - Organization/Facility設計・認証体系
 - **[実装計画書](./docs/IMPLEMENTATION_PLAN.md)** - 初期実装計画（参考）
-
-### 実装ドキュメント
-
 - **[分析実装](./docs/ANALYSIS_IMPLEMENTATION_PLAN.md)** - LLM分析実装詳細
-
-### 運用・テスト
-
-- **[テストガイド](./docs/TESTING_GUIDE.md)** - テスト手順
 - **[DB定義](./infrastructure/supabase/create_tables.sql)** - Supabaseテーブル定義
 
 ## 🚀 技術スタック
@@ -80,9 +87,64 @@ ASR_PROVIDER=deepgram
    - `.github/workflows/deploy-to-ecr.yml` の env セクションに追加
    - docker-compose.prod.yml に環境変数を追加
 
+### 🎤 録音形式
+
+**フロントエンド録音形式**: `audio/webm`
+
+| 項目 | 詳細 |
+|------|------|
+| **録音形式** | WebM（ブラウザ標準） |
+| **API** | MediaRecorder API |
+| **変換** | なし（webmのまま送信） |
+| **理由** | 転送パフォーマンス重視 |
+
+#### なぜwebmを使用するのか
+
+✅ **転送パフォーマンス**:
+- wavより圧縮効率が高い（ファイルサイズ小）
+- モバイル・Web環境で高速転送
+- ネットワーク帯域の節約
+
+✅ **ブラウザ標準**:
+- MediaRecorder APIのデフォルト形式
+- 追加ライブラリ不要
+- クロスブラウザ対応
+
+✅ **ASR互換性**:
+- Deepgram・Speechmatics両方がwebmをネイティブサポート
+- API側で自動的に最適な形式に変換
+- wav変換不要
+
+#### wav 16kHz モノラル変換は不要
+
+**現在の設計では変換不要**:
+- ASR APIが内部で最適な形式に自動変換
+- フロントエンドで変換すると、ブラウザ負荷＋転送サイズ増加
+- webmのまま送る方がパフォーマンス向上
+
+**処理フロー**:
+```
+フロントエンド (MediaRecorder)
+  → audio/webm 録音
+  → そのままアップロード (app.py:137)
+  → S3保存 (webm)
+  → ASR API送信 (webm)
+  → ASR側で自動変換
+  → 文字起こし結果
+```
+
+## ⚙️ Lambda関数（イベント駆動型）
+
+| 関数名 | トリガー | 処理 | 状態 |
+|--------|---------|------|------|
+| `business-audio-upload-handler` | S3 Upload | 文字起こし自動開始 | ✅ 実装完了（未デプロイ） |
+| `business-transcription-completed-handler` | SQS | 分析自動開始 | ✅ デプロイ済み |
+
+詳細: [lambda/audio-upload-handler/README.md](./lambda/audio-upload-handler/README.md)
+
 ## 🔧 開発状況
 
-**進捗**: 約50% (トランスクリプション・分析機能完了)
+**進捗**: 約60% (トランスクリプション・分析・自動化完了)
 
 詳細は [NEXT_SESSION.md](./NEXT_SESSION.md) 参照
 
