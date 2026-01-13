@@ -1,0 +1,71 @@
+import React from 'react';
+import './Header.css';
+
+interface HeaderProps {
+  companyName: string;
+  facilityName: string;
+  userName: string;
+  userRole?: string;
+}
+
+const Header: React.FC<HeaderProps> = ({
+  companyName = '株式会社すまいる',
+  facilityName = '横浜市港北営業所',
+  userName = '山田太郎',
+  userRole = '管理者'
+}) => {
+  return (
+    <header className="header">
+      <div className="header-left">
+        <div className="logo-section">
+          <span className="logo">WatchMe</span>
+          <span className="logo-business">Business</span>
+        </div>
+        <div className="org-info">
+          <span className="company-name">{companyName}</span>
+          <span className="divider">|</span>
+          <span className="facility-name">{facilityName}</span>
+        </div>
+      </div>
+
+      <div className="header-center">
+        <div className="search-bar">
+          <svg className="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M11 11L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <input type="text" placeholder="検索..." />
+        </div>
+      </div>
+
+      <div className="header-right">
+        <button className="header-icon-btn" title="通知">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M15 7C15 5.67392 14.4732 4.40215 13.5355 3.46447C12.5979 2.52678 11.3261 2 10 2C8.67392 2 7.40215 2.52678 6.46447 3.46447C5.52678 4.40215 5 5.67392 5 7C5 14 2 16 2 16H18C18 16 15 14 15 7Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M11.73 18C11.5542 18.3031 11.3019 18.5547 10.9982 18.7295C10.6946 18.9044 10.3504 18.9965 10 18.9965C9.64964 18.9965 9.30541 18.9044 9.00179 18.7295C8.69818 18.5547 8.44583 18.3031 8.27 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span className="notification-badge">3</span>
+        </button>
+
+        <button className="header-icon-btn" title="設定">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="3" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M10 1V3M10 17V19M19 10H17M3 10H1M16.364 3.636L15 5M5 15L3.636 16.364M16.364 16.364L15 15M5 5L3.636 3.636" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </button>
+
+        <div className="user-profile">
+          <div className="user-info">
+            <span className="user-name">{userName}</span>
+            <span className="user-role">{userRole}</span>
+          </div>
+          <div className="user-avatar">
+            {userName.charAt(0)}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default Header;

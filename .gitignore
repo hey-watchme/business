@@ -34,3 +34,4 @@ Thumbs.db
 *.tmp
 temp/lambda/audio-upload-handler/urllib3*
 lambda/audio-upload-handler/*.dist-info
+lambda/audio-upload-handler/*.zip
