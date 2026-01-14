@@ -58,7 +58,7 @@ app.add_middleware(
 AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "watchme-business")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # Use service_role key for backend
 API_TOKEN = os.getenv("API_TOKEN", "watchme-b2b-poc-2025")
 SQS_TRANSCRIPTION_QUEUE_URL = os.getenv(
     "SQS_TRANSCRIPTION_QUEUE_URL",
@@ -407,7 +407,7 @@ async def create_support_plan(
 
         # Use dummy facility_id and created_by (will be replaced with auth later)
         facility_id = "00000000-0000-0000-0000-000000000001"  # Test facility
-        created_by = None  # Will be set by auth later
+        created_by = "00000000-0000-0000-0000-000000000001"  # Dummy user (will be set by auth later)
 
         # Insert into database
         result = supabase.table('business_support_plans').insert({
