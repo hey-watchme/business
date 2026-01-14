@@ -4,30 +4,47 @@
 
 ## ✅ 今回のセッションで完了した作業
 
-### 1. データベースマイグレーション完了 🎉
+### 1. Support Plans CRUD API 実装完了 🎉
 
-**問題**:
-- `auth.users`と`public.users`の区別が曖昧
-- 古い`business_children`, `business_facilities`テーブルが残存
-- 統合アーキテクチャへの移行が未完了
+**実装内容**:
+- Pydanticモデル定義（SupportPlanCreate, SupportPlanUpdate, SupportPlanResponse）
+- POST /api/support-plans（新規作成）
+- GET /api/support-plans（一覧取得、session_count付き）
+- GET /api/support-plans/:id（詳細取得、sessions配列付き）
+- PUT /api/support-plans/:id（更新）
+- DELETE /api/support-plans/:id（削除）
+- GET /api/sessions に support_plan_id フィルタ追加
 
-**解決策**:
-- すべてのSQLファイルで`public.`スキーマを明示化
-- 既存DBの状態を確認し、古いテーブルを削除
-- 新しい統合アーキテクチャでテーブルを再作成
+**対応した問題**:
+1. **RLSエラー**: `SUPABASE_KEY` → `SUPABASE_SERVICE_ROLE_KEY` に変更
+   - CI/CD設定3箇所を更新（docker-compose.prod.yml, deploy-to-ecr.yml x2）
+2. **subject_id NOT NULL制約**: `ALTER TABLE` で NULL 許可に変更
+3. **created_by 外部キー制約**: ダミーUUIDではなく `None` に変更
 
-**実施内容**:
-1. `000_base_tables.sql`: `public.`スキーマで統一
-2. `001a_alter_existing_tables.sql`: `users`に`role`, `facility_id`追加
-3. `002_cleanup_and_final_setup.sql`: 古いテーブル削除、新規作成
-   - `business_support_plans`: 個別支援計画テーブル
-   - `subject_relations`: 観測対象との関係性テーブル
-   - RLSポリシー、トリガー、ビュー設定
+**動作確認済み**:
+```bash
+# テスト成功
+curl -X POST "https://api.hey-watch.me/business/api/support-plans" \
+  -H "X-API-Token: watchme-b2b-poc-2025" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"田中太郎くん 2025年度 個別支援計画","plan_number":"2025-001","status":"draft"}'
 
-**結果**:
-- データベースは統合アーキテクチャで正常に動作
-- `auth.users`と`public.users`の区別が明確
-- すべてGitHubにプッシュ済み
+# 結果
+{
+  "id": "23bc674a-177a-4346-8e03-5f48243598e0",
+  "title": "田中太郎くん 2025年度 個別支援計画",
+  "plan_number": "2025-001",
+  "status": "draft",
+  "subject_id": null,
+  "session_count": 0
+}
+```
+
+**コミット履歴**:
+- `cade0c6`: feat: add Support Plans CRUD API
+- `9376b79`: fix: use SUPABASE_SERVICE_ROLE_KEY for backend
+- `247db03`: fix: add SUPABASE_SERVICE_ROLE_KEY to CI/CD config
+- `f06a514`: fix: set created_by to None to avoid FK constraint
 
 ---
 
@@ -41,20 +58,17 @@
 - `facilities`: 施設マスタ（B2C/B2B共通）
 
 #### Business専用テーブル
-- `business_support_plans`: 個別支援計画
+- `business_support_plans`: 個別支援計画（**subject_id は NULL 許可**、**created_by は NULL 許可**）
 - `business_interview_sessions`: ヒアリングセッション
 - `subject_relations`: 観測対象との関係性（権限管理）
-
-#### B2C専用テーブル
-- `audio_files`, `spot_features`, `spot_results`, `daily_results`, `weekly_results` 等
 
 ### 重要な外部キー関係
 
 ```
 business_support_plans
   ├─ facility_id → facilities(id)
-  ├─ subject_id → subjects(subject_id)
-  └─ created_by → users(user_id)
+  ├─ subject_id → subjects(subject_id) [NULL許可]
+  └─ created_by → users(user_id) [NULL許可]
 
 business_interview_sessions
   ├─ facility_id → facilities(id)
@@ -70,110 +84,119 @@ subject_relations
 
 ## 🚀 次のセッションで行うべき作業
 
-### Phase 1: Backend API実装（優先度：高）
+### Phase 1: Backend API実装（残タスク）
 
-#### 1. Support Plans API
-- [ ] `GET /api/support-plans`: 支援計画一覧取得
-- [ ] `POST /api/support-plans`: 新規支援計画作成
-- [ ] `GET /api/support-plans/:id`: 支援計画詳細取得
-- [ ] `PUT /api/support-plans/:id`: 支援計画更新
-- [ ] `DELETE /api/support-plans/:id`: 支援計画削除
+#### 1. Subjects API（未実装）
+- [ ] `GET /api/subjects`: サブジェクト一覧取得
+- [ ] `POST /api/subjects`: 新規サブジェクト作成
+- [ ] `GET /api/subjects/:id`: サブジェクト詳細取得
+- [ ] `PUT /api/subjects/:id`: サブジェクト更新
 
-**注意点**:
-- RLSポリシーで施設単位のデータ分離を確認
-- `facility_id`は現在ログイン中のユーザーから取得
-- `subject_id`は既存の`subjects`テーブルから参照
-
-#### 2. Subject Relations API
+#### 2. Subject Relations API（未実装）
 - [ ] `GET /api/subjects/:id/relations`: 観測対象の関係者一覧
 - [ ] `POST /api/subjects/:id/relations`: 関係者追加
 - [ ] `PUT /api/subjects/:id/relations/:relationId`: 権限更新
 - [ ] `DELETE /api/subjects/:id/relations/:relationId`: 関係者削除
 
-#### 3. Session API の更新
-- [ ] `GET /api/sessions`: セッション一覧に`support_plan_id`でフィルタ追加
-- [ ] `POST /api/sessions`: `support_plan_id`を含める
-- [ ] `PUT /api/sessions/:id`: `support_plan_id`の更新
+---
 
-**実装場所**: `/Users/kaya.matsumoto/projects/watchme/business/backend/app.py`
+### Phase 2: Frontend UI実装（最優先）
+
+#### 1. 個別支援計画一覧画面（SupportPlanCreate.tsx 改修）
+
+**現状**: セッション一覧を表示
+**変更後**: 支援計画一覧を表示
+
+**実装内容**:
+- [ ] API統合：`GET /api/support-plans` を呼び出し
+- [ ] 支援計画カードの表示
+  - タイトル
+  - 計画番号
+  - ステータス
+  - セッション数
+  - 作成日時
+- [ ] 「新規作成」ボタン
+- [ ] カードクリック → 詳細画面（右スライド）表示
+
+**ファイル**: `/Users/kaya.matsumoto/projects/watchme/business/frontend/src/pages/SupportPlanCreate.tsx`
+
+#### 2. 個別支援計画作成モーダル
+
+**実装内容**:
+- [ ] モーダルコンポーネント作成
+- [ ] タイトル入力フィールド
+- [ ] 計画番号入力フィールド（オプション）
+- [ ] ステータス選択（draft/active）
+- [ ] API統合：`POST /api/support-plans`
+- [ ] 作成成功後、一覧を再取得
+
+#### 3. 個別支援計画詳細画面（右スライド）
+
+**現状**: セッション詳細を表示
+**変更後**: 支援計画詳細を表示
+
+**実装内容**:
+- [ ] 基本情報表示
+  - タイトル
+  - 計画番号
+  - ステータス
+  - サブジェクト（未設定 or 名前）
+  - 作成日時
+- [ ] 「+ 支援対象を追加」ボタン（subject_id が null の場合）
+- [ ] 紐づくセッション一覧
+- [ ] 「セッション開始」ボタン
+- [ ] 「編集」ボタン
 
 ---
 
-### Phase 2: Frontend UI実装（優先度：中）
+### Phase 3: API Client の作成
 
-#### 1. 支援計画一覧画面
-- [ ] 支援計画一覧の表示
-- [ ] 施設・観測対象でフィルタリング
-- [ ] ステータス（draft/active/completed/archived）表示
-- [ ] 新規作成ボタン
+#### Frontend API Client（`frontend/src/api/client.ts`）
 
-#### 2. 支援計画詳細画面
-- [ ] 支援計画の基本情報表示
-- [ ] 紐づくセッション一覧表示
-- [ ] セッション追加ボタン
-- [ ] 支援計画編集ボタン
-
-#### 3. 支援計画作成/編集画面
-- [ ] タイトル入力
-- [ ] 観測対象選択（`subjects`から）
-- [ ] 計画番号入力
-- [ ] ステータス選択
-
-**実装場所**: `/Users/kaya.matsumoto/projects/watchme/business/frontend/src/`
+**追加が必要なAPI**:
+- [ ] `getSupportPlans()`: 支援計画一覧取得
+- [ ] `createSupportPlan(data)`: 支援計画作成
+- [ ] `getSupportPlan(id)`: 支援計画詳細取得
+- [ ] `updateSupportPlan(id, data)`: 支援計画更新
+- [ ] `deleteSupportPlan(id)`: 支援計画削除
 
 ---
 
-### Phase 3: 権限管理実装（優先度：中）
+## ⚠️ 重要な注意事項
 
-#### 1. ロールベース認証
-- [ ] `users.role`に基づいたアクセス制御
-- [ ] `parent`: WatchMeアプリのみ
-- [ ] `staff`: WatchMe + Business両方
-- [ ] `admin`: 全権限
+### 1. Supabase Key の使い分け
 
-#### 2. Subject Relations による権限制御
-- [ ] `can_view`: 閲覧権限チェック
-- [ ] `can_edit`: 編集権限チェック
-- [ ] `is_primary`: 主担当/主保護者の識別
+- **Backend**: `SUPABASE_SERVICE_ROLE_KEY` を使用（RLSをバイパス）
+- **Frontend**: `SUPABASE_ANON_KEY` を使用（RLSが適用される）
 
----
+**現在の設定**:
+- `backend/app.py`: `SUPABASE_SERVICE_ROLE_KEY` 使用中 ✅
+- CI/CD: 3箇所更新済み ✅
 
-## 🔍 確認が必要な事項
+### 2. 環境変数追加時のルール
 
-### 1. 既存の`business_interview_sessions`のデータ
-```sql
-SELECT COUNT(*) FROM business_interview_sessions;
-```
-現在16件のデータが存在。これらの`subject_id`と`facility_id`が正しく参照されているか確認済み。
+**CICD_STANDARD_SPECIFICATION.md** に従い、必ず3箇所を更新：
+1. GitHub Secrets
+2. `.github/workflows/deploy-to-ecr.yml` (env: + echo)
+3. `docker-compose.prod.yml` (environment:)
 
-### 2. `subjects`テーブルと`users`テーブルの連携
-- B2Cでは`subjects`は既に使用されている
-- B2Bでも同じ`subjects`テーブルを使用する
-- 両者の整合性を保つ必要がある
+### 3. データベース操作
 
-### 3. `facilities`テーブルのデータ
-テスト用施設データが1件存在：
-```sql
-SELECT * FROM facilities WHERE id = '00000000-0000-0000-0000-000000000001';
--- 結果: 'テスト療育施設'
-```
-
----
-
-## ⚠️ 注意事項
-
-### 1. データベース操作
 - **auth.usersへの直接参照は絶対禁止**
 - すべて`public.users(user_id)`を使用
 - RLSポリシーで`auth.uid()`を使うのは正しい（Supabase認証関数）
 
-### 2. マイグレーション
-- すでに実行済みのため、再実行不要
-- 新しい変更は新しいマイグレーションファイルを作成
+### 4. UI/UX の設計方針
 
-### 3. テストデータ
-- 現在のデータは削除可能だったため削除済み
-- 新しいテストデータが必要な場合は作成が必要
+**ユーザー体験フロー**:
+1. 「個別支援計画作成」ボタンをクリック
+2. モーダル表示（タイトル・計画番号入力）
+3. 支援計画作成（subject_id は null）
+4. 詳細画面で「+ 支援対象を追加」ボタン
+5. サブジェクト選択/新規作成
+6. 「セッション開始」ボタンでセッション録音
+
+**重要**: 現在16件の既存セッションは `support_plan_id` が null のため、一覧に表示されない。
 
 ---
 
@@ -181,47 +204,51 @@ SELECT * FROM facilities WHERE id = '00000000-0000-0000-0000-000000000001';
 
 ### プロジェクト内
 - `/Users/kaya.matsumoto/projects/watchme/business/docs/INTEGRATED_ARCHITECTURE.md`: 統合アーキテクチャ設計書
-- `/Users/kaya.matsumoto/projects/watchme/business/infrastructure/supabase/migrations/README.md`: マイグレーション実行手順
-- `/Users/kaya.matsumoto/projects/watchme/business/infrastructure/supabase/migrations/002_cleanup_and_final_setup.sql`: 実行済みSQL
+- `/Users/kaya.matsumoto/projects/watchme/business/backend/app.py`: Backend API実装（L388-610）
+- `/Users/kaya.matsumoto/projects/watchme/business/frontend/src/pages/SupportPlanCreate.tsx`: Frontend UI
 
 ### WatchMe全体
 - `/Users/kaya.matsumoto/projects/watchme/CLAUDE.md`: WatchMeプロジェクト全体のルール
 - `/Users/kaya.matsumoto/CLAUDE.md`: 開発全般の基本方針
+- `/Users/kaya.matsumoto/projects/watchme/server-configs/docs/CICD_STANDARD_SPECIFICATION.md`: CI/CD標準仕様
 
 ---
 
 ## 🎯 次セッションの最優先タスク
 
-**1. Backend API実装を開始**
-- まず`GET /api/support-plans`の実装から開始
-- RLSポリシーが正しく機能するか確認
-- Postmanまたはcurlでテスト
+**1. Frontend: 支援計画一覧画面の実装**
+- `SupportPlanCreate.tsx` を改修
+- API統合（`GET /api/support-plans`）
+- 支援計画カード表示
+- 新規作成モーダル実装
 
-**2. フロントエンドで一覧画面を作成**
-- 支援計画一覧を表示
-- バックエンドAPIと連携して動作確認
+**2. Frontend: 支援計画詳細画面の実装**
+- 右スライドで詳細表示
+- 基本情報 + 紐づくセッション一覧
+- 「+ 支援対象を追加」ボタン
 
-**3. 実際のワークフローをテスト**
-1. 施設を作成
-2. 観測対象（subject）を作成
-3. 支援計画を作成
-4. セッションを紐づけ
+**3. API Client の作成**
+- `frontend/src/api/client.ts` に Support Plans API を追加
 
 ---
 
 ## 💡 今回のセッションで学んだこと
 
-1. **既存DBの状態確認が最重要**
-   - 推測せず、必ず`information_schema`で確認
-   - テーブル構造、データ件数、外部キー関係を把握
+1. **権限エラーは最初に疑う**
+   - RLSエラー → Supabase Key の種類を確認
+   - Backend は `SERVICE_ROLE_KEY`、Frontend は `ANON_KEY`
 
-2. **段階的な実行が重要**
-   - 一度に全SQLを実行せず、ステップバイステップ
-   - エラーが出たら、その箇所を特定して修正
+2. **環境変数は3箇所セットで更新**
+   - GitHub Secrets だけでは不十分
+   - CI/CD 設定（2箇所）+ docker-compose も必須
 
-3. **記録を残す**
-   - 実行した手順をSQLファイルに記録
-   - READMEに実行状況を記載
+3. **外部キー制約は慎重に**
+   - ダミー値を使う場合、実際にテーブルに存在する必要がある
+   - NULL 許可が適切な場合も多い
+
+4. **ユーザーに聞くことを躊躇しない**
+   - 推測で進めない
+   - 不明点があれば即座に STOP して質問
 
 ---
 
@@ -233,3 +260,23 @@ SELECT * FROM facilities WHERE id = '00000000-0000-0000-0000-000000000001';
 - Backend (dev): http://localhost:8052
 - Frontend (prod): https://business.hey-watch.me
 - Backend (prod): https://api.hey-watch.me/business
+
+---
+
+## 🧪 テスト用エンドポイント
+
+```bash
+# 支援計画作成
+curl -X POST "https://api.hey-watch.me/business/api/support-plans" \
+  -H "X-API-Token: watchme-b2b-poc-2025" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"テスト支援計画","plan_number":"2025-999","status":"draft"}'
+
+# 支援計画一覧取得
+curl "https://api.hey-watch.me/business/api/support-plans" \
+  -H "X-API-Token: watchme-b2b-poc-2025"
+
+# 支援計画詳細取得
+curl "https://api.hey-watch.me/business/api/support-plans/23bc674a-177a-4346-8e03-5f48243598e0" \
+  -H "X-API-Token: watchme-b2b-poc-2025"
+```
