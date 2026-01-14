@@ -158,9 +158,6 @@ const SupportPlanCreate: React.FC = () => {
     }
   };
 
-  const handleStartRecording = () => {
-    setRecordingMode('setup');
-  };
 
   const handleRecordingStart = (childName: string) => {
     setSelectedChild(childName);
