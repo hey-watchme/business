@@ -107,6 +107,30 @@ class AnalyzeResponse(BaseModel):
     model: str
     message: str
 
+# Support Plans models
+class SupportPlanCreate(BaseModel):
+    title: str
+    plan_number: Optional[str] = None
+    status: str = "draft"
+
+class SupportPlanUpdate(BaseModel):
+    title: Optional[str] = None
+    plan_number: Optional[str] = None
+    status: Optional[str] = None
+    subject_id: Optional[str] = None
+
+class SupportPlanResponse(BaseModel):
+    id: str
+    facility_id: str
+    subject_id: Optional[str]
+    title: str
+    plan_number: Optional[str]
+    status: str
+    created_by: Optional[str]
+    created_at: str
+    updated_at: str
+    session_count: Optional[int] = 0
+
 @app.get("/health")
 async def health_check():
     return {
@@ -316,6 +340,7 @@ async def analyze_interview(
 @app.get("/api/sessions")
 async def get_sessions(
     x_api_token: str = Header(None, alias="X-API-Token"),
+    support_plan_id: Optional[str] = None,
     limit: Optional[int] = 50
 ):
     # Validate token
@@ -326,11 +351,13 @@ async def get_sessions(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        result = supabase.table('business_interview_sessions')\
-            .select('*')\
-            .order('recorded_at', desc=True)\
-            .limit(limit)\
-            .execute()
+        query = supabase.table('business_interview_sessions').select('*')
+
+        # Filter by support_plan_id if provided
+        if support_plan_id:
+            query = query.eq('support_plan_id', support_plan_id)
+
+        result = query.order('recorded_at', desc=True).limit(limit).execute()
 
         return {"sessions": result.data, "count": len(result.data)}
 
@@ -360,6 +387,230 @@ async def get_session(
 
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Session not found: {str(e)}")
+
+# Support Plans endpoints
+@app.post("/api/support-plans", response_model=SupportPlanResponse)
+async def create_support_plan(
+    plan: SupportPlanCreate,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Generate UUID for new plan
+        plan_id = str(uuid.uuid4())
+
+        # Use dummy facility_id and created_by (will be replaced with auth later)
+        facility_id = "00000000-0000-0000-0000-000000000001"  # Test facility
+        created_by = None  # Will be set by auth later
+
+        # Insert into database
+        result = supabase.table('business_support_plans').insert({
+            'id': plan_id,
+            'facility_id': facility_id,
+            'subject_id': None,
+            'title': plan.title,
+            'plan_number': plan.plan_number,
+            'status': plan.status,
+            'created_by': created_by
+        }).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create support plan")
+
+        created_plan = result.data[0]
+
+        return SupportPlanResponse(
+            id=created_plan['id'],
+            facility_id=created_plan['facility_id'],
+            subject_id=created_plan.get('subject_id'),
+            title=created_plan['title'],
+            plan_number=created_plan.get('plan_number'),
+            status=created_plan['status'],
+            created_by=created_plan.get('created_by'),
+            created_at=created_plan['created_at'],
+            updated_at=created_plan['updated_at'],
+            session_count=0
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create support plan: {str(e)}")
+
+@app.get("/api/support-plans")
+async def get_support_plans(
+    x_api_token: str = Header(None, alias="X-API-Token"),
+    facility_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: Optional[int] = 50
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Build query
+        query = supabase.table('business_support_plans').select('*')
+
+        if facility_id:
+            query = query.eq('facility_id', facility_id)
+
+        if status:
+            query = query.eq('status', status)
+
+        result = query.order('created_at', desc=True).limit(limit).execute()
+
+        # Add session count for each plan
+        plans_with_counts = []
+        for plan in result.data:
+            session_count_result = supabase.table('business_interview_sessions')\
+                .select('id', count='exact')\
+                .eq('support_plan_id', plan['id'])\
+                .execute()
+
+            plans_with_counts.append({
+                **plan,
+                'session_count': session_count_result.count if session_count_result.count else 0
+            })
+
+        return {"plans": plans_with_counts, "count": len(plans_with_counts)}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch support plans: {str(e)}")
+
+@app.get("/api/support-plans/{plan_id}")
+async def get_support_plan(
+    plan_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Get support plan
+        plan_result = supabase.table('business_support_plans')\
+            .select('*')\
+            .eq('id', plan_id)\
+            .single()\
+            .execute()
+
+        if not plan_result.data:
+            raise HTTPException(status_code=404, detail="Support plan not found")
+
+        # Get associated sessions
+        sessions_result = supabase.table('business_interview_sessions')\
+            .select('*')\
+            .eq('support_plan_id', plan_id)\
+            .order('recorded_at', desc=True)\
+            .execute()
+
+        return {
+            **plan_result.data,
+            'sessions': sessions_result.data,
+            'session_count': len(sessions_result.data)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch support plan: {str(e)}")
+
+@app.put("/api/support-plans/{plan_id}")
+async def update_support_plan(
+    plan_id: str,
+    plan: SupportPlanUpdate,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Build update data
+        update_data = {}
+        if plan.title is not None:
+            update_data['title'] = plan.title
+        if plan.plan_number is not None:
+            update_data['plan_number'] = plan.plan_number
+        if plan.status is not None:
+            update_data['status'] = plan.status
+        if plan.subject_id is not None:
+            update_data['subject_id'] = plan.subject_id
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        # Update database
+        result = supabase.table('business_support_plans')\
+            .update(update_data)\
+            .eq('id', plan_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Support plan not found")
+
+        return result.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update support plan: {str(e)}")
+
+@app.delete("/api/support-plans/{plan_id}")
+async def delete_support_plan(
+    plan_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Check if plan has sessions
+        sessions_result = supabase.table('business_interview_sessions')\
+            .select('id', count='exact')\
+            .eq('support_plan_id', plan_id)\
+            .execute()
+
+        session_count = sessions_result.count if sessions_result.count else 0
+
+        # Delete support plan (cascade will delete sessions if configured)
+        result = supabase.table('business_support_plans')\
+            .delete()\
+            .eq('id', plan_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Support plan not found")
+
+        return {
+            "success": True,
+            "message": f"Support plan deleted (with {session_count} sessions)"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete support plan: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
