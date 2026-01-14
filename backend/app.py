@@ -407,7 +407,7 @@ async def create_support_plan(
 
         # Use dummy facility_id and created_by (will be replaced with auth later)
         facility_id = "00000000-0000-0000-0000-000000000001"  # Test facility
-        created_by = "00000000-0000-0000-0000-000000000001"  # Dummy user (will be set by auth later)
+        created_by = None  # Will be set by auth later
 
         # Insert into database
         result = supabase.table('business_support_plans').insert({
