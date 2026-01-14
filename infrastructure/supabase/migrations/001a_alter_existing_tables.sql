@@ -1,21 +1,24 @@
 -- ================================================================
 -- 既存テーブルへのカラム追加
 -- 作成日: 2026-01-14
--- 注意: 001_support_plans_architecture.sql の前に実行してください
+-- 注意: 001b_support_plans_tables.sql の前に実行してください
+--
+-- 重要: WatchMeプロジェクトでは auth.users への直接参照は禁止
+--      すべて public.users を使用します
 -- ================================================================
 
 -- ----------------------------------------------------------------
--- 1. usersテーブルの拡張
+-- 1. public.usersテーブルの拡張
 -- ----------------------------------------------------------------
 
 -- roleカラムを追加（既存の場合はスキップ）
-ALTER TABLE users ADD COLUMN IF NOT EXISTS
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS
   role text DEFAULT 'parent';
 
 -- roleの制約を追加（既に存在する場合はエラーになるので注意）
 DO $$
 BEGIN
-  ALTER TABLE users ADD CONSTRAINT users_role_check
+  ALTER TABLE public.users ADD CONSTRAINT users_role_check
     CHECK (role IN ('parent', 'staff', 'admin', 'self'));
 EXCEPTION
   WHEN duplicate_object THEN
@@ -24,14 +27,14 @@ EXCEPTION
 END $$;
 
 -- facility_idカラムを追加
-ALTER TABLE users ADD COLUMN IF NOT EXISTS
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS
   facility_id UUID;
 
 -- 外部キー制約を追加（既に存在する場合はエラーになるので注意）
 DO $$
 BEGIN
-  ALTER TABLE users ADD CONSTRAINT users_facility_id_fkey
-    FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE SET NULL;
+  ALTER TABLE public.users ADD CONSTRAINT users_facility_id_fkey
+    FOREIGN KEY (facility_id) REFERENCES public.facilities(id) ON DELETE SET NULL;
 EXCEPTION
   WHEN duplicate_object THEN
     -- 制約が既に存在する場合は何もしない
@@ -39,8 +42,8 @@ EXCEPTION
 END $$;
 
 -- インデックス作成
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-CREATE INDEX IF NOT EXISTS idx_users_facility_id ON users(facility_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
+CREATE INDEX IF NOT EXISTS idx_users_facility_id ON public.users(facility_id);
 
 -- ----------------------------------------------------------------
 -- 2. business_interview_sessionsテーブルの拡張

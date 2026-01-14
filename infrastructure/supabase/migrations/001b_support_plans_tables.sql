@@ -2,6 +2,9 @@
 -- WatchMe/Business 統合アーキテクチャ - 新規テーブル作成
 -- 作成日: 2026-01-14
 -- 注意: 001a_alter_existing_tables.sql の後に実行してください
+--
+-- 重要: WatchMeプロジェクトでは auth.users への直接参照は禁止
+--      すべて public.users を使用します
 -- ================================================================
 
 -- ----------------------------------------------------------------
@@ -10,12 +13,12 @@
 
 CREATE TABLE IF NOT EXISTS business_support_plans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  facility_id UUID NOT NULL REFERENCES facilities(id) ON DELETE CASCADE,
-  subject_id UUID NOT NULL REFERENCES subjects(subject_id) ON DELETE CASCADE,
+  facility_id UUID NOT NULL REFERENCES public.facilities(id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES public.subjects(subject_id) ON DELETE CASCADE,
   title text NOT NULL,
   plan_number text, -- 施設の管理番号
   status text DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'completed', 'archived')),
-  created_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
+  created_by UUID REFERENCES public.users(user_id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -34,7 +37,7 @@ CREATE POLICY business_support_plans_facility_access ON business_support_plans
   FOR ALL
   USING (
     facility_id IN (
-      SELECT facility_id FROM users WHERE user_id = auth.uid()
+      SELECT facility_id FROM public.users WHERE user_id = auth.uid()
     )
   );
 
@@ -44,8 +47,8 @@ CREATE POLICY business_support_plans_facility_access ON business_support_plans
 
 CREATE TABLE IF NOT EXISTS subject_relations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  subject_id UUID NOT NULL REFERENCES subjects(subject_id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES public.subjects(subject_id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.users(user_id) ON DELETE CASCADE,
   relation_type text NOT NULL CHECK (relation_type IN
     ('parent', 'self', 'staff', 'therapist', 'teacher')),
   can_view boolean DEFAULT true,
@@ -74,7 +77,7 @@ CREATE POLICY subject_relations_access ON subject_relations
       WHERE sr.user_id = auth.uid() AND sr.can_view = true
     ) OR
     EXISTS (
-      SELECT 1 FROM users u
+      SELECT 1 FROM public.users u
       WHERE u.user_id = auth.uid()
       AND u.role = 'staff'
       AND u.facility_id IS NOT NULL
@@ -88,7 +91,7 @@ CREATE POLICY subject_relations_edit ON subject_relations
   WITH CHECK (
     user_id = auth.uid() OR
     EXISTS (
-      SELECT 1 FROM users u
+      SELECT 1 FROM public.users u
       WHERE u.user_id = auth.uid()
       AND u.role IN ('staff', 'admin')
     )
@@ -111,7 +114,7 @@ CREATE POLICY subject_relations_delete ON subject_relations
   USING (
     user_id = auth.uid() OR
     EXISTS (
-      SELECT 1 FROM users u
+      SELECT 1 FROM public.users u
       WHERE u.user_id = auth.uid()
       AND u.role = 'admin'
     )
@@ -180,7 +183,7 @@ SELECT
   COUNT(DISTINCT bis.id) as session_count,
   MAX(bis.recorded_at) as last_session_date
 FROM business_support_plans sp
-LEFT JOIN subjects s ON sp.subject_id = s.subject_id
+LEFT JOIN public.subjects s ON sp.subject_id = s.subject_id
 LEFT JOIN business_interview_sessions bis ON sp.id = bis.support_plan_id
 GROUP BY sp.id, s.subject_id, s.name, s.age, s.gender;
 
@@ -197,7 +200,7 @@ SELECT
   s.age as subject_age,
   s.avatar_url
 FROM subject_relations sr
-JOIN subjects s ON sr.subject_id = s.subject_id
+JOIN public.subjects s ON sr.subject_id = s.subject_id
 WHERE sr.can_view = true;
 
 -- コメント追加
