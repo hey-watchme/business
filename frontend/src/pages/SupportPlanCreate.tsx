@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import RecordingSetup from '../components/RecordingSetup';
 import RecordingSession from '../components/RecordingSession';
-import { api, type InterviewSession } from '../api/client';
+import SupportPlanModal from '../components/SupportPlanModal';
+import { api, type InterviewSession, type SupportPlan } from '../api/client';
 import './SupportPlanCreate.css';
 
 type RecordingMode = 'none' | 'setup' | 'recording';
@@ -9,24 +10,48 @@ type RecordingMode = 'none' | 'setup' | 'recording';
 const SupportPlanCreate: React.FC = () => {
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('none');
   const [selectedChild, setSelectedChild] = useState('田中太郎');
-  const [sessions, setSessions] = useState<InterviewSession[]>([]);
-  const [selectedSession, setSelectedSession] = useState<InterviewSession | null>(null);
+  const [supportPlans, setSupportPlans] = useState<SupportPlan[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<SupportPlan | null>(null);
+  const [planSessions, setPlanSessions] = useState<InterviewSession[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchSessions();
+    fetchSupportPlans();
   }, []);
 
-  const fetchSessions = async () => {
+  useEffect(() => {
+    if (selectedPlan) {
+      fetchPlanDetails(selectedPlan.id);
+    }
+  }, [selectedPlan]);
+
+  const fetchSupportPlans = async () => {
     try {
       setLoading(true);
-      const response = await api.getSessions();
-      setSessions(response.sessions);
+      const plans = await api.getSupportPlans();
+      setSupportPlans(plans);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch sessions');
+      setError(err instanceof Error ? err.message : 'Failed to fetch support plans');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPlanDetails = async (planId: string) => {
+    try {
+      const plan = await api.getSupportPlan(planId);
+      if (plan.sessions) {
+        setPlanSessions(plan.sessions);
+      } else {
+        // If no sessions in plan detail, fetch them separately
+        const response = await api.getSessions(50, planId);
+        setPlanSessions(response.sessions);
+      }
+    } catch (err) {
+      console.error('Failed to fetch plan details:', err);
+      setPlanSessions([]);
     }
   };
 
@@ -92,6 +117,47 @@ const SupportPlanCreate: React.FC = () => {
     return `${mins}分`;
   };
 
+  const getPlanStatusIcon = (status: SupportPlan['status']) => {
+    switch (status) {
+      case 'active':
+        return (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="7" stroke="var(--accent-success)" strokeWidth="1.5"/>
+            <path d="M5 8L7 10L11 6" stroke="var(--accent-success)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        );
+      case 'completed':
+        return (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="7" stroke="var(--text-secondary)" strokeWidth="1.5"/>
+            <path d="M5 8L7 10L11 6" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        );
+      case 'archived':
+        return (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="3" y="6" width="10" height="7" rx="1" stroke="var(--text-muted)" strokeWidth="1.5"/>
+            <path d="M5 3H11V6H5V3Z" stroke="var(--text-muted)" strokeWidth="1.5"/>
+          </svg>
+        );
+      default: // draft
+        return (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="7" stroke="var(--text-muted)" strokeWidth="1.5" strokeDasharray="2 2"/>
+          </svg>
+        );
+    }
+  };
+
+  const getPlanStatusLabel = (status: SupportPlan['status']) => {
+    switch (status) {
+      case 'active': return 'アクティブ';
+      case 'completed': return '完了';
+      case 'archived': return 'アーカイブ';
+      default: return '下書き';
+    }
+  };
+
   const handleStartRecording = () => {
     setRecordingMode('setup');
   };
@@ -133,14 +199,14 @@ const SupportPlanCreate: React.FC = () => {
     <div className="support-plan-create">
       <div className="page-header">
         <div>
-          <h1 className="page-title">個別支援計画作成</h1>
+          <h1 className="page-title">個別支援計画管理</h1>
           <p className="page-subtitle">保護者ヒアリング録音から個別支援計画書を自動生成</p>
         </div>
-        <button className="primary-button" onClick={handleStartRecording}>
+        <button className="primary-button" onClick={() => setShowCreateModal(true)}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
-          新規ヒアリング開始
+          新規計画作成
         </button>
       </div>
 
@@ -217,11 +283,11 @@ const SupportPlanCreate: React.FC = () => {
         </div>
       </div>
 
-      {/* Sessions List */}
+      {/* Support Plans List */}
       <div className="sessions-container">
         <div className="sessions-section">
           <div className="section-header">
-            <h2 className="section-title">最近のヒアリングセッション</h2>
+            <h2 className="section-title">個別支援計画一覧</h2>
             <div className="section-actions">
               <button className="filter-button">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -250,32 +316,32 @@ const SupportPlanCreate: React.FC = () => {
           </div>
         )}
 
-        {!loading && !error && sessions.length === 0 && (
+        {!loading && !error && supportPlans.length === 0 && (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-            <p>ヒアリングセッションがありません</p>
+            <p>個別支援計画がありません</p>
           </div>
         )}
 
         <div className="sessions-list">
-          {sessions.map(session => (
+          {supportPlans.map(plan => (
             <div
-              key={session.id}
-              className={`session-card ${session.status} ${selectedSession?.id === session.id ? 'selected' : ''}`}
+              key={plan.id}
+              className={`session-card ${plan.status} ${selectedPlan?.id === plan.id ? 'selected' : ''}`}
               onClick={() => {
-                console.log('Session clicked:', session);
-                setSelectedSession(session);
+                console.log('Plan clicked:', plan);
+                setSelectedPlan(plan);
               }}
               style={{ cursor: 'pointer' }}
             >
               <div className="session-status">
-                {getStatusIcon(session.status)}
+                {getPlanStatusIcon(plan.status)}
               </div>
 
               <div className="session-info">
-                <h3 className="session-child-name">サブジェクト: {session.child_id}</h3>
-                {session.staff_id && (
+                <h3 className="session-child-name">{plan.title}</h3>
+                {plan.plan_number && (
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-                    担当者: {session.staff_id}
+                    計画番号: {plan.plan_number}
                   </p>
                 )}
                 <div className="session-meta">
@@ -284,56 +350,62 @@ const SupportPlanCreate: React.FC = () => {
                       <rect x="2" y="2" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1"/>
                       <path d="M2 4H10M4 2V1M8 2V1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
                     </svg>
-                    {formatDate(session.recorded_at)}
+                    {formatDate(plan.created_at)}
                   </span>
-                  {session.duration_seconds && (
+                  {plan.session_count !== undefined && (
                     <span className="meta-item">
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1"/>
-                        <path d="M6 3V6L8 7" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                        <rect x="2" y="3" width="8" height="6" rx="0.5" stroke="currentColor" strokeWidth="1"/>
+                        <circle cx="3.5" cy="6" r="0.5" fill="currentColor"/>
+                        <line x1="5" y1="6" x2="8" y2="6" stroke="currentColor" strokeWidth="1"/>
                       </svg>
-                      {formatDuration(session.duration_seconds)}
+                      {plan.session_count} セッション
                     </span>
                   )}
                 </div>
               </div>
 
               <div className="session-progress">
-                <span className={`status-label ${session.status}`}>
-                  {getStatusLabel(session.status)}
+                <span className={`status-label ${plan.status}`}>
+                  {getPlanStatusLabel(plan.status)}
                 </span>
               </div>
 
               <div className="session-actions">
-                {session.status === 'completed' && (
-                  <>
-                    <button
-                      className="action-button"
-                      title="詳細表示"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedSession(session);
-                      }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/>
-                        <path d="M1 8C1 8 3 3 8 3C13 3 15 8 15 8C15 8 13 13 8 13C3 13 1 8 1 8Z" stroke="currentColor" strokeWidth="1.5"/>
-                      </svg>
-                    </button>
-                  </>
-                )}
+                <button
+                  className="action-button"
+                  title="詳細表示"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedPlan(plan);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M5 8H11M11 8L8 5M11 8L8 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
               </div>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Create Modal */}
+      {showCreateModal && (
+        <SupportPlanModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => {
+            fetchSupportPlans();
+          }}
+        />
+      )}
+
       {/* Drawer Overlay */}
-      {selectedSession && (
+      {selectedPlan && (
         <>
           <div
             className="drawer-overlay"
-            onClick={() => setSelectedSession(null)}
+            onClick={() => setSelectedPlan(null)}
             style={{
               position: 'fixed',
               top: 0,
@@ -371,9 +443,9 @@ const SupportPlanCreate: React.FC = () => {
               marginBottom: '24px'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>詳細情報</h2>
+                <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>支援計画詳細</h2>
                 <button
-                  onClick={() => setSelectedSession(null)}
+                  onClick={() => setSelectedPlan(null)}
                   style={{
                     background: 'var(--bg-tertiary)',
                     border: '1px solid var(--border-primary)',
@@ -408,149 +480,150 @@ const SupportPlanCreate: React.FC = () => {
               <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-secondary)' }}>基本情報</h3>
               <div style={{ display: 'grid', gap: '12px' }}>
                 <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>セッションID</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{selectedSession.id}</p>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>計画ID</span>
+                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{selectedPlan.id}</p>
                 </div>
                 <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>サブジェクト（子供）</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selectedSession.child_id}</p>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>タイトル</span>
+                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selectedPlan.title}</p>
                 </div>
-                {selectedSession.staff_id && (
+                {selectedPlan.plan_number && (
                   <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>担当者</span>
-                    <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selectedSession.staff_id}</p>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>計画番号</span>
+                    <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selectedPlan.plan_number}</p>
                   </div>
                 )}
                 <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>録音日時</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{formatDate(selectedSession.recorded_at)}</p>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>作成日時</span>
+                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{formatDate(selectedPlan.created_at)}</p>
                 </div>
                 <div>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ステータス</span>
                   <p style={{ fontSize: '14px', margin: '4px 0 0 0' }}>
-                    <span className={`status-label ${selectedSession.status}`}>
-                      {getStatusLabel(selectedSession.status)}
+                    <span className={`status-label ${selectedPlan.status}`}>
+                      {getPlanStatusLabel(selectedPlan.status)}
                     </span>
                   </p>
                 </div>
-                {selectedSession.duration_seconds && (
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>録音時間</span>
-                    <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{formatDuration(selectedSession.duration_seconds)}</p>
-                  </div>
-                )}
+                <div>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>支援対象</span>
+                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>
+                    {selectedPlan.subject_id ? selectedPlan.subject_id : (
+                      <button
+                        onClick={() => console.log('Add subject')}
+                        style={{
+                          background: 'transparent',
+                          border: '1px dashed var(--accent-primary)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '12px',
+                          color: 'var(--accent-primary)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.background = 'var(--bg-hover)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        + 支援対象を追加
+                      </button>
+                    )}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {selectedSession.transcription && (
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-secondary)' }}>文字起こし</h3>
+            {/* Sessions List in Drawer */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '600', margin: 0, color: 'var(--text-secondary)' }}>
+                  関連セッション ({planSessions.length})
+                </h3>
+                <button
+                  onClick={() => {
+                    setRecordingMode('setup');
+                    // TODO: Associate with this plan
+                  }}
+                  style={{
+                    background: 'var(--accent-primary)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.02)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <circle cx="6" cy="6" r="5" fill="white"/>
+                  </svg>
+                  セッション開始
+                </button>
+              </div>
+
+              {planSessions.length === 0 ? (
                 <div style={{
                   background: 'var(--bg-primary)',
-                  border: '1px solid var(--border-primary)',
+                  border: '1px dashed var(--border-primary)',
                   borderRadius: '8px',
-                  padding: '16px',
+                  padding: '24px',
+                  textAlign: 'center',
                   fontSize: '14px',
-                  lineHeight: '1.6',
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                  color: 'var(--text-primary)'
+                  color: 'var(--text-secondary)'
                 }}>
-                  {selectedSession.transcription}
+                  まだセッションがありません
                 </div>
-              </div>
-            )}
-
-            {selectedSession.analysis_result && (
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-secondary)' }}>分析結果</h3>
-                <div style={{
-                  background: 'var(--bg-primary)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  fontSize: '14px',
-                  lineHeight: '1.6',
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                  color: 'var(--text-primary)'
-                }}>
-                  {(() => {
-                    try {
-                      if (!selectedSession.analysis_result) return '分析結果がありません';
-
-                      let result = selectedSession.analysis_result;
-                      if (typeof result === 'string') {
-                        result = JSON.parse(result);
-                      }
-
-                      if (typeof result === 'object' && result.summary) {
-                        return typeof result.summary === 'string' ? result.summary : JSON.stringify(result.summary, null, 2);
-                      }
-
-                      return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-                    } catch (e) {
-                      console.error('Failed to parse analysis_result:', e);
-                      return String(selectedSession.analysis_result);
-                    }
-                  })()}
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {planSessions.map(session => (
+                    <div
+                      key={session.id}
+                      style={{
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--border-primary)';
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <p style={{ margin: 0, color: 'var(--text-primary)', fontWeight: '500' }}>
+                            {formatDate(session.recorded_at)}
+                          </p>
+                          <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                            {formatDuration(session.duration_seconds)} • {getStatusLabel(session.status)}
+                          </p>
+                        </div>
+                        {getStatusIcon(session.status)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {selectedSession.transcription_metadata && (
-              <div>
-                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-secondary)' }}>メタデータ</h3>
-                <div style={{
-                  background: 'var(--bg-primary)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  fontSize: '12px',
-                  lineHeight: '1.6',
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: '200px',
-                  overflowY: 'auto',
-                  fontFamily: 'monospace',
-                  color: 'var(--text-primary)'
-                }}>
-                  {(() => {
-                    try {
-                      if (!selectedSession.transcription_metadata) return 'メタデータがありません';
-
-                      let metadata = selectedSession.transcription_metadata;
-                      if (typeof metadata === 'string') {
-                        metadata = JSON.parse(metadata);
-                      }
-
-                      return typeof metadata === 'string' ? metadata : JSON.stringify(metadata, null, 2);
-                    } catch (e) {
-                      console.error('Failed to parse transcription_metadata:', e);
-                      return String(selectedSession.transcription_metadata);
-                    }
-                  })()}
-                </div>
-              </div>
-            )}
-
-            {selectedSession.error_message && (
-              <div style={{ marginTop: '24px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--accent-danger)' }}>エラー</h3>
-                <div style={{
-                  background: 'var(--bg-primary)',
-                  border: '1px solid var(--accent-danger)',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  fontSize: '14px',
-                  lineHeight: '1.6',
-                  color: 'var(--accent-danger)'
-                }}>
-                  {selectedSession.error_message}
-                </div>
-              </div>
-            )}
             </div>
           </div>
         </>

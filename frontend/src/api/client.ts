@@ -24,6 +24,40 @@ export interface SessionsResponse {
   count: number;
 }
 
+// Support Plan interfaces
+export interface SupportPlan {
+  id: string;
+  facility_id: string;
+  title: string;
+  plan_number?: string | null;
+  status: 'draft' | 'active' | 'completed' | 'archived';
+  subject_id?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  session_count?: number;
+  sessions?: InterviewSession[];
+}
+
+export interface SupportPlanCreate {
+  title: string;
+  plan_number?: string | null;
+  status?: 'draft' | 'active';
+  subject_id?: string | null;
+}
+
+export interface SupportPlanUpdate {
+  title?: string;
+  plan_number?: string | null;
+  status?: 'draft' | 'active' | 'completed' | 'archived';
+  subject_id?: string | null;
+}
+
+export interface SupportPlansResponse {
+  support_plans: SupportPlan[];
+  count: number;
+}
+
 async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -48,9 +82,39 @@ async function apiRequest<T>(
 }
 
 export const api = {
-  getSessions: (limit = 50) =>
-    apiRequest<SessionsResponse>(`/api/sessions?limit=${limit}`),
+  // Sessions API
+  getSessions: (limit = 50, supportPlanId?: string) => {
+    let url = `/api/sessions?limit=${limit}`;
+    if (supportPlanId) {
+      url += `&support_plan_id=${supportPlanId}`;
+    }
+    return apiRequest<SessionsResponse>(url);
+  },
 
   getSession: (sessionId: string) =>
     apiRequest<InterviewSession>(`/api/sessions/${sessionId}`),
+
+  // Support Plans API
+  getSupportPlans: () =>
+    apiRequest<SupportPlan[]>(`/api/support-plans`),
+
+  createSupportPlan: (data: SupportPlanCreate) =>
+    apiRequest<SupportPlan>(`/api/support-plans`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getSupportPlan: (planId: string) =>
+    apiRequest<SupportPlan>(`/api/support-plans/${planId}`),
+
+  updateSupportPlan: (planId: string, data: SupportPlanUpdate) =>
+    apiRequest<SupportPlan>(`/api/support-plans/${planId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteSupportPlan: (planId: string) =>
+    apiRequest<void>(`/api/support-plans/${planId}`, {
+      method: 'DELETE',
+    }),
 };
