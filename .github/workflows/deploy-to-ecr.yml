@@ -143,7 +143,7 @@ jobs:
         AWS_REGION: ap-southeast-2
         S3_BUCKET: ${{ secrets.S3_BUCKET }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         API_TOKEN: ${{ secrets.API_TOKEN }}
         DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -158,7 +158,7 @@ jobs:
           echo "AWS_REGION=${AWS_REGION}" >> .env
           echo "S3_BUCKET=${S3_BUCKET}" >> .env
           echo "SUPABASE_URL=${SUPABASE_URL}" >> .env
-          echo "SUPABASE_KEY=${SUPABASE_KEY}" >> .env
+          echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}" >> .env
           echo "API_TOKEN=${API_TOKEN}" >> .env
           echo "DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}" >> .env
           echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> .env
