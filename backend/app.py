@@ -174,17 +174,15 @@ async def upload_audio(
 
         # Save to database
         if supabase:
-            # Temporarily comment out database insertion until table is properly created
-            print(f"Would insert: session_id={session_id}, facility_id={facility_id}, child_id={child_id}, path={s3_path}")
-            # supabase.table('business_interview_sessions').insert({
-            #     'id': session_id,
-            #     'facility_id': facility_id,
-            #     'child_id': child_id,
-            #     's3_audio_path': s3_path,
-            #     'status': 'uploaded',
-            #     'duration_seconds': 0,  # To be calculated later
-            #     'recorded_at': datetime.now().isoformat()
-            # }).execute()
+            supabase.table('business_interview_sessions').insert({
+                'id': session_id,
+                'facility_id': facility_id,
+                'child_id': child_id,
+                's3_audio_path': s3_path,
+                'status': 'uploaded',
+                'duration_seconds': 0,  # To be calculated later
+                'recorded_at': datetime.now().isoformat()
+            }).execute()
 
         return UploadResponse(
             success=True,
