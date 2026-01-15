@@ -96,7 +96,7 @@ export const api = {
 
   // Support Plans API
   getSupportPlans: () =>
-    apiRequest<SupportPlan[]>(`/api/support-plans`),
+    apiRequest<{ plans: SupportPlan[]; count: number }>(`/api/support-plans`).then(data => data.plans),
 
   createSupportPlan: (data: SupportPlanCreate) =>
     apiRequest<SupportPlan>(`/api/support-plans`, {

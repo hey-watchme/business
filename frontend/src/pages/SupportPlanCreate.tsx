@@ -325,7 +325,6 @@ const SupportPlanCreate: React.FC = () => {
               key={plan.id}
               className={`session-card ${plan.status} ${selectedPlan?.id === plan.id ? 'selected' : ''}`}
               onClick={() => {
-                console.log('Plan clicked:', plan);
                 setSelectedPlan(plan);
               }}
               style={{ cursor: 'pointer' }}
@@ -507,7 +506,9 @@ const SupportPlanCreate: React.FC = () => {
                   <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>
                     {selectedPlan.subject_id ? selectedPlan.subject_id : (
                       <button
-                        onClick={() => console.log('Add subject')}
+                        onClick={() => {
+                          // TODO: Implement subject addition
+                        }}
                         style={{
                           background: 'transparent',
                           border: '1px dashed var(--accent-primary)',
