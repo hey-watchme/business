@@ -647,8 +647,8 @@ async def get_subjects(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        # Query subjects
-        query = supabase.table('business_subjects').select('*')
+        # Query children (actual table name in DB)
+        query = supabase.table('business_children').select('*')
 
         # Filter by facility_id if provided
         if facility_id:
@@ -657,66 +657,47 @@ async def get_subjects(
         result = query.order('name', desc=False).limit(limit).execute()
 
         subjects = []
-        for subject in result.data:
+        for child in result.data:
             subjects.append({
-                "id": subject.get('id'),
-                "facility_id": subject.get('facility_id'),
-                "name": subject.get('name'),
-                "age": subject.get('age'),
-                "gender": subject.get('gender'),
-                "avatar_url": subject.get('avatar_url'),
-                "notes": subject.get('notes'),
-                "prefecture": subject.get('prefecture'),
-                "city": subject.get('city'),
-                "cognitive_type": subject.get('cognitive_type'),
-                "created_at": subject.get('created_at'),
-                "updated_at": subject.get('updated_at')
+                "id": child.get('id'),
+                "facility_id": child.get('facility_id'),
+                "name": child.get('name'),
+                "age": None,  # Not in DB
+                "gender": None,  # Not in DB
+                "avatar_url": None,  # Not in DB
+                "notes": None,  # Not in DB
+                "prefecture": None,  # Not in DB
+                "city": None,  # Not in DB
+                "cognitive_type": None,  # Not in DB
+                "created_at": child.get('created_at'),
+                "updated_at": child.get('created_at')  # Use created_at since no updated_at
             })
 
-        # Calculate analytics
+        # Simplified analytics (since we don't have gender/age data)
         total_count = len(subjects)
-        male_count = sum(1 for s in subjects if s.get('gender') == 'male')
-        female_count = sum(1 for s in subjects if s.get('gender') == 'female')
-        other_count = sum(1 for s in subjects if s.get('gender') == 'other')
-        unknown_count = total_count - male_count - female_count - other_count
-
-        age_groups = {
-            "0-3": 0,
-            "4-6": 0,
-            "7-9": 0,
-            "10+": 0,
-            "unknown": 0
-        }
-
-        for subject in subjects:
-            age = subject.get('age')
-            if age is None:
-                age_groups["unknown"] += 1
-            elif age <= 3:
-                age_groups["0-3"] += 1
-            elif age <= 6:
-                age_groups["4-6"] += 1
-            elif age <= 9:
-                age_groups["7-9"] += 1
-            else:
-                age_groups["10+"] += 1
 
         return {
             "subjects": subjects,
             "analytics": {
                 "total_count": total_count,
                 "gender_distribution": {
-                    "male": male_count,
-                    "female": female_count,
-                    "other": other_count,
-                    "unknown": unknown_count
+                    "male": 0,
+                    "female": 0,
+                    "other": 0,
+                    "unknown": total_count
                 },
-                "age_groups": age_groups
+                "age_groups": {
+                    "0-3": 0,
+                    "4-6": 0,
+                    "7-9": 0,
+                    "10+": 0,
+                    "unknown": total_count
+                }
             }
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch subjects: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch children: {str(e)}")
 
 @app.get("/api/subjects/{subject_id}")
 async def get_subject(
@@ -731,17 +712,17 @@ async def get_subject(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        # Get subject details
-        result = supabase.table('business_subjects')\
+        # Get child details (actual table name in DB)
+        result = supabase.table('business_children')\
             .select('*')\
             .eq('id', subject_id)\
             .single()\
             .execute()
 
         if not result.data:
-            raise HTTPException(status_code=404, detail="Subject not found")
+            raise HTTPException(status_code=404, detail="Child not found")
 
-        subject = result.data
+        child = result.data
 
         # Get related sessions count
         sessions_result = supabase.table('business_interview_sessions')\
@@ -760,18 +741,18 @@ async def get_subject(
 
         return {
             "subject": SubjectResponse(
-                id=subject.get('id'),
-                facility_id=subject.get('facility_id'),
-                name=subject.get('name'),
-                age=subject.get('age'),
-                gender=subject.get('gender'),
-                avatar_url=subject.get('avatar_url'),
-                notes=subject.get('notes'),
-                prefecture=subject.get('prefecture'),
-                city=subject.get('city'),
-                cognitive_type=subject.get('cognitive_type'),
-                created_at=subject.get('created_at'),
-                updated_at=subject.get('updated_at')
+                id=child.get('id'),
+                facility_id=child.get('facility_id'),
+                name=child.get('name'),
+                age=None,  # Not in DB
+                gender=None,  # Not in DB
+                avatar_url=None,  # Not in DB
+                notes=None,  # Not in DB
+                prefecture=None,  # Not in DB
+                city=None,  # Not in DB
+                cognitive_type=None,  # Not in DB
+                created_at=child.get('created_at'),
+                updated_at=child.get('created_at')  # Use created_at since no updated_at
             ),
             "session_count": session_count,
             "support_plans": plans_result.data if plans_result.data else []
@@ -780,7 +761,7 @@ async def get_subject(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch subject: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch child: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
