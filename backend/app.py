@@ -131,6 +131,20 @@ class SupportPlanResponse(BaseModel):
     updated_at: str
     session_count: Optional[int] = 0
 
+class SubjectResponse(BaseModel):
+    id: str
+    facility_id: str
+    name: str
+    age: Optional[int]
+    gender: Optional[str]
+    avatar_url: Optional[str]
+    notes: Optional[str]
+    prefecture: Optional[str]
+    city: Optional[str]
+    cognitive_type: Optional[str]
+    created_at: str
+    updated_at: str
+
 @app.get("/health")
 async def health_check():
     return {
@@ -618,6 +632,155 @@ async def delete_support_plan(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete support plan: {str(e)}")
+
+@app.get("/api/subjects")
+async def get_subjects(
+    x_api_token: str = Header(None, alias="X-API-Token"),
+    facility_id: Optional[str] = None,
+    limit: Optional[int] = 100
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Query subjects
+        query = supabase.table('business_subjects').select('*')
+
+        # Filter by facility_id if provided
+        if facility_id:
+            query = query.eq('facility_id', facility_id)
+
+        result = query.order('name', desc=False).limit(limit).execute()
+
+        subjects = []
+        for subject in result.data:
+            subjects.append({
+                "id": subject.get('id'),
+                "facility_id": subject.get('facility_id'),
+                "name": subject.get('name'),
+                "age": subject.get('age'),
+                "gender": subject.get('gender'),
+                "avatar_url": subject.get('avatar_url'),
+                "notes": subject.get('notes'),
+                "prefecture": subject.get('prefecture'),
+                "city": subject.get('city'),
+                "cognitive_type": subject.get('cognitive_type'),
+                "created_at": subject.get('created_at'),
+                "updated_at": subject.get('updated_at')
+            })
+
+        # Calculate analytics
+        total_count = len(subjects)
+        male_count = sum(1 for s in subjects if s.get('gender') == 'male')
+        female_count = sum(1 for s in subjects if s.get('gender') == 'female')
+        other_count = sum(1 for s in subjects if s.get('gender') == 'other')
+        unknown_count = total_count - male_count - female_count - other_count
+
+        age_groups = {
+            "0-3": 0,
+            "4-6": 0,
+            "7-9": 0,
+            "10+": 0,
+            "unknown": 0
+        }
+
+        for subject in subjects:
+            age = subject.get('age')
+            if age is None:
+                age_groups["unknown"] += 1
+            elif age <= 3:
+                age_groups["0-3"] += 1
+            elif age <= 6:
+                age_groups["4-6"] += 1
+            elif age <= 9:
+                age_groups["7-9"] += 1
+            else:
+                age_groups["10+"] += 1
+
+        return {
+            "subjects": subjects,
+            "analytics": {
+                "total_count": total_count,
+                "gender_distribution": {
+                    "male": male_count,
+                    "female": female_count,
+                    "other": other_count,
+                    "unknown": unknown_count
+                },
+                "age_groups": age_groups
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch subjects: {str(e)}")
+
+@app.get("/api/subjects/{subject_id}")
+async def get_subject(
+    subject_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Get subject details
+        result = supabase.table('business_subjects')\
+            .select('*')\
+            .eq('id', subject_id)\
+            .single()\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Subject not found")
+
+        subject = result.data
+
+        # Get related sessions count
+        sessions_result = supabase.table('business_interview_sessions')\
+            .select('id', count='exact')\
+            .eq('subject_id', subject_id)\
+            .execute()
+
+        session_count = sessions_result.count if sessions_result.count else 0
+
+        # Get related support plans
+        plans_result = supabase.table('business_support_plans')\
+            .select('*')\
+            .eq('subject_id', subject_id)\
+            .order('created_at', desc=True)\
+            .execute()
+
+        return {
+            "subject": SubjectResponse(
+                id=subject.get('id'),
+                facility_id=subject.get('facility_id'),
+                name=subject.get('name'),
+                age=subject.get('age'),
+                gender=subject.get('gender'),
+                avatar_url=subject.get('avatar_url'),
+                notes=subject.get('notes'),
+                prefecture=subject.get('prefecture'),
+                city=subject.get('city'),
+                cognitive_type=subject.get('cognitive_type'),
+                created_at=subject.get('created_at'),
+                updated_at=subject.get('updated_at')
+            ),
+            "session_count": session_count,
+            "support_plans": plans_result.data if plans_result.data else []
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch subject: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

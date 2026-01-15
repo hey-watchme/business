@@ -58,6 +58,48 @@ export interface SupportPlansResponse {
   count: number;
 }
 
+// Subject interfaces
+export interface Subject {
+  id: string;
+  facility_id: string;
+  name: string;
+  age?: number | null;
+  gender?: string | null;
+  avatar_url?: string | null;
+  notes?: string | null;
+  prefecture?: string | null;
+  city?: string | null;
+  cognitive_type?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubjectsResponse {
+  subjects: Subject[];
+  analytics: {
+    total_count: number;
+    gender_distribution: {
+      male: number;
+      female: number;
+      other: number;
+      unknown: number;
+    };
+    age_groups: {
+      "0-3": number;
+      "4-6": number;
+      "7-9": number;
+      "10+": number;
+      unknown: number;
+    };
+  };
+}
+
+export interface SubjectDetailResponse {
+  subject: Subject;
+  session_count: number;
+  support_plans: SupportPlan[];
+}
+
 async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -117,4 +159,16 @@ export const api = {
     apiRequest<void>(`/api/support-plans/${planId}`, {
       method: 'DELETE',
     }),
+
+  // Subjects API
+  getSubjects: (facilityId?: string) => {
+    let url = `/api/subjects?limit=100`;
+    if (facilityId) {
+      url += `&facility_id=${facilityId}`;
+    }
+    return apiRequest<SubjectsResponse>(url);
+  },
+
+  getSubject: (subjectId: string) =>
+    apiRequest<SubjectDetailResponse>(`/api/subjects/${subjectId}`),
 };

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Layout from './components/Layout';
 import SupportPlanCreate from './pages/SupportPlanCreate';
+import ChildrenList from './pages/ChildrenList';
 import './App.css';
 
 function App() {
@@ -20,14 +21,7 @@ function App() {
           </div>
         );
       case 'children':
-        return (
-          <div style={{ padding: '24px' }}>
-            <h1>児童管理</h1>
-            <p style={{ color: 'var(--text-secondary)' }}>
-              登録されている児童の情報を管理します。
-            </p>
-          </div>
-        );
+        return <ChildrenList />;
       case 'interviews':
         return (
           <div style={{ padding: '24px' }}>
