@@ -145,6 +145,7 @@ async def upload_audio(
     audio: UploadFile = File(...),
     facility_id: str = Form(...),
     child_id: str = Form(...),  # Keep as child_id in API for frontend compatibility
+    support_plan_id: Optional[str] = Form(None),
     x_api_token: str = Header(None, alias="X-API-Token")
 ):
     # Validate token
@@ -174,7 +175,7 @@ async def upload_audio(
 
         # Save to database
         if supabase:
-            supabase.table('business_interview_sessions').insert({
+            session_data = {
                 'id': session_id,
                 'facility_id': facility_id,
                 'subject_id': child_id,  # Column name is subject_id, but we use child_id from API
@@ -182,7 +183,13 @@ async def upload_audio(
                 'status': 'uploaded',
                 'duration_seconds': 0,  # To be calculated later
                 'recorded_at': datetime.now().isoformat()
-            }).execute()
+            }
+
+            # Add support_plan_id if provided
+            if support_plan_id:
+                session_data['support_plan_id'] = support_plan_id
+
+            supabase.table('business_interview_sessions').insert(session_data).execute()
 
         return UploadResponse(
             success=True,

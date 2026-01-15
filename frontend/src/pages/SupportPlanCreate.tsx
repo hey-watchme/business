@@ -187,6 +187,7 @@ const SupportPlanCreate: React.FC = () => {
     return (
       <RecordingSession
         childName={selectedChild}
+        supportPlanId={selectedPlan?.id}
         onStop={handleRecordingStop}
       />
     );

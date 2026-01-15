@@ -3,6 +3,7 @@ import './RecordingSession.css';
 
 interface RecordingSessionProps {
   childName: string;
+  supportPlanId?: string;
   onStop: () => void;
 }
 
@@ -14,7 +15,7 @@ interface TranscriptMessage {
   timestamp: string;
 }
 
-const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, onStop }) => {
+const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportPlanId, onStop }) => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -110,6 +111,9 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, onStop }
     formData.append('audio', blob, 'recording.webm');
     formData.append('facility_id', '00000000-0000-0000-0000-000000000001');
     formData.append('child_id', '00000000-0000-0000-0000-000000000002');
+    if (supportPlanId) {
+      formData.append('support_plan_id', supportPlanId);
+    }
 
     try {
       const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8052';
