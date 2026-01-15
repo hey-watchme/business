@@ -144,7 +144,7 @@ async def health_check():
 async def upload_audio(
     audio: UploadFile = File(...),
     facility_id: str = Form(...),
-    child_id: str = Form(...),
+    child_id: str = Form(...),  # Keep as child_id in API for frontend compatibility
     x_api_token: str = Header(None, alias="X-API-Token")
 ):
     # Validate token
@@ -177,7 +177,7 @@ async def upload_audio(
             supabase.table('business_interview_sessions').insert({
                 'id': session_id,
                 'facility_id': facility_id,
-                'child_id': child_id,
+                'subject_id': child_id,  # Column name is subject_id, but we use child_id from API
                 's3_audio_path': s3_path,
                 'status': 'uploaded',
                 'duration_seconds': 0,  # To be calculated later
