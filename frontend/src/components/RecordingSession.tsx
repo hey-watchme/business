@@ -112,7 +112,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, onStop }
     formData.append('child_id', '00000000-0000-0000-0000-000000000002');
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8052';
+      const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8052';
       const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
         headers: {
