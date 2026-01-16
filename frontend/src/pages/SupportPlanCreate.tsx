@@ -503,32 +503,18 @@ const SupportPlanCreate: React.FC = () => {
                   </p>
                 </div>
                 <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>支援対象</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>支援対象児童</span>
                   <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>
-                    {selectedPlan.subject_id ? selectedPlan.subject_id : (
-                      <button
-                        onClick={() => {
-                          // TODO: Implement subject addition
-                        }}
-                        style={{
-                          background: 'transparent',
-                          border: '1px dashed var(--accent-primary)',
-                          borderRadius: '6px',
-                          padding: '4px 8px',
-                          fontSize: '12px',
-                          color: 'var(--accent-primary)',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.background = 'var(--bg-hover)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.background = 'transparent';
-                        }}
-                      >
-                        + 支援対象を追加
-                      </button>
+                    {selectedPlan.subjects ? (
+                      <span>
+                        {selectedPlan.subjects.name}
+                        {selectedPlan.subjects.age && ` (${selectedPlan.subjects.age}歳)`}
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginLeft: '8px', fontFamily: 'monospace' }}>
+                          ID: {selectedPlan.subjects.subject_id.slice(0, 8)}...
+                        </span>
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--text-secondary)' }}>未選択</span>
                     )}
                   </p>
                 </div>

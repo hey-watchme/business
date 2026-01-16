@@ -37,6 +37,13 @@ export interface SupportPlan {
   updated_at: string;
   session_count?: number;
   sessions?: InterviewSession[];
+  subjects?: {
+    subject_id: string;
+    name: string;
+    age?: number | null;
+    gender?: string | null;
+    avatar_url?: string | null;
+  } | null;
 }
 
 export interface SupportPlanCreate {

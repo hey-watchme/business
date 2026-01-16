@@ -522,9 +522,9 @@ async def get_support_plan(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        # Get support plan
+        # Get support plan with subject info
         plan_result = supabase.table('business_support_plans')\
-            .select('*')\
+            .select('*, subjects(subject_id, name, age, gender, avatar_url)')\
             .eq('id', plan_id)\
             .single()\
             .execute()
