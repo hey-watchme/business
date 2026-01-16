@@ -739,9 +739,17 @@ const SupportPlanCreate: React.FC = () => {
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word'
                           }}>
-                            {typeof session.analysis_result === 'object'
-                              ? (session.analysis_result.summary || JSON.stringify(session.analysis_result, null, 2))
-                              : session.analysis_result}
+                            {(() => {
+                              const result = session.analysis_result;
+                              if (typeof result === 'string') {
+                                return result;
+                              } else if (result && typeof result === 'object' && 'summary' in result) {
+                                return result.summary;
+                              } else if (result && typeof result === 'object') {
+                                return JSON.stringify(result, null, 2);
+                              }
+                              return '';
+                            })()}
                           </div>
                         </div>
                       )}

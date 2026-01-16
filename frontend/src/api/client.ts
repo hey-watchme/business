@@ -14,7 +14,7 @@ export interface InterviewSession {
   created_at: string;
   updated_at: string;
   analysis_prompt?: string | null;
-  analysis_result?: string | null;
+  analysis_result?: { summary: string } | string | null;
   error_message?: string | null;
   transcription_metadata?: string | null;
 }
