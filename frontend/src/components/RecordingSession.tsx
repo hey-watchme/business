@@ -58,6 +58,13 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
 
         mediaRecorder.onstop = async () => {
           const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+
+          // Clean up media stream BEFORE uploading
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+          }
+
           await uploadAudio(blob);
         };
 

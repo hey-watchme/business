@@ -691,7 +691,9 @@ const SupportPlanCreate: React.FC = () => {
                             margin: 0,
                             fontFamily: 'monospace'
                           }}>
-                            {JSON.stringify(JSON.parse(session.transcription_metadata), null, 2)}
+                            {typeof session.transcription_metadata === 'string'
+                              ? JSON.stringify(JSON.parse(session.transcription_metadata), null, 2)
+                              : JSON.stringify(session.transcription_metadata, null, 2)}
                           </pre>
                         </div>
                       )}
