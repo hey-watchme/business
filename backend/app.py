@@ -773,6 +773,62 @@ async def get_subject(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch child: {str(e)}")
 
+# ==================== USERS API ====================
+
+@app.get("/api/users")
+async def get_users(
+    x_api_token: str = Header(None, alias="X-API-Token"),
+    facility_id: Optional[str] = None,
+    limit: Optional[int] = 100
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Query users from public.users table
+        query = supabase.table('users').select('*')
+
+        # Note: facility_id filtering temporarily disabled (returns all users)
+
+        result = query.order('display_name', desc=False).limit(limit).execute()
+
+        users = []
+        for user in result.data:
+            users.append({
+                "id": user.get('user_id'),
+                "email": user.get('email'),
+                "display_name": user.get('display_name'),
+                "avatar_url": user.get('avatar_url'),
+                "role": user.get('role'),
+                "facility_id": user.get('facility_id'),
+                "created_at": user.get('created_at'),
+                "updated_at": user.get('updated_at')
+            })
+
+        # Calculate analytics from actual data
+        total_count = len(users)
+
+        # Calculate role distribution
+        role_counts = {}
+        for u in users:
+            role = u.get('role') or 'unknown'
+            role_counts[role] = role_counts.get(role, 0) + 1
+
+        return {
+            "users": users,
+            "analytics": {
+                "total_count": total_count,
+                "role_distribution": role_counts
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch users: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8052))

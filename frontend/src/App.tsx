@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from './components/Layout';
 import SupportPlanCreate from './pages/SupportPlanCreate';
 import ChildrenList from './pages/ChildrenList';
+import StaffList from './pages/StaffList';
 import './App.css';
 
 function App() {
@@ -22,6 +23,8 @@ function App() {
         );
       case 'children':
         return <ChildrenList />;
+      case 'staff':
+        return <StaffList />;
       case 'interviews':
         return (
           <div style={{ padding: '24px' }}>

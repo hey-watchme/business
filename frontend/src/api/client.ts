@@ -100,6 +100,28 @@ export interface SubjectDetailResponse {
   support_plans: SupportPlan[];
 }
 
+// User interfaces
+export interface User {
+  id: string;
+  email: string;
+  display_name: string;
+  avatar_url?: string | null;
+  role?: string | null;
+  facility_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UsersResponse {
+  users: User[];
+  analytics: {
+    total_count: number;
+    role_distribution: {
+      [key: string]: number;
+    };
+  };
+}
+
 async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -171,4 +193,13 @@ export const api = {
 
   getSubject: (subjectId: string) =>
     apiRequest<SubjectDetailResponse>(`/api/subjects/${subjectId}`),
+
+  // Users API
+  getUsers: (facilityId?: string) => {
+    let url = `/api/users?limit=100`;
+    if (facilityId) {
+      url += `&facility_id=${facilityId}`;
+    }
+    return apiRequest<UsersResponse>(url);
+  },
 };
