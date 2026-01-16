@@ -715,7 +715,9 @@ const SupportPlanCreate: React.FC = () => {
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word'
                           }}>
-                            {session.analysis_prompt}
+                            {typeof session.analysis_prompt === 'object'
+                              ? JSON.stringify(session.analysis_prompt, null, 2)
+                              : session.analysis_prompt}
                           </div>
                         </div>
                       )}
@@ -737,7 +739,9 @@ const SupportPlanCreate: React.FC = () => {
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word'
                           }}>
-                            {session.analysis_result}
+                            {typeof session.analysis_result === 'object'
+                              ? (session.analysis_result.summary || JSON.stringify(session.analysis_result, null, 2))
+                              : session.analysis_result}
                           </div>
                         </div>
                       )}
@@ -752,7 +756,9 @@ const SupportPlanCreate: React.FC = () => {
                           fontSize: '12px',
                           color: 'var(--accent-danger)'
                         }}>
-                          <strong>エラー:</strong> {session.error_message}
+                          <strong>エラー:</strong> {typeof session.error_message === 'object'
+                            ? JSON.stringify(session.error_message, null, 2)
+                            : session.error_message}
                         </div>
                       )}
                     </div>
