@@ -4,7 +4,7 @@ const API_TOKEN = import.meta.env.VITE_API_TOKEN || 'watchme-b2b-poc-2025';
 export interface InterviewSession {
   id: string;
   facility_id: string;
-  child_id: string;
+  subject_id: string;
   staff_id?: string | null;
   s3_audio_path: string;
   transcription?: string | null;

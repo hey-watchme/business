@@ -158,7 +158,7 @@ async def health_check():
 async def upload_audio(
     audio: UploadFile = File(...),
     facility_id: str = Form(...),
-    child_id: str = Form(...),  # Keep as child_id in API for frontend compatibility
+    subject_id: str = Form(...),
     support_plan_id: Optional[str] = Form(None),
     x_api_token: str = Header(None, alias="X-API-Token")
 ):
@@ -174,7 +174,7 @@ async def upload_audio(
         # Generate session ID and S3 path
         session_id = str(uuid.uuid4())
         timestamp = datetime.now().strftime('%Y-%m-%d')
-        s3_path = f"recordings/{facility_id}/{child_id}/{timestamp}/{session_id}.webm"
+        s3_path = f"recordings/{facility_id}/{subject_id}/{timestamp}/{session_id}.webm"
 
         # Read file content
         file_content = await audio.read()
@@ -192,10 +192,10 @@ async def upload_audio(
             session_data = {
                 'id': session_id,
                 'facility_id': facility_id,
-                'subject_id': child_id,  # Column name is subject_id, but we use child_id from API
+                'subject_id': subject_id,
                 's3_audio_path': s3_path,
                 'status': 'uploaded',
-                'duration_seconds': 0,  # To be calculated later
+                'duration_seconds': 0,
                 'recorded_at': datetime.now().isoformat()
             }
 

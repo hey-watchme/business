@@ -110,7 +110,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
     const formData = new FormData();
     formData.append('audio', blob, 'recording.webm');
     formData.append('facility_id', '00000000-0000-0000-0000-000000000001');
-    formData.append('child_id', '00000000-0000-0000-0000-000000000002');
+    formData.append('subject_id', '00000000-0000-0000-0000-000000000002');
     if (supportPlanId) {
       formData.append('support_plan_id', supportPlanId);
     }
