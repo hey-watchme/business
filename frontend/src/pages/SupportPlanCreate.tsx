@@ -573,7 +573,7 @@ const SupportPlanCreate: React.FC = () => {
                   まだセッションがありません
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto' }}>
                   {planSessions.map(session => (
                     <div
                       key={session.id}
@@ -581,21 +581,14 @@ const SupportPlanCreate: React.FC = () => {
                         background: 'var(--bg-primary)',
                         border: '1px solid var(--border-primary)',
                         borderRadius: '8px',
-                        padding: '12px',
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--accent-primary)';
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--border-primary)';
+                        padding: '16px',
+                        fontSize: '13px'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {/* Session Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                         <div>
-                          <p style={{ margin: 0, color: 'var(--text-primary)', fontWeight: '500' }}>
+                          <p style={{ margin: 0, color: 'var(--text-primary)', fontWeight: '600', fontSize: '14px' }}>
                             {formatDate(session.recorded_at)}
                           </p>
                           <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '12px' }}>
@@ -604,6 +597,133 @@ const SupportPlanCreate: React.FC = () => {
                         </div>
                         {getStatusIcon(session.status)}
                       </div>
+
+                      {/* Session Metadata */}
+                      <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                        <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>セッション情報</h4>
+                        <div style={{ display: 'grid', gap: '6px', fontSize: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>セッションID:</span>
+                            <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-primary)' }}>{session.id.slice(0, 8)}...</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>作成日時:</span>
+                            <span style={{ color: 'var(--text-primary)' }}>{formatDate(session.created_at)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>更新日時:</span>
+                            <span style={{ color: 'var(--text-primary)' }}>{formatDate(session.updated_at)}</span>
+                          </div>
+                          {session.s3_audio_path && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'var(--text-secondary)' }}>音声ファイル:</span>
+                              <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-primary)' }}>{session.s3_audio_path.split('/').pop()}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Transcription */}
+                      {session.transcription && (
+                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>文字起こし結果</h4>
+                          <div style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '12px',
+                            lineHeight: '1.6',
+                            color: 'var(--text-primary)',
+                            maxHeight: '200px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                          }}>
+                            {session.transcription}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Transcription Metadata */}
+                      {session.transcription_metadata && (
+                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>文字起こしメタデータ</h4>
+                          <pre style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '11px',
+                            lineHeight: '1.4',
+                            color: 'var(--text-primary)',
+                            maxHeight: '150px',
+                            overflowY: 'auto',
+                            margin: 0,
+                            fontFamily: 'monospace'
+                          }}>
+                            {JSON.stringify(JSON.parse(session.transcription_metadata), null, 2)}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Analysis Prompt */}
+                      {session.analysis_prompt && (
+                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>分析プロンプト</h4>
+                          <div style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '12px',
+                            lineHeight: '1.6',
+                            color: 'var(--text-primary)',
+                            maxHeight: '150px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                          }}>
+                            {session.analysis_prompt}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Analysis Result */}
+                      {session.analysis_result && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>分析結果</h4>
+                          <div style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '12px',
+                            lineHeight: '1.6',
+                            color: 'var(--text-primary)',
+                            maxHeight: '200px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                          }}>
+                            {session.analysis_result}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Error Message */}
+                      {session.error_message && (
+                        <div style={{
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          borderRadius: '6px',
+                          padding: '12px',
+                          fontSize: '12px',
+                          color: 'var(--accent-danger)'
+                        }}>
+                          <strong>エラー:</strong> {session.error_message}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

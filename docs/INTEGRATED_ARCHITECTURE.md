@@ -1,6 +1,6 @@
 # WatchMe/Business 統合アーキテクチャ設計書
 
-最終更新: 2026-01-14
+最終更新: 2026-01-16
 
 ## 📌 概要
 
@@ -171,33 +171,45 @@ subject_relationsテーブルで細かい権限制御：
 - `can_edit`: 観測データの編集権限
 - `is_primary`: 主担当/主保護者フラグ
 
-## 🚀 実装フェーズ
+## 🚀 実装状況
 
-### Phase 1: 最小限実装（MVP）
-1. DBスキーマ作成
-   - business_support_plans
-   - subject_relations
-   - business_interview_sessionsの改修
-2. Backend API
-   - 支援計画CRUD
-   - セッション管理の改修
-3. Frontend
-   - 支援計画一覧UI
-   - セッション階層表示
+### Phase 1: 最小限実装（MVP）✅ 完了
+1. ✅ DBスキーマ作成
+   - ✅ business_support_plans（個別支援計画）
+   - ✅ subject_relations（観測対象との関係性）
+   - ✅ business_interview_sessionsの改修（support_plan_id, session_type追加）
+2. ✅ Backend API
+   - ✅ 支援計画CRUD（`/api/support-plans`）
+   - ✅ subject情報のJOIN取得
+   - ✅ セッション管理の改修
+   - ✅ 音声アップロード・文字起こし（Speechmatics）
+   - ✅ LLM分析（OpenAI GPT-4o）
+   - ✅ Lambda自動化（S3 → 文字起こし → 分析）
+3. ✅ Frontend
+   - ✅ 支援計画一覧UI
+   - ✅ 支援計画詳細ドロワー
+   - ✅ 支援対象児童情報表示（subject JOIN）
+   - ✅ セッション階層表示
+   - ✅ 録音・アップロード機能
+   - ✅ ステータス管理（uploaded → transcribing → analyzing → completed）
 
-### Phase 2: 権限管理
-1. ロールベース認証実装
-2. subject_relationsによる権限制御
-3. 施設間データ分離
+**現在の実装レベル**: MVP完成、本番稼働中
 
-### Phase 3: WatchMe連携
+### Phase 2: 権限管理 🚧 未実装
+1. ⏳ ロールベース認証実装
+2. ⏳ subject_relationsによる権限制御
+3. ⏳ 施設間データ分離
+
+**Note**: 現在は単一施設（facility_id = 00000000-0000-0000-0000-000000000001）での運用
+
+### Phase 3: WatchMe連携 📋 計画中
 1. 共通コンポーネント開発
 2. データ同期機能
 3. 通知連携
 
-### Phase 4: 高度な機能
+### Phase 4: 高度な機能 📋 計画中
 1. 6ヶ月レビューサイクル管理
-2. レポート生成
+2. レポート生成（PDF出力）
 3. 分析精度向上
 
 ## 📈 将来的な拡張性
@@ -225,11 +237,59 @@ subject_relationsテーブルで細かい権限制御：
 2. **柔軟性**: 様々な関係性に対応
 3. **拡張性**: 新サービス追加が容易
 
+## 🔧 技術スタック（2026-01-16現在）
+
+### Backend
+- FastAPI (Python 3.11)
+- Supabase (PostgreSQL + Auth)
+- AWS S3 (音声ファイル保存)
+- AWS Lambda (イベント駆動型自動処理)
+- Speechmatics（文字起こし、話者分離対応、10.6倍速）
+- OpenAI GPT-4o（LLM分析）
+
+### Frontend
+- React + TypeScript + Vite
+- PWA対応（オフライン録音可能）
+- MediaRecorder API（audio/webm）
+
+### Infrastructure
+- EC2 (Sydney, t4g.large)
+- GitHub Actions (CI/CD自動デプロイ)
+- Nginx (リバースプロキシ)
+
+### データフロー
+```
+ブラウザ録音（webm）
+  → S3アップロード
+  → Lambda (business-audio-upload-handler)
+  → Speechmatics文字起こし
+  → SQS (business-transcription-completed-queue)
+  → Lambda (business-transcription-completed-handler)
+  → GPT-4o分析
+  → 完了
+```
+
 ## 📝 注意事項
 
 - プライバシー保護を最優先
-- 施設間のデータ分離を厳格に
+- 施設間のデータ分離を厳格に（Phase 2で実装予定）
 - 段階的な実装でリスク最小化
+
+## 🎯 次のステップ
+
+### 優先度：高
+1. 支援対象児童選択UI（現在は手動入力）
+2. セッション→支援計画の紐付けUI
+3. レポート生成（PDF出力）
+
+### 優先度：中
+1. 施設管理機能
+2. スタッフ権限管理
+3. RLSポリシー整備
+
+### 優先度：低
+1. WatchMeアプリとの連携
+2. 6ヶ月レビューサイクル管理
 
 ---
 
