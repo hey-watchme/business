@@ -505,12 +505,12 @@ const SupportPlanCreate: React.FC = () => {
                 <div>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>支援対象児童</span>
                   <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>
-                    {selectedPlan.subjects ? (
+                    {(selectedPlan as any).subjects ? (
                       <span>
-                        {selectedPlan.subjects.name}
-                        {selectedPlan.subjects.age && ` (${selectedPlan.subjects.age}歳)`}
+                        {(selectedPlan as any).subjects.name}
+                        {(selectedPlan as any).subjects.age && ` (${(selectedPlan as any).subjects.age}歳)`}
                         <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginLeft: '8px', fontFamily: 'monospace' }}>
-                          ID: {selectedPlan.subjects.subject_id.slice(0, 8)}...
+                          ID: {(selectedPlan as any).subjects.subject_id.slice(0, 8)}...
                         </span>
                       </span>
                     ) : (
