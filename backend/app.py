@@ -794,14 +794,14 @@ async def get_users(
 
         # Note: facility_id filtering temporarily disabled (returns all users)
 
-        result = query.order('display_name', desc=False).limit(limit).execute()
+        result = query.order('name', desc=False).limit(limit).execute()
 
         users = []
         for user in result.data:
             users.append({
                 "id": user.get('user_id'),
                 "email": user.get('email'),
-                "display_name": user.get('display_name'),
+                "display_name": user.get('name'),
                 "avatar_url": user.get('avatar_url'),
                 "role": user.get('role'),
                 "facility_id": user.get('facility_id'),
