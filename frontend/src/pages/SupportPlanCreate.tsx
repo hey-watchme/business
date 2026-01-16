@@ -436,12 +436,19 @@ const SupportPlanCreate: React.FC = () => {
               top: 0,
               background: 'var(--bg-secondary)',
               zIndex: 10,
-              padding: '24px 24px 16px 24px',
+              padding: '24px 24px 20px 24px',
               borderBottom: '1px solid var(--border-primary)',
               marginBottom: '24px'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>支援計画詳細</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', margin: '0 0 4px 0', color: 'var(--text-primary)' }}>
+                    {selectedPlan.title}
+                  </h2>
+                  <p style={{ fontSize: '12px', margin: 0, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                    {selectedPlan.id}
+                  </p>
+                </div>
                 <button
                   onClick={() => setSelectedPlan(null)}
                   style={{
@@ -471,56 +478,78 @@ const SupportPlanCreate: React.FC = () => {
                   </svg>
                 </button>
               </div>
-            </div>
 
-            <div style={{ padding: '0 24px 24px 24px' }}>
-            <div style={{ marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-secondary)' }}>基本情報</h3>
-              <div style={{ display: 'grid', gap: '12px' }}>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>計画ID</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{selectedPlan.id}</p>
+              {/* Meta Info */}
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', fontSize: '13px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <rect x="2" y="2" width="10" height="10" rx="1" stroke="var(--text-secondary)" strokeWidth="1"/>
+                    <path d="M2 4H12M4 2V1M10 2V1" stroke="var(--text-secondary)" strokeWidth="1" strokeLinecap="round"/>
+                  </svg>
+                  <span style={{ color: 'var(--text-secondary)' }}>{formatDate(selectedPlan.created_at)}</span>
                 </div>
                 <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>タイトル</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selectedPlan.title}</p>
-                </div>
-                {selectedPlan.plan_number && (
-                  <div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>計画番号</span>
-                    <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selectedPlan.plan_number}</p>
-                  </div>
-                )}
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>作成日時</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{formatDate(selectedPlan.created_at)}</p>
-                </div>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ステータス</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0' }}>
-                    <span className={`status-label ${selectedPlan.status}`}>
-                      {getPlanStatusLabel(selectedPlan.status)}
-                    </span>
-                  </p>
-                </div>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>支援対象児童</span>
-                  <p style={{ fontSize: '14px', margin: '4px 0 0 0', color: 'var(--text-primary)' }}>
-                    {(selectedPlan as any).subjects ? (
-                      <span>
-                        {(selectedPlan as any).subjects.name}
-                        {(selectedPlan as any).subjects.age && ` (${(selectedPlan as any).subjects.age}歳)`}
-                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginLeft: '8px', fontFamily: 'monospace' }}>
-                          ID: {(selectedPlan as any).subjects.subject_id.slice(0, 8)}...
-                        </span>
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-secondary)' }}>未選択</span>
-                    )}
-                  </p>
+                  <span className={`status-label ${selectedPlan.status}`}>
+                    {getPlanStatusLabel(selectedPlan.status)}
+                  </span>
                 </div>
               </div>
             </div>
+
+            <div style={{ padding: '0 24px 24px 24px' }}>
+            {/* Subject Card */}
+            {(selectedPlan as any).subjects && (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-secondary)' }}>支援対象児童</h3>
+                <div style={{
+                  background: 'var(--bg-primary)',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px'
+                }}>
+                  {/* Avatar */}
+                  <div style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    background: (selectedPlan as any).subjects.avatar_url
+                      ? `url(${(selectedPlan as any).subjects.avatar_url})`
+                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px',
+                    fontWeight: '600',
+                    color: 'white',
+                    flexShrink: 0
+                  }}>
+                    {!(selectedPlan as any).subjects.avatar_url && (selectedPlan as any).subjects.name.charAt(0)}
+                  </div>
+                  {/* Info */}
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ fontSize: '16px', fontWeight: '600', margin: '0 0 4px 0', color: 'var(--text-primary)' }}>
+                      {(selectedPlan as any).subjects.name}
+                    </h4>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {(selectedPlan as any).subjects.age && (
+                        <span>{(selectedPlan as any).subjects.age}歳</span>
+                      )}
+                      {(selectedPlan as any).subjects.gender && (
+                        <span>
+                          {(selectedPlan as any).subjects.gender === 'male' ? '男児' :
+                           (selectedPlan as any).subjects.gender === 'female' ? '女児' : 'その他'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Sessions List in Drawer */}
             <div style={{ marginBottom: '24px' }}>
