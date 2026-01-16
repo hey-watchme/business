@@ -25,7 +25,7 @@ const SupportPlanCreate: React.FC = () => {
     if (selectedPlan) {
       fetchPlanDetails(selectedPlan.id);
     }
-  }, [selectedPlan]);
+  }, [selectedPlan?.id]); // Only depend on ID to prevent infinite loop
 
   const fetchSupportPlans = async () => {
     try {
