@@ -42,8 +42,7 @@ const SupportPlanCreate: React.FC = () => {
   const fetchPlanDetails = async (planId: string) => {
     try {
       const plan = await api.getSupportPlan(planId);
-      console.log('[DEBUG] Plan details:', plan);
-      console.log('[DEBUG] Subjects field:', (plan as any).subjects);
+      setSelectedPlan(plan); // Update selectedPlan with full details including subjects
       if (plan.sessions) {
         setPlanSessions(plan.sessions);
       } else {
