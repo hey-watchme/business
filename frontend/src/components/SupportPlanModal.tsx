@@ -9,6 +9,7 @@ interface SupportPlanModalProps {
 
 const SupportPlanModal: React.FC<SupportPlanModalProps> = ({ onClose, onCreated }) => {
   const [formData, setFormData] = useState<SupportPlanCreate>({
+    subject_id: '00000000-0000-0000-0000-000000000002',
     title: '',
     plan_number: '',
     status: 'draft',
@@ -29,6 +30,7 @@ const SupportPlanModal: React.FC<SupportPlanModalProps> = ({ onClose, onCreated 
 
     try {
       const dataToSend: SupportPlanCreate = {
+        subject_id: formData.subject_id,
         title: formData.title,
         status: formData.status,
       };

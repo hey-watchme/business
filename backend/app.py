@@ -109,6 +109,7 @@ class AnalyzeResponse(BaseModel):
 
 # Support Plans models
 class SupportPlanCreate(BaseModel):
+    subject_id: str
     title: str
     plan_number: Optional[str] = None
     status: str = "draft"
@@ -434,7 +435,7 @@ async def create_support_plan(
         result = supabase.table('business_support_plans').insert({
             'id': plan_id,
             'facility_id': facility_id,
-            'subject_id': None,
+            'subject_id': plan.subject_id,
             'title': plan.title,
             'plan_number': plan.plan_number,
             'status': plan.status,

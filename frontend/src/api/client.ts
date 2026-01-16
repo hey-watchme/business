@@ -40,10 +40,10 @@ export interface SupportPlan {
 }
 
 export interface SupportPlanCreate {
+  subject_id: string;
   title: string;
   plan_number?: string | null;
   status?: 'draft' | 'active';
-  subject_id?: string | null;
 }
 
 export interface SupportPlanUpdate {
