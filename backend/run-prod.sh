@@ -34,8 +34,14 @@ else
 fi
 echo ""
 
-# Step 2: Pull latest image from ECR
-echo -e "${BLUE}📥 Step 2: Pulling latest image from ECR...${NC}"
+# Step 2: Remove old images (prevent cache issues)
+echo -e "${BLUE}🗑️  Step 2: Removing old images...${NC}"
+docker rmi ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest || true
+echo -e "${GREEN}✅ Old images removed${NC}"
+echo ""
+
+# Step 3: Pull latest image from ECR
+echo -e "${BLUE}📥 Step 3: Pulling latest image from ECR...${NC}"
 docker pull ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Image pull successful${NC}"
@@ -45,8 +51,8 @@ else
 fi
 echo ""
 
-# Step 3: Remove existing containers
-echo -e "${BLUE}🗑️  Step 3: Removing existing containers...${NC}"
+# Step 4: Remove existing containers
+echo -e "${BLUE}🗑️  Step 4: Removing existing containers...${NC}"
 
 # Stop running containers
 echo "  📦 Searching for running containers..."
@@ -76,9 +82,9 @@ docker-compose -f docker-compose.prod.yml down || true
 echo -e "${GREEN}✅ Container removal complete${NC}"
 echo ""
 
-# Step 4: Start new container
-echo -e "${BLUE}🚀 Step 4: Starting new container...${NC}"
-docker-compose -f docker-compose.prod.yml up -d
+# Step 5: Start new container
+echo -e "${BLUE}🚀 Step 5: Starting new container...${NC}"
+docker-compose -f docker-compose.prod.yml up -d --force-recreate
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Container started successfully${NC}"
 else
@@ -87,14 +93,14 @@ else
 fi
 echo ""
 
-# Step 5: Wait for container startup
-echo -e "${BLUE}⏳ Step 5: Waiting for container startup...${NC}"
+# Step 6: Wait for container startup
+echo -e "${BLUE}⏳ Step 6: Waiting for container startup...${NC}"
 sleep 5
 echo -e "${GREEN}✅ Wait complete${NC}"
 echo ""
 
-# Step 6: Check container status
-echo -e "${BLUE}📊 Step 6: Checking container status...${NC}"
+# Step 7: Check container status
+echo -e "${BLUE}📊 Step 7: Checking container status...${NC}"
 CONTAINER_STATUS=$(docker ps --filter "name=${CONTAINER_NAME}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}")
 if [ ! -z "$CONTAINER_STATUS" ]; then
     echo "$CONTAINER_STATUS"
@@ -107,8 +113,8 @@ else
 fi
 echo ""
 
-# Step 7: Health check
-echo -e "${BLUE}🏥 Step 7: Running health check...${NC}"
+# Step 8: Health check
+echo -e "${BLUE}🏥 Step 8: Running health check...${NC}"
 echo "Retrying for up to 60 seconds (12 attempts × 5 seconds)..."
 
 for i in {1..12}; do
