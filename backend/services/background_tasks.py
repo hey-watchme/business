@@ -142,16 +142,56 @@ def analyze_background(
             'updated_at': datetime.now().isoformat()
         }).eq('id', session_id).execute()
 
-        # Generate prompt
-        prompt = f"""以下の保護者ヒアリング内容を要約してください。
+        # Generate extraction_v1 prompt
+        prompt = f"""あなたは児童発達支援のヒアリング記録を整理するアシスタントです。
 
-ヒアリング内容:
+重要なルール:
+- 判断・評価・目標設定・支援計画の作成は絶対にしないでください
+- ヒアリング内の事実・発言・観察内容のみを抽出してください
+- 推測や補完は禁止です
+- 曖昧な場合は「不明」「判断不能」としてください
+- 言い換えは最小限にし、可能であれば原文のニュアンスを残してください
+
+以下は、児童発達支援に関するヒアリングのトランスクリプションです。
+この内容から「情報抽出」だけを行ってください。
+
+【目的】
+後続の処理で「個別支援計画書」を作成するための素材を整理すること。
+
+【抽出カテゴリ】
+次のカテゴリに分類してください。
+該当しない情報は administrative_notes に入れてください。
+
+- basic_info
+- current_state
+- strengths
+- challenges
+- physical_sensory
+- medical_development
+- family_environment
+- parent_intentions
+- staff_notes
+- administrative_notes
+- unresolved_items
+
+【話者情報の扱い】
+- トランスクリプションに "SPEAKER S1", "SPEAKER S2" 等の表記がある場合、以下のように推定してください:
+  - S1: 施設スタッフ（支援者）
+  - S2, S3: 保護者（父・母）
+  - その他: 文脈から判断困難な場合は "speaker: unknown"
+- speaker フィールドには以下を記録:
+  - parent（保護者）
+  - staff（施設スタッフ）
+  - unknown（判断不能）
+
+【出力形式】
+YAML 形式で出力してください。
+各項目は配列で、なければ空配列にしてください。
+各要素には summary（要約）を必ず含めてください。
+可能な場合は source（原文に近い表現）も含めてください。
+
+【ヒアリングのトランスクリプション】
 {transcription}
-
-以下の項目について、日本語で回答してください:
-1. 概要（2-3文）
-2. 主なポイント
-3. お子さまの現在の状況
 """
 
         # Call LLM
