@@ -491,18 +491,31 @@ async def get_support_plans(
 
         result = query.order('created_at', desc=True).limit(limit).execute()
 
-        # Add session count for each plan
-        plans_with_counts = []
-        for plan in result.data:
-            session_count_result = supabase.table('business_interview_sessions')\
-                .select('id', count='exact')\
-                .eq('support_plan_id', plan['id'])\
+        # Optimization: Fetch all session counts in one query instead of N queries
+        if result.data:
+            plan_ids = [plan['id'] for plan in result.data]
+
+            # Get all sessions for these plans in one query
+            sessions_result = supabase.table('business_interview_sessions')\
+                .select('support_plan_id')\
+                .in_('support_plan_id', plan_ids)\
                 .execute()
 
-            plans_with_counts.append({
-                **plan,
-                'session_count': session_count_result.count if session_count_result.count else 0
-            })
+            # Count sessions per plan
+            session_counts = {}
+            for session in sessions_result.data:
+                plan_id = session['support_plan_id']
+                session_counts[plan_id] = session_counts.get(plan_id, 0) + 1
+
+            # Add session count to each plan
+            plans_with_counts = []
+            for plan in result.data:
+                plans_with_counts.append({
+                    **plan,
+                    'session_count': session_counts.get(plan['id'], 0)
+                })
+        else:
+            plans_with_counts = []
 
         return {"plans": plans_with_counts, "count": len(plans_with_counts)}
 
