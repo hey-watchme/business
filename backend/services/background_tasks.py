@@ -142,53 +142,137 @@ def analyze_background(
             'updated_at': datetime.now().isoformat()
         }).eq('id', session_id).execute()
 
-        # Generate extraction_v1 prompt
+        # Get session and related data from DB
+        session_result = supabase.table('business_interview_sessions')\
+            .select('*, support_plan:support_plan_id(*, subject:subject_id(*))')\
+            .eq('id', session_id)\
+            .single()\
+            .execute()
+
+        if session_result.data:
+            session_data = session_result.data
+            # Extract subject info if available
+            subject = None
+            if session_data.get('support_plan') and session_data['support_plan'].get('subject'):
+                subject = session_data['support_plan']['subject']
+
+            # Extract attendees info
+            attendees = session_data.get('attendees', {})
+
+            # Calculate age from birth_date if available
+            age_text = "不明"
+            if subject and subject.get('birth_date'):
+                from datetime import datetime
+                try:
+                    birth_date = datetime.fromisoformat(subject['birth_date'].replace('Z', '+00:00'))
+                    age = (datetime.now() - birth_date).days // 365
+                    age_text = f"{age}歳"
+                except:
+                    pass
+
+        # Generate extraction_v1 prompt with pre-filled information
         prompt = f"""あなたは児童発達支援のヒアリング記録を整理するアシスタントです。
 
-重要なルール:
+【事前情報】
+■ 支援対象児
+- 氏名: {subject.get('name', '不明') if subject else '不明'}
+- 年齢: {age_text}
+- 性別: {subject.get('gender', '不明') if subject else '不明'}
+- 診断: {', '.join(subject.get('diagnosis', [])) if subject and subject.get('diagnosis') else '不明'}
+- 通園先: {subject.get('school_name', '不明') if subject and subject.get('school_name') else '不明'}
+
+■ 参加者
+- 保護者: {"父" if attendees.get('father') else ""}{"・母" if attendees.get('mother') else ""}{"不明" if not attendees else ""}
+
+■ インタビュアー
+- 氏名: 山田太郎（児発管）
+
+■ 実施情報
+- 日時: {session.get('recorded_at', '不明')}
+
+【重要なルール】
 - 判断・評価・目標設定・支援計画の作成は絶対にしないでください
-- ヒアリング内の事実・発言・観察内容のみを抽出してください
+- 事実・発言・観察内容のみを抽出してください
+- 原文の引用は不要です（要約のみ）
 - 推測や補完は禁止です
-- 曖昧な場合は「不明」「判断不能」としてください
-- 言い換えは最小限にし、可能であれば原文のニュアンスを残してください
-
-以下は、児童発達支援に関するヒアリングのトランスクリプションです。
-この内容から「情報抽出」だけを行ってください。
-
-【目的】
-後続の処理で「個別支援計画書」を作成するための素材を整理すること。
-
-【抽出カテゴリ】
-次のカテゴリに分類してください。
-該当しない情報は administrative_notes に入れてください。
-
-- basic_info
-- current_state
-- strengths
-- challenges
-- physical_sensory
-- medical_development
-- family_environment
-- parent_intentions
-- staff_notes
-- administrative_notes
-- unresolved_items
-
-【話者情報の扱い】
-- トランスクリプションに "SPEAKER S1", "SPEAKER S2" 等の表記がある場合、以下のように推定してください:
-  - S1: 施設スタッフ（支援者）
-  - S2, S3: 保護者（父・母）
-  - その他: 文脈から判断困難な場合は "speaker: unknown"
-- speaker フィールドには以下を記録:
-  - parent（保護者）
-  - staff（施設スタッフ）
-  - unknown（判断不能）
+- 曖昧な場合は confidence を "low" にしてください
 
 【出力形式】
-YAML 形式で出力してください。
-各項目は配列で、なければ空配列にしてください。
-各要素には summary（要約）を必ず含めてください。
-可能な場合は source（原文に近い表現）も含めてください。
+以下のJSON形式で出力してください。
+原文引用（source）は含めないでください。
+
+{{
+  "extraction_v1": {{
+    "basic_info": [
+      {{
+        "field": "項目名",
+        "value": "値",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "current_state": [
+      {{
+        "summary": "現在の状況の要約",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "strengths": [
+      {{
+        "summary": "強みの要約",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "challenges": [
+      {{
+        "summary": "課題の要約",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "physical_sensory": [
+      {{
+        "summary": "身体・感覚の要約",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "medical_development": [
+      {{
+        "summary": "医療・発達の要約",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "family_environment": [
+      {{
+        "summary": "家族・環境の要約",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "parent_intentions": [
+      {{
+        "summary": "保護者の希望",
+        "priority": 1,
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "staff_notes": [
+      {{
+        "summary": "スタッフの観察・メモ",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "administrative_notes": [
+      {{
+        "summary": "事務的な内容",
+        "confidence": "high/medium/low"
+      }}
+    ],
+    "unresolved_items": [
+      {{
+        "summary": "未解決・保留事項",
+        "reason": "理由"
+      }}
+    ]
+  }}
+}}
 
 【ヒアリングのトランスクリプション】
 {transcription}
