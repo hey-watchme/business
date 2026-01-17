@@ -120,9 +120,9 @@ def analyze_background(
         print(f"[Background] Starting analysis for session: {session_id}")
         start_time = time.time()
 
-        # Get session from DB
+        # Get session and related data from DB (single query with joins)
         result = supabase.table('business_interview_sessions')\
-            .select('*')\
+            .select('*, support_plan:support_plan_id(*, subject:subject_id(*))')\
             .eq('id', session_id)\
             .single()\
             .execute()
@@ -142,33 +142,24 @@ def analyze_background(
             'updated_at': datetime.now().isoformat()
         }).eq('id', session_id).execute()
 
-        # Get session and related data from DB
-        session_result = supabase.table('business_interview_sessions')\
-            .select('*, support_plan:support_plan_id(*, subject:subject_id(*))')\
-            .eq('id', session_id)\
-            .single()\
-            .execute()
+        # Initialize variables with default values
+        subject = None
+        attendees = session.get('attendees', {})
+        age_text = "不明"
 
-        if session_result.data:
-            session_data = session_result.data
-            # Extract subject info if available
-            subject = None
-            if session_data.get('support_plan') and session_data['support_plan'].get('subject'):
-                subject = session_data['support_plan']['subject']
-
-            # Extract attendees info
-            attendees = session_data.get('attendees', {})
+        # Extract subject info if available
+        if session.get('support_plan') and session['support_plan'].get('subject'):
+            subject = session['support_plan']['subject']
 
             # Calculate age from birth_date if available
-            age_text = "不明"
-            if subject and subject.get('birth_date'):
-                from datetime import datetime
+            if subject.get('birth_date'):
                 try:
                     birth_date = datetime.fromisoformat(subject['birth_date'].replace('Z', '+00:00'))
                     age = (datetime.now() - birth_date).days // 365
                     age_text = f"{age}歳"
-                except:
-                    pass
+                except (ValueError, TypeError, KeyError) as e:
+                    print(f"[Warning] Failed to calculate age: {e}")
+                    age_text = "不明"
 
         # Generate extraction_v1 prompt with pre-filled information
         prompt = f"""あなたは児童発達支援のヒアリング記録を整理するアシスタントです。
@@ -182,7 +173,7 @@ def analyze_background(
 - 通園先: {subject.get('school_name', '不明') if subject and subject.get('school_name') else '不明'}
 
 ■ 参加者
-- 保護者: {"父" if attendees.get('father') else ""}{"・母" if attendees.get('mother') else ""}{"不明" if not attendees else ""}
+- 保護者: {("父" if attendees.get('father') else "") + ("・母" if attendees.get('mother') else "") or "不明"}
 
 ■ インタビュアー
 - 氏名: 山田太郎（児発管）
@@ -278,13 +269,29 @@ def analyze_background(
 {transcription}
 """
 
-        # Call LLM
-        llm_response = llm_service.generate(prompt)
+        # Call LLM with error handling
+        try:
+            llm_response = llm_service.generate(prompt)
+            if not llm_response:
+                raise Exception("LLM returned empty response")
+        except Exception as e:
+            raise Exception(f"LLM generation failed: {str(e)}")
+
+        # Parse LLM response (handle both JSON string and plain text)
+        try:
+            if llm_response.strip().startswith('{'):
+                analysis_data = json.loads(llm_response)
+            else:
+                # If not JSON, wrap in summary structure
+                analysis_data = {'summary': llm_response}
+        except json.JSONDecodeError:
+            # Fallback: treat as plain text
+            analysis_data = {'summary': llm_response}
 
         # Update DB with result
         supabase.table('business_interview_sessions').update({
             'analysis_prompt': prompt,
-            'analysis_result': {'summary': llm_response},
+            'analysis_result': analysis_data,
             'status': 'completed',
             'updated_at': datetime.now().isoformat()
         }).eq('id', session_id).execute()
