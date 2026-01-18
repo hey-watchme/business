@@ -452,7 +452,91 @@ async def structure_facts(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start fact structuring: {str(e)}")
+
+@app.post("/api/assess")
+async def assess(
+    request: AnalyzeRequest,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Phase 3: Assessment (Asynchronous)
+
+    Generates individual support plan from fact_clusters_v1
+    - Professional judgment and interpretation
+    - Support policy, goals, and support items
+
+    Flow:
+    1. Validate request
+    2. Start background task
+    3. Return 202 Accepted immediately
+    """
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Get session from DB
+        result = supabase.table('business_interview_sessions')\
+            .select('fact_structuring_result_v1')\
+            .eq('id', request.session_id)\
+            .single()\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        structuring_result = result.data.get('fact_structuring_result_v1')
+
+        if not structuring_result:
+            raise HTTPException(
+                status_code=400,
+                detail="fact_structuring_result_v1 not found. Please run /api/structure-facts first."
+            )
+
+        # Validate fact_clusters_v1 exists
+        from services.llm_pipeline import validate_previous_phase_result
+
+        has_valid_data = validate_previous_phase_result(structuring_result, 'fact_clusters_v1')
+
+        if not has_valid_data:
+            raise HTTPException(
+                status_code=400,
+                detail="fact_clusters_v1 is invalid. Please run /api/structure-facts first."
+            )
+
+        # Start background task
+        from services.background_tasks import assess_background
+        from services.llm_providers import get_current_llm
+
+        llm_service = get_current_llm()
+
+        thread = threading.Thread(
+            target=assess_background,
+            args=(
+                request.session_id,
+                supabase,
+                llm_service
+            )
+        )
+        thread.daemon = True
+        thread.start()
+
+        print(f"Started background assessment for session: {request.session_id}")
+
+        return Response(
+            status_code=202,
+            content='{"status": "processing", "message": "Assessment started"}',
+            media_type="application/json"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start assessment: {str(e)}")
 
 @app.get("/api/sessions")
 async def get_sessions(

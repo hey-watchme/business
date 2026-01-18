@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 import boto3
 from supabase import Client
-from services.prompts import build_fact_structuring_prompt
+from services.prompts import build_fact_structuring_prompt, build_assessment_prompt
 from services.llm_pipeline import execute_llm_phase
 
 
@@ -350,4 +350,34 @@ def structure_facts_background(
         input_selector="fact_extraction_result_v1",
         output_column="fact_structuring_result_v1",
         prompt_column="fact_structuring_prompt_v1"
+    )
+
+
+def assess_background(
+    session_id: str,
+    supabase: Client,
+    llm_service
+):
+    """
+    Phase 3: Assessment (Background Task)
+
+    Generates individual support plan based on fact_clusters_v1
+    - Professional judgment and interpretation
+    - Support policy, goals, and support items
+
+    Args:
+        session_id: Session ID
+        supabase: Supabase client
+        llm_service: LLM service instance
+    """
+    # Use unified LLM pipeline
+    execute_llm_phase(
+        session_id=session_id,
+        supabase=supabase,
+        llm_service=llm_service,
+        phase_name="assessment",
+        prompt_builder=build_assessment_prompt,
+        input_selector="fact_structuring_result_v1",
+        output_column="assessment_result_v1",
+        prompt_column="assessment_prompt_v1"
     )
