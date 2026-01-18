@@ -325,7 +325,7 @@ def analyze_background(
 def structure_facts_background(
     session_id: str,
     supabase: Client,
-    openai_client
+    llm_service
 ):
     """
     Phase 2: Fact Structuring (Background Task)
@@ -337,7 +337,7 @@ def structure_facts_background(
     Args:
         session_id: Session ID
         supabase: Supabase client
-        openai_client: OpenAI client
+        llm_service: LLM service instance
     """
     start_time = time.time()
     print(f"[Background] Starting fact structuring for session: {session_id}")
@@ -388,22 +388,15 @@ def structure_facts_background(
             'fact_structuring_prompt_v1': prompt
         }).eq('id', session_id).execute()
 
-        # 4. Call OpenAI API
-        print(f"[Background] Calling OpenAI API for fact structuring...")
-        llm_response = openai_client.chat.completions.create(
-            model='gpt-4o',
-            messages=[
-                {'role': 'system', 'content': 'You are a fact organization assistant for child development support.'},
-                {'role': 'user', 'content': prompt}
-            ],
-            temperature=0.3,
-            response_format={'type': 'json_object'}
-        )
-
-        llm_output = llm_response.choices[0].message.content
-
-        if not llm_output or llm_output.strip() == '':
-            raise ValueError("OpenAI returned empty response")
+        # 4. Call LLM (using same pattern as Phase 1)
+        print(f"[Background] Calling LLM for fact structuring...")
+        try:
+            # Note: llm_service parameter name should be consistent
+            llm_output = llm_service.generate(prompt)
+            if not llm_output:
+                raise ValueError("LLM returned empty response")
+        except Exception as e:
+            raise ValueError(f"LLM generation failed: {str(e)}")
 
         # 5. Parse JSON response
         try:
