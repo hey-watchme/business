@@ -353,10 +353,32 @@ def structure_facts_background(
         if not response.data:
             raise ValueError(f"Session not found: {session_id}")
 
-        extraction_v1 = response.data.get('fact_extraction_result_v1', {}).get('extraction_v1')
+        fact_extraction_data = response.data.get('fact_extraction_result_v1')
+
+        if not fact_extraction_data:
+            raise ValueError(f"fact_extraction_result_v1 not found for session: {session_id}")
+
+        # Handle different data structures
+        extraction_v1 = None
+
+        # Case 1: Direct structure {"extraction_v1": {...}}
+        if isinstance(fact_extraction_data, dict) and 'extraction_v1' in fact_extraction_data:
+            extraction_v1 = fact_extraction_data['extraction_v1']
+
+        # Case 2: Wrapped in summary {"summary": "```json\n{...}\n```"}
+        elif isinstance(fact_extraction_data, dict) and 'summary' in fact_extraction_data:
+            summary_text = fact_extraction_data['summary']
+            # Extract JSON from markdown code block
+            if '```json' in summary_text:
+                json_start = summary_text.find('{')
+                json_end = summary_text.rfind('}') + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_str = summary_text[json_start:json_end]
+                    parsed = json.loads(json_str)
+                    extraction_v1 = parsed.get('extraction_v1')
 
         if not extraction_v1:
-            raise ValueError(f"fact_extraction_result_v1.extraction_v1 not found for session: {session_id}")
+            raise ValueError(f"Could not extract extraction_v1 from fact_extraction_result_v1 for session: {session_id}")
 
         # 2. Build prompt
         prompt = build_fact_structuring_prompt(extraction_v1)
