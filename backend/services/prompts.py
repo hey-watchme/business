@@ -1,13 +1,26 @@
 """
 Prompt templates for LLM-based analysis pipeline
+
+All prompt builders follow the same interface:
+- Input: session_data (dict from DB query)
+- Output: prompt (str)
 """
 
-def build_fact_structuring_prompt(extraction_v1: dict) -> str:
+from services.llm_pipeline import extract_from_wrapped_result
+
+
+def build_fact_structuring_prompt(session_data: dict) -> str:
     """
     Build prompt for Phase 2: Fact Structuring
 
     Converts extraction_v1 (11 categories of raw facts)
     into fact_clusters_v1 (domain-neutral fact groups)
+
+    Args:
+        session_data: Dict with 'fact_extraction_result_v1' from DB query
+
+    Returns:
+        Prompt string for LLM
 
     Important principles:
     - NO interpretation or inference
@@ -15,6 +28,12 @@ def build_fact_structuring_prompt(extraction_v1: dict) -> str:
     - NO words like "possibility", "tendency", "seems"
     - Only reorganize facts into neutral clusters
     """
+    # Extract extraction_v1 from session data
+    fact_extraction_data = session_data.get('fact_extraction_result_v1')
+    extraction_v1 = extract_from_wrapped_result(fact_extraction_data, 'extraction_v1')
+
+    if not extraction_v1:
+        raise ValueError("extraction_v1 not found in session data")
 
     prompt = f"""あなたは児童発達支援の事実整理アシスタントです。
 

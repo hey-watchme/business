@@ -7,6 +7,7 @@ from datetime import datetime
 import boto3
 from supabase import Client
 from services.prompts import build_fact_structuring_prompt
+from services.llm_pipeline import execute_llm_phase
 
 
 def transcribe_background(
@@ -339,90 +340,14 @@ def structure_facts_background(
         supabase: Supabase client
         llm_service: LLM service instance
     """
-    start_time = time.time()
-    print(f"[Background] Starting fact structuring for session: {session_id}")
-
-    try:
-        # 1. Get extraction_v1 from DB
-        response = supabase.table('business_interview_sessions') \
-            .select('fact_extraction_result_v1') \
-            .eq('id', session_id) \
-            .single() \
-            .execute()
-
-        if not response.data:
-            raise ValueError(f"Session not found: {session_id}")
-
-        fact_extraction_data = response.data.get('fact_extraction_result_v1')
-
-        if not fact_extraction_data:
-            raise ValueError(f"fact_extraction_result_v1 not found for session: {session_id}")
-
-        # Handle different data structures
-        extraction_v1 = None
-
-        # Case 1: Direct structure {"extraction_v1": {...}}
-        if isinstance(fact_extraction_data, dict) and 'extraction_v1' in fact_extraction_data:
-            extraction_v1 = fact_extraction_data['extraction_v1']
-
-        # Case 2: Wrapped in summary {"summary": "```json\n{...}\n```"}
-        elif isinstance(fact_extraction_data, dict) and 'summary' in fact_extraction_data:
-            summary_text = fact_extraction_data['summary']
-            # Extract JSON from markdown code block
-            if '```json' in summary_text:
-                json_start = summary_text.find('{')
-                json_end = summary_text.rfind('}') + 1
-                if json_start >= 0 and json_end > json_start:
-                    json_str = summary_text[json_start:json_end]
-                    parsed = json.loads(json_str)
-                    extraction_v1 = parsed.get('extraction_v1')
-
-        if not extraction_v1:
-            raise ValueError(f"Could not extract extraction_v1 from fact_extraction_result_v1 for session: {session_id}")
-
-        # 2. Build prompt
-        prompt = build_fact_structuring_prompt(extraction_v1)
-
-        # 3. Save prompt to DB
-        supabase.table('business_interview_sessions').update({
-            'fact_structuring_prompt_v1': prompt
-        }).eq('id', session_id).execute()
-
-        # 4. Call LLM (using same pattern as Phase 1)
-        print(f"[Background] Calling LLM for fact structuring...")
-        try:
-            # Note: llm_service parameter name should be consistent
-            llm_output = llm_service.generate(prompt)
-            if not llm_output:
-                raise ValueError("LLM returned empty response")
-        except Exception as e:
-            raise ValueError(f"LLM generation failed: {str(e)}")
-
-        # 5. Parse JSON response (flexible handling, same as Phase 1)
-        try:
-            if llm_output.strip().startswith('{'):
-                fact_clusters_data = json.loads(llm_output)
-            else:
-                # If not JSON, wrap in summary structure
-                fact_clusters_data = {'summary': llm_output}
-        except json.JSONDecodeError:
-            # Fallback: treat as plain text
-            fact_clusters_data = {'summary': llm_output}
-
-        # 6. Save result to DB
-        supabase.table('business_interview_sessions').update({
-            'fact_structuring_result_v1': fact_clusters_data,
-            'updated_at': datetime.now().isoformat()
-        }).eq('id', session_id).execute()
-
-        processing_time = time.time() - start_time
-        print(f"[Background] Fact structuring completed in {processing_time:.2f}s for session: {session_id}")
-
-    except Exception as e:
-        print(f"[Background] ERROR in fact structuring: {str(e)}")
-        # Update DB with error
-        if supabase:
-            supabase.table('business_interview_sessions').update({
-                'error_message': f"Fact structuring failed: {str(e)}",
-                'updated_at': datetime.now().isoformat()
-            }).eq('id', session_id).execute()
+    # Use unified LLM pipeline
+    execute_llm_phase(
+        session_id=session_id,
+        supabase=supabase,
+        llm_service=llm_service,
+        phase_name="fact_structuring",
+        prompt_builder=build_fact_structuring_prompt,
+        input_selector="fact_extraction_result_v1",
+        output_column="fact_structuring_result_v1",
+        prompt_column="fact_structuring_prompt_v1"
+    )
