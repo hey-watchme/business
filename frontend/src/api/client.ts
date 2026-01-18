@@ -13,8 +13,8 @@ export interface InterviewSession {
   recorded_at: string;
   created_at: string;
   updated_at: string;
-  analysis_prompt?: string | null;
-  analysis_result?: { summary: string } | string | null;
+  fact_extraction_prompt_v1?: string | null;
+  fact_extraction_result_v1?: { summary: string } | string | null;
   error_message?: string | null;
   transcription_metadata?: string | null;
 }

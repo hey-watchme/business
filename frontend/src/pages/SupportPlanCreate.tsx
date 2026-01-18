@@ -698,10 +698,10 @@ const SupportPlanCreate: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Analysis Prompt */}
-                      {session.analysis_prompt && (
+                      {/* Fact Extraction Prompt */}
+                      {session.fact_extraction_prompt_v1 && (
                         <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>分析プロンプト</h4>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>事実抽出プロンプト</h4>
                           <div style={{
                             background: 'var(--bg-secondary)',
                             border: '1px solid var(--border-primary)',
@@ -715,17 +715,17 @@ const SupportPlanCreate: React.FC = () => {
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word'
                           }}>
-                            {typeof session.analysis_prompt === 'object'
-                              ? JSON.stringify(session.analysis_prompt, null, 2)
-                              : session.analysis_prompt}
+                            {typeof session.fact_extraction_prompt_v1 === 'object'
+                              ? JSON.stringify(session.fact_extraction_prompt_v1, null, 2)
+                              : session.fact_extraction_prompt_v1}
                           </div>
                         </div>
                       )}
 
-                      {/* Analysis Result */}
-                      {session.analysis_result && (
+                      {/* Fact Extraction Result */}
+                      {session.fact_extraction_result_v1 && (
                         <div style={{ marginBottom: '12px' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>分析結果</h4>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>事実抽出結果</h4>
                           <div style={{
                             background: 'var(--bg-secondary)',
                             border: '1px solid var(--border-primary)',
@@ -740,7 +740,7 @@ const SupportPlanCreate: React.FC = () => {
                             wordBreak: 'break-word'
                           }}>
                             {(() => {
-                              const result = session.analysis_result;
+                              const result = session.fact_extraction_result_v1;
                               if (typeof result === 'string') {
                                 return result;
                               } else if (result && typeof result === 'object' && 'summary' in result) {

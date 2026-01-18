@@ -290,8 +290,8 @@ def analyze_background(
 
         # Update DB with result
         supabase.table('business_interview_sessions').update({
-            'analysis_prompt': prompt,
-            'analysis_result': analysis_data,
+            'fact_extraction_prompt_v1': prompt,
+            'fact_extraction_result_v1': analysis_data,
             'status': 'completed',
             'updated_at': datetime.now().isoformat()
         }).eq('id', session_id).execute()

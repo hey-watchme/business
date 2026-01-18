@@ -77,7 +77,7 @@
    - バックグラウンドで GPT-4o 分析
    ↓
 8. 分析完了
-   - DB更新: analysis_result 保存
+   - DB更新: fact_extraction_result_v1 保存
    - status: 'completed'
    ↓
 9. フロントエンド: ポーリングまたはWebSocketで結果取得
@@ -126,9 +126,9 @@ CREATE TABLE business_interview_sessions (
   transcription TEXT,
   transcription_metadata JSONB,
 
-  -- 分析
-  analysis_prompt TEXT,
-  analysis_result JSONB,
+  -- Phase 1: 事実抽出
+  fact_extraction_prompt_v1 TEXT,
+  fact_extraction_result_v1 JSONB,
 
   -- ステータス管理
   status TEXT NOT NULL, -- 'uploaded' | 'transcribing' | 'transcribed' | 'analyzing' | 'completed' | 'failed'
@@ -246,8 +246,11 @@ Content-Type: multipart/form-data
   "id": "uuid",
   "status": "completed",
   "transcription": "...",
-  "analysis_result": {
-    "summary": "..."
+  "fact_extraction_result_v1": {
+    "extraction_v1": {
+      "basic_info": [...],
+      "challenges": [...]
+    }
   },
   "created_at": "2026-01-13T00:00:00Z"
 }
