@@ -398,10 +398,30 @@ async def structure_facts(
 
         extraction_result = result.data.get('fact_extraction_result_v1')
 
-        if not extraction_result or not extraction_result.get('extraction_v1'):
+        if not extraction_result:
             raise HTTPException(
                 status_code=400,
                 detail="fact_extraction_result_v1 not found. Please run /api/analyze first."
+            )
+
+        # Handle different data structures (same logic as in background_tasks.py)
+        has_valid_data = False
+
+        # Case 1: Direct structure {"extraction_v1": {...}}
+        if isinstance(extraction_result, dict) and 'extraction_v1' in extraction_result:
+            has_valid_data = True
+
+        # Case 2: Wrapped in summary {"summary": "```json\n{...}\n```"}
+        elif isinstance(extraction_result, dict) and 'summary' in extraction_result:
+            # Just check that summary exists and contains JSON
+            summary_text = extraction_result.get('summary', '')
+            if '```json' in summary_text and 'extraction_v1' in summary_text:
+                has_valid_data = True
+
+        if not has_valid_data:
+            raise HTTPException(
+                status_code=400,
+                detail="fact_extraction_result_v1 is invalid. Please run /api/analyze first."
             )
 
         # Start background task
