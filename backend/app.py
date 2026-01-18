@@ -357,6 +357,81 @@ async def analyze_interview(
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Error in analyze endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/structure-facts")
+async def structure_facts(
+    request: AnalyzeRequest,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Phase 2: Fact Structuring (Asynchronous)
+
+    Converts extraction_v1 into fact_clusters_v1
+    - NO interpretation or inference
+    - Only reorganize facts into neutral clusters
+
+    Flow:
+    1. Validate request
+    2. Start background task
+    3. Return 202 Accepted immediately
+    """
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Get session from DB
+        result = supabase.table('business_interview_sessions')\
+            .select('fact_extraction_result_v1')\
+            .eq('id', request.session_id)\
+            .single()\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        extraction_result = result.data.get('fact_extraction_result_v1')
+
+        if not extraction_result or not extraction_result.get('extraction_v1'):
+            raise HTTPException(
+                status_code=400,
+                detail="fact_extraction_result_v1 not found. Please run /api/analyze first."
+            )
+
+        # Start background task
+        from services.background_tasks import structure_facts_background
+        from services.llm_providers import get_current_llm
+
+        llm_service = get_current_llm()
+
+        thread = threading.Thread(
+            target=structure_facts_background,
+            args=(
+                request.session_id,
+                supabase,
+                llm_service
+            )
+        )
+        thread.daemon = True
+        thread.start()
+
+        print(f"Started background fact structuring for session: {request.session_id}")
+
+        return Response(
+            status_code=202,
+            content='{"status": "processing", "message": "Fact structuring started"}',
+            media_type="application/json"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start analysis: {str(e)}")
 
 @app.get("/api/sessions")

@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime
 import boto3
 from supabase import Client
+from services.prompts import build_fact_structuring_prompt
 
 
 def transcribe_background(
@@ -317,5 +318,91 @@ def analyze_background(
             supabase.table('business_interview_sessions').update({
                 'status': 'failed',
                 'error_message': f"Analysis failed: {str(e)}",
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', session_id).execute()
+
+
+def structure_facts_background(
+    session_id: str,
+    supabase: Client,
+    openai_client
+):
+    """
+    Phase 2: Fact Structuring (Background Task)
+
+    Converts extraction_v1 into fact_clusters_v1
+    - NO interpretation or inference
+    - Only reorganize facts into neutral domain clusters
+
+    Args:
+        session_id: Session ID
+        supabase: Supabase client
+        openai_client: OpenAI client
+    """
+    start_time = time.time()
+    print(f"[Background] Starting fact structuring for session: {session_id}")
+
+    try:
+        # 1. Get extraction_v1 from DB
+        response = supabase.table('business_interview_sessions') \
+            .select('fact_extraction_result_v1') \
+            .eq('id', session_id) \
+            .single() \
+            .execute()
+
+        if not response.data:
+            raise ValueError(f"Session not found: {session_id}")
+
+        extraction_v1 = response.data.get('fact_extraction_result_v1', {}).get('extraction_v1')
+
+        if not extraction_v1:
+            raise ValueError(f"fact_extraction_result_v1.extraction_v1 not found for session: {session_id}")
+
+        # 2. Build prompt
+        prompt = build_fact_structuring_prompt(extraction_v1)
+
+        # 3. Save prompt to DB
+        supabase.table('business_interview_sessions').update({
+            'fact_structuring_prompt_v1': prompt
+        }).eq('id', session_id).execute()
+
+        # 4. Call OpenAI API
+        print(f"[Background] Calling OpenAI API for fact structuring...")
+        llm_response = openai_client.chat.completions.create(
+            model='gpt-4o',
+            messages=[
+                {'role': 'system', 'content': 'You are a fact organization assistant for child development support.'},
+                {'role': 'user', 'content': prompt}
+            ],
+            temperature=0.3,
+            response_format={'type': 'json_object'}
+        )
+
+        llm_output = llm_response.choices[0].message.content
+
+        if not llm_output or llm_output.strip() == '':
+            raise ValueError("OpenAI returned empty response")
+
+        # 5. Parse JSON response
+        try:
+            fact_clusters_data = json.loads(llm_output)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse LLM JSON response: {str(e)}")
+
+        # 6. Save result to DB
+        supabase.table('business_interview_sessions').update({
+            'fact_structuring_result_v1': fact_clusters_data,
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', session_id).execute()
+
+        processing_time = time.time() - start_time
+        print(f"[Background] Fact structuring completed in {processing_time:.2f}s for session: {session_id}")
+
+    except Exception as e:
+        print(f"[Background] ERROR in fact structuring: {str(e)}")
+        # Update DB with error
+        if supabase:
+            supabase.table('business_interview_sessions').update({
+                'error_message': f"Fact structuring failed: {str(e)}",
                 'updated_at': datetime.now().isoformat()
             }).eq('id', session_id).execute()
