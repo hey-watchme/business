@@ -41,9 +41,9 @@ business/
 
 ### その他のドキュメント
 
+- **[個別支援計画生成システム 技術仕様書](./docs/INDIVIDUAL_SUPPORT_PLAN_SPEC.md)** - Phase 0-3 完全仕様（★最重要）
 - **[認証・アカウント設計](./docs/AUTHENTICATION_DESIGN.md)** - Organization/Facility設計・認証体系
 - **[実装計画書](./docs/IMPLEMENTATION_PLAN.md)** - 初期実装計画（参考）
-- **[分析実装](./docs/ANALYSIS_IMPLEMENTATION_PLAN.md)** - LLM分析実装詳細
 - **[DB定義](./infrastructure/supabase/create_tables.sql)** - Supabaseテーブル定義
 
 ## 🚀 技術スタック
@@ -150,16 +150,20 @@ ASR_PROVIDER=deepgram
 
 ## 🔧 開発状況
 
-**進捗**: 約65% (トランスクリプション・分析・完全自動化完了)
+**進捗**: 約75% (Phase 0-3完了、Phase 4未実装)
 
 **✅ 完了機能:**
-- 音声アップロード（webm）
-- 自動文字起こし（Speechmatics）
-- 自動LLM分析（GPT-4o）
-- イベント駆動型完全自動化
-- ステータス管理（uploaded → transcribing → transcribed → analyzing → completed）
+- Phase 0: 音声アップロード・自動文字起こし（Speechmatics、話者分離）
+- Phase 1: 事実抽出（11カテゴリ、約5-7秒）
+- Phase 2: 事実整理（支援計画用に再分類、約6-7秒）
+- Phase 3: 個別支援計画生成（5領域の支援項目、約17秒）
+- イベント駆動型完全自動化（Lambda）
+- DRY原則に基づく統一実装パターン
 
-詳細は [NEXT_SESSION.md](./NEXT_SESSION.md) 参照
+**🚧 未実装:**
+- Phase 4: PDF生成（リタリコ様式）
+
+詳細は **[個別支援計画生成システム 技術仕様書](./docs/INDIVIDUAL_SUPPORT_PLAN_SPEC.md)** 参照
 
 ---
 
