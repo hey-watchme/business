@@ -398,11 +398,16 @@ def structure_facts_background(
         except Exception as e:
             raise ValueError(f"LLM generation failed: {str(e)}")
 
-        # 5. Parse JSON response
+        # 5. Parse JSON response (flexible handling, same as Phase 1)
         try:
-            fact_clusters_data = json.loads(llm_output)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse LLM JSON response: {str(e)}")
+            if llm_output.strip().startswith('{'):
+                fact_clusters_data = json.loads(llm_output)
+            else:
+                # If not JSON, wrap in summary structure
+                fact_clusters_data = {'summary': llm_output}
+        except json.JSONDecodeError:
+            # Fallback: treat as plain text
+            fact_clusters_data = {'summary': llm_output}
 
         # 6. Save result to DB
         supabase.table('business_interview_sessions').update({
