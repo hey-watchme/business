@@ -1,9 +1,9 @@
 # LLM分析機能 実装計画書
 
-**最終更新**: 2026-01-18
+**最終更新**: 2026-01-18 19:00 JST
 **対象プロジェクト**: WatchMe Business API
-**現在のフェーズ**: Phase 2 - fact_structuring 実装中 🚧
-**進捗**: 40% (Phase 0-1完了、Phase 2実装済み・テスト中)
+**現在のフェーズ**: Phase 2 - fact_structuring デバッグ中 🚧
+**進捗**: 45% (Phase 0-1完了、Phase 2コード統一完了・テスト待ち)
 
 ---
 
@@ -32,6 +32,167 @@ Phase 3: 解釈・評価・計画策定（assessment）
 **設計の核心**:
 - Phase 1-2: **事実のみ**（推論・解釈ゼロ）→ 自動化可能
 - Phase 3: **専門的判断**（解釈・評価・創造）→ Human in the Loop必須
+
+---
+
+## 🏛️ 設計の基本原則（Phase 1-3 統一パターン）
+
+**2026-01-18策定 - 全フェーズで厳守**
+
+### 1. バックグラウンド処理の統一構造
+
+すべてのフェーズは同じ処理パターンに従う：
+
+```python
+def {phase}_background(
+    session_id: str,
+    supabase: Client,
+    llm_service  # ← 統一パラメータ名（openai_clientではない）
+):
+    """
+    Phase X: {目的}
+
+    Args:
+        session_id: Session ID
+        supabase: Supabase client
+        llm_service: LLM service instance (抽象化レイヤー)
+    """
+    try:
+        # 1. DB.select() - 前フェーズの結果を取得
+        result = supabase.table('business_interview_sessions')\
+            .select('...')\
+            .eq('id', session_id)\
+            .single()\
+            .execute()
+
+        # 2. プロンプト生成
+        prompt = build_{phase}_prompt(...)
+
+        # 3. プロンプトをDBに保存
+        supabase.table('business_interview_sessions').update({
+            '{phase}_prompt_v1': prompt
+        }).eq('id', session_id).execute()
+
+        # 4. LLM呼び出し（統一インターフェース）
+        llm_output = llm_service.generate(prompt)
+
+        # 5. JSON parse（柔軟な対応）
+        if llm_output.strip().startswith('{'):
+            result_data = json.loads(llm_output)
+        else:
+            result_data = {'summary': llm_output}
+
+        # 6. DB.update() - 結果を保存
+        supabase.table('business_interview_sessions').update({
+            '{phase}_result_v1': result_data,
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', session_id).execute()
+
+    except Exception as e:
+        # エラー処理（DB更新含む）
+        ...
+```
+
+### 2. LLM呼び出しの統一ルール
+
+**絶対禁止**：
+```python
+# ❌ 直接OpenAI APIを呼び出す
+openai_client.chat.completions.create(...)
+```
+
+**必須パターン**：
+```python
+# ✅ 抽象化レイヤーを使用
+llm_output = llm_service.generate(prompt)
+```
+
+**理由**：
+- モデル切り替えが容易（GPT-4o → GPT-4o-mini → GPT-5 Nano）
+- プロバイダー切り替えが可能（OpenAI → Anthropic → Groq）
+- リトライ・エラーハンドリングが一元管理される
+
+### 3. エンドポイントの統一パターン
+
+```python
+@app.post("/api/{phase}")
+async def {phase}(
+    request: AnalyzeRequest,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # 1. トークン検証
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, ...)
+
+    # 2. 前提条件チェック（前フェーズの結果が存在するか）
+    result = supabase.table('business_interview_sessions')\
+        .select('{prev_phase}_result_v1')\
+        .eq('id', request.session_id)\
+        .single()\
+        .execute()
+
+    # データ構造の柔軟な対応（summary wrapper等）
+    has_valid_data = validate_{prev_phase}_result(result.data)
+
+    # 3. バックグラウンドスレッド起動
+    from services.background_tasks import {phase}_background
+    from services.llm_providers import get_current_llm
+
+    llm_service = get_current_llm()  # ← 統一インターフェース
+
+    thread = threading.Thread(
+        target={phase}_background,
+        args=(request.session_id, supabase, llm_service)
+    )
+    thread.daemon = True
+    thread.start()
+
+    # 4. 即座に202 Acceptedを返す
+    return Response(
+        status_code=202,
+        content='{"status": "processing", "message": "{Phase} started"}',
+        media_type="application/json"
+    )
+```
+
+### 4. モデル管理の統一方針
+
+**現在の設定**（`backend/services/llm_providers.py`）：
+```python
+CURRENT_PROVIDER = "openai"
+CURRENT_MODEL = "gpt-4o"
+```
+
+**モデル切り替え方法**：
+1. `llm_providers.py`の定数を変更
+2. デプロイ
+
+**将来的な拡張**：
+- 環境変数による動的切り替え（`LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o`）
+- フェーズごとに異なるモデルを使用（Phase 1はmini、Phase 3はo1-preview等）
+
+---
+
+## 🤖 使用LLMモデル一覧
+
+**2026-01-18時点**
+
+| フェーズ | エンドポイント | 関数名 | 使用モデル | プロバイダー |
+|---------|--------------|--------|-----------|------------|
+| **Phase 1** | POST /api/analyze | `analyze_background()` | **gpt-4o** | OpenAI |
+| **Phase 2** | POST /api/structure-facts | `structure_facts_background()` | **gpt-4o** | OpenAI |
+| Phase 3（未実装） | POST /api/assess | `assess_background()` | gpt-4o（予定） | OpenAI |
+| Phase 4（未実装） | POST /api/plan/generate | - | - | - |
+
+**モデル選定の方針**：
+- **Phase 1-2（事実処理）**: gpt-4o（精度・コスト・速度バランス）
+- **Phase 3（専門的判断）**: gpt-4o または o1-preview（複雑な推論が必要な場合）
+
+**コスト試算**（1セッションあたり）：
+- Phase 1: 約$0.10（入力15,000 tokens、出力2,000 tokens想定）
+- Phase 2: 約$0.03（入力2,500 tokens、出力1,500 tokens想定）
+- Phase 3: 約$0.05（入力2,000 tokens、出力3,000 tokens想定）
+- **合計**: 約$0.18/セッション
 
 ---
 
@@ -110,6 +271,8 @@ business_interview_sessions.transcription 保存
 
 **目的**: ヒアリング文字起こしから**事実のみを抽出**
 
+**使用モデル**: OpenAI gpt-4o（`backend/services/llm_providers.py`で設定）
+
 **データフロー**:
 ```
 POST /api/analyze
@@ -158,11 +321,13 @@ analyze_background() (threading)
 
 ---
 
-### 🚧 Phase 2: fact_structuring（2026-01-18実装中）
+### 🚧 Phase 2: fact_structuring（2026-01-18実装完了・デバッグ中）
 
 **目的**: extraction_v1（11カテゴリの生データ）を、**支援計画用に再分類**
 
 **重要**: Phase 2も**事実のみ**。解釈・評価は一切しない。
+
+**使用モデル**: OpenAI gpt-4o（`backend/services/llm_providers.py`で設定）
 
 **データフロー**:
 ```
@@ -266,7 +431,11 @@ structure_facts_background() (threading)
 - ✅ DBカラム追加完了
 - ✅ エンドポイント実装完了
 - ✅ プロンプト実装完了
-- 🚧 テスト中（データ構造の互換性調整済み）
+- ✅ Phase 1パターンへのコード統一完了（2026-01-18 19:00）
+  - `llm_service.generate()` 使用に統一
+  - パラメータ名を `openai_client` → `llm_service` に変更
+  - Phase 1と同じエラーハンドリング実装
+- 🚧 デプロイ完了・テスト待ち
 
 ---
 
