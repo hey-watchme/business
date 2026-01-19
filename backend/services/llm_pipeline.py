@@ -66,6 +66,11 @@ def execute_llm_phase(
         if not result.data:
             raise ValueError(f"Session not found: {session_id}")
 
+        # 1.5. Clear old error_message (if exists) before starting new phase
+        supabase.table('business_interview_sessions').update({
+            'error_message': None
+        }).eq('id', session_id).execute()
+
         # 2. Build prompt
         if additional_data:
             prompt = prompt_builder(result.data, **additional_data)
