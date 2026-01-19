@@ -588,7 +588,7 @@ const Phase3Display: React.FC<Props> = ({ data, sessionId }) => {
             onClick={async () => {
               try {
                 setDownloading(true);
-                const response = await fetch(`/api/sessions/${sessionId}/download-excel`, {
+                const response = await fetch(`https://api.hey-watch.me/business/api/sessions/${sessionId}/download-excel`, {
                   headers: {
                     'X-API-Token': 'watchme-b2b-poc-2025'
                   }
