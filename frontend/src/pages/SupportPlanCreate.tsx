@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import RecordingSetup from '../components/RecordingSetup';
 import RecordingSession from '../components/RecordingSession';
 import SupportPlanModal from '../components/SupportPlanModal';
+import Phase1Display from '../components/Phase1Display';
+import Phase2Display from '../components/Phase2Display';
+import Phase3Display from '../components/Phase3Display';
 import { api, type InterviewSession, type SupportPlan } from '../api/client';
 import './SupportPlanCreate.css';
 
@@ -722,131 +725,33 @@ const SupportPlanCreate: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Fact Extraction Result */}
+                      {/* Phase 1: Fact Extraction Result */}
                       {session.fact_extraction_result_v1 && (
                         <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 1: 事実抽出結果</h4>
-                          <div style={{
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-primary)',
-                            borderRadius: '6px',
-                            padding: '12px',
-                            fontSize: '12px',
-                            lineHeight: '1.6',
-                            color: 'var(--text-primary)',
-                            maxHeight: '200px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word'
-                          }}>
-                            {(() => {
-                              const result = session.fact_extraction_result_v1;
-                              if (typeof result === 'string') {
-                                return result;
-                              } else if (result && typeof result === 'object' && 'summary' in result) {
-                                return result.summary;
-                              } else if (result && typeof result === 'object') {
-                                return JSON.stringify(result, null, 2);
-                              }
-                              return '';
-                            })()}
-                          </div>
+                          <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
+                            Phase 1: 事実抽出結果
+                          </h4>
+                          <Phase1Display data={session.fact_extraction_result_v1 as any} />
                         </div>
                       )}
 
-                      {/* Fact Structuring Prompt */}
-                      {(session as any).fact_structuring_prompt_v1 && (
-                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 2: 事実整理プロンプト</h4>
-                          <div style={{
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-primary)',
-                            borderRadius: '6px',
-                            padding: '12px',
-                            fontSize: '12px',
-                            lineHeight: '1.6',
-                            color: 'var(--text-primary)',
-                            maxHeight: '150px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word'
-                          }}>
-                            {typeof (session as any).fact_structuring_prompt_v1 === 'object'
-                              ? JSON.stringify((session as any).fact_structuring_prompt_v1, null, 2)
-                              : (session as any).fact_structuring_prompt_v1}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Fact Structuring Result */}
+                      {/* Phase 2: Fact Structuring Result */}
                       {(session as any).fact_structuring_result_v1 && (
                         <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 2: 事実整理結果</h4>
-                          <div style={{
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-primary)',
-                            borderRadius: '6px',
-                            padding: '12px',
-                            fontSize: '12px',
-                            lineHeight: '1.6',
-                            color: 'var(--text-primary)',
-                            maxHeight: '200px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word'
-                          }}>
-                            {typeof (session as any).fact_structuring_result_v1 === 'string'
-                              ? (session as any).fact_structuring_result_v1
-                              : JSON.stringify((session as any).fact_structuring_result_v1, null, 2)}
-                          </div>
+                          <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
+                            Phase 2: 事実整理結果
+                          </h4>
+                          <Phase2Display data={(session as any).fact_structuring_result_v1} />
                         </div>
                       )}
 
-                      {/* Assessment Prompt */}
-                      {(session as any).assessment_prompt_v1 && (
-                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 3: 個別支援計画プロンプト</h4>
-                          <div style={{
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-primary)',
-                            borderRadius: '6px',
-                            padding: '12px',
-                            fontSize: '12px',
-                            lineHeight: '1.6',
-                            color: 'var(--text-primary)',
-                            maxHeight: '150px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word'
-                          }}>
-                            {typeof (session as any).assessment_prompt_v1 === 'object'
-                              ? JSON.stringify((session as any).assessment_prompt_v1, null, 2)
-                              : (session as any).assessment_prompt_v1}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Assessment Result */}
+                      {/* Phase 3: Assessment Result */}
                       {(session as any).assessment_result_v1 && (
                         <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 3: 個別支援計画結果</h4>
-                          <div style={{
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-primary)',
-                            borderRadius: '6px',
-                            padding: '12px',
-                            fontSize: '12px',
-                            lineHeight: '1.6',
-                            color: 'var(--text-primary)',
-                            maxHeight: '200px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word'
-                          }}>
-                            {typeof (session as any).assessment_result_v1 === 'string'
-                              ? (session as any).assessment_result_v1
-                              : JSON.stringify((session as any).assessment_result_v1, null, 2)}
-                          </div>
+                          <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
+                            Phase 3: 個別支援計画
+                          </h4>
+                          <Phase3Display data={(session as any).assessment_result_v1} />
                         </div>
                       )}
 
