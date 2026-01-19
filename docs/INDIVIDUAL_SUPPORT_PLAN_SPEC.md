@@ -1,9 +1,9 @@
 # 個別支援計画 自動生成システム 技術仕様書
 
-**最終更新**: 2026-01-18 23:30 JST
+**最終更新**: 2026-01-19 23:45 JST
 **対象プロジェクト**: WatchMe Business API
-**システム状態**: Phase 0-3 稼働中 ✅
-**実装完了度**: 75% (Phase 0-3完了、Phase 4未実装)
+**システム状態**: Phase 0-4 稼働中 ✅
+**実装完了度**: 95% (Phase 0-4完了、PDF生成未実装)
 
 ---
 
@@ -16,8 +16,9 @@
 5. [Phase 1: 事実抽出](#phase-1-事実抽出)
 6. [Phase 2: 事実整理](#phase-2-事実整理)
 7. [Phase 3: 個別支援計画生成](#phase-3-個別支援計画生成)
-8. [Phase 4: PDF生成（未実装）](#phase-4-pdf生成未実装)
-9. [共通実装パターン](#共通実装パターン)
+8. [Phase 4: Excel出力](#phase-4-excel出力)
+9. [UI実装（管理画面表示）](#ui実装管理画面表示)
+10. [共通実装パターン](#共通実装パターン)
 10. [LLMモデル管理](#llmモデル管理)
 11. [テスト方法](#テスト方法)
 
@@ -37,7 +38,8 @@
   → 事実抽出（LLM、11カテゴリ）
   → 事実整理（LLM、支援計画用に再分類）
   → 個別支援計画生成（LLM、5領域の支援項目）
-  → PDF生成（未実装）
+  → 管理画面表示（構造化UI）
+  → Excel出力（2シート）
 ```
 
 ### 処理時間
@@ -48,6 +50,7 @@
 | Phase 1 | 5-7秒 |
 | Phase 2 | 6-7秒 |
 | Phase 3 | 17秒 |
+| Phase 4 | <1秒（Excel生成） |
 | **合計** | **約5分30秒** |
 
 ### 設計思想
@@ -415,34 +418,114 @@ fact_clusters_v1から**個別支援計画書**を生成する。
 
 ---
 
-## Phase 4: PDF生成（未実装）
+## Phase 4: Excel出力
 
 ### 概要
 
-- **状態**: 📋 未実装
-- **予定実装日**: TBD
+- **実装日**: 2026-01-19
+- **状態**: ✅ 稼働中
+- **エンドポイント**: `GET /api/sessions/{session_id}/download-excel`
+- **使用ライブラリ**: openpyxl
+- **処理時間**: <1秒
 
 ### 責務
 
-assessment_v1から**リタリコ様式のPDF**を生成する。
+assessment_v1から**個別支援計画書のExcelファイル**を生成する（2シート構成）。
 
-### 想定実装
+### 出力ファイル構成
 
-```
-POST /api/plan/generate
-  ↓
-1. assessment_result_v1.assessment_v1 取得
-2. HTML生成（Jinja2テンプレート）
-3. PDF変換（weasyprint）
-4. S3アップロード
-5. plan_pdf_url 保存
-```
+#### Sheet 1: 別紙1-1（個別支援計画書）
+- タイトル：個別支援計画書
+- 利用児氏名・年齢（subjectsテーブルから取得）
+- 総合的な支援方針
+- 長期目標・短期目標
+- 支援項目（5領域）
+  - 運動・感覚
+  - 言語・コミュニケーション
+  - 健康・生活
+  - 認知・行動
+  - 人間関係・社会性
+- 家族支援
+- 移行支援・地域連携
 
-### 必要なDBカラム
+#### Sheet 2: 別紙1-2（個別支援計画書別表）
+- 週間スケジュール（月〜日・祝日）
+- 提供時間（利用開始・終了時間）
+- 延長支援時間
+  - 【支援前】延長支援時間
+  - 【支援後】延長支援時間
+- 延長を必要とする理由
+- 特記事項
 
-```sql
-plan_html      TEXT
-plan_pdf_url   TEXT
+### 実装ファイル
+
+- `backend/services/excel_generator.py`: Excel生成ロジック
+  - `generate_support_plan_excel()`: メイン関数
+  - `generate_main_support_plan()`: Sheet 1生成
+  - `generate_support_schedule()`: Sheet 2生成
+  - `extract_assessment_v1()`: データ抽出（ラップされたJSON対応）
+- `backend/app.py`: ダウンロードエンドポイント
+- `frontend/src/components/Phase3Display.tsx`: ダウンロードボタンUI
+
+### API仕様
+
+**エンドポイント**: `GET /api/sessions/{session_id}/download-excel`
+
+**レスポンス**:
+- Content-Type: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- ファイル名: `個別支援計画_{session_id}.xlsx`
+
+### データ取得優先順位
+
+1. **subjectsテーブル**（児童名・年齢）
+2. **assessment_v1.child_profile**（フォールバック）
+3. **デフォルト値**（〇〇 〇〇、5歳）
+
+---
+
+## UI実装（管理画面表示）
+
+### 概要
+
+- **実装日**: 2026-01-19
+- **状態**: ✅ 稼働中
+- **ページ**: 個別支援計画詳細画面（Session Detail Drawer）
+
+### 実装コンポーネント
+
+#### Phase1Display.tsx
+- 11カテゴリの事実抽出結果を構造化表示
+- 信頼度バッジ（high/medium/low）
+- 優先度表示
+
+#### Phase2Display.tsx
+- 11カテゴリの事実整理結果を構造化表示
+- 児童プロフィール
+- カラーコード（強み=緑、課題=黄色）
+- 本人・保護者の意向（話者別）
+
+#### Phase3Display.tsx
+- 個別支援計画の全セクション表示
+- 支援方針（子どもの理解・見立て、主要アプローチ、連携事項）
+- 長期目標・短期目標
+- 支援項目（5領域）
+- 家族支援
+- 移行支援・地域連携
+- **Excelダウンロードボタン**
+
+### データ抽出処理
+
+各コンポーネントで`{"summary": "```json\n{...}\n```"}`形式のラップされたJSONに対応：
+
+```typescript
+// Handle wrapped JSON format
+if (!extraction && (data as any).summary) {
+  const jsonMatch = summaryText.match(/```json\s*\n([\s\S]*?)\n```/);
+  if (jsonMatch) {
+    const parsed = JSON.parse(jsonMatch[1]);
+    extraction = parsed.extraction_v1;
+  }
+}
 ```
 
 ---
