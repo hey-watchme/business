@@ -13,7 +13,7 @@ from openpyxl.utils import get_column_letter
 
 def generate_support_plan_excel(session_data: dict) -> BytesIO:
     """
-    Generate Individual Support Plan Excel file
+    Generate Individual Support Plan Excel file (2 sheets)
 
     Args:
         session_data: Dict containing assessment_result_v1 and child profile
@@ -22,14 +22,34 @@ def generate_support_plan_excel(session_data: dict) -> BytesIO:
         BytesIO: Excel file binary data
     """
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Individual Support Plan"
+
+    # Sheet 1: Main Support Plan
+    ws1 = wb.active
+    ws1.title = "別紙1-1（個別支援計画書）"
 
     # Extract data
     assessment_v1 = extract_assessment_v1(session_data.get('assessment_result_v1', {}))
 
     if not assessment_v1:
         raise ValueError("assessment_v1 data not found")
+
+    # === Sheet 1: Main Support Plan ===
+    generate_main_support_plan(ws1, assessment_v1)
+
+    # === Sheet 2: Support Schedule (Appendix) ===
+    ws2 = wb.create_sheet(title="別紙1-2（個別支援計画書別表）")
+    generate_support_schedule(ws2, assessment_v1)
+
+    # Save to BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return output
+
+
+def generate_main_support_plan(ws, assessment_v1: dict):
+    """Generate main support plan sheet"""
 
     # Set column widths
     ws.column_dimensions['A'].width = 15
@@ -318,12 +338,151 @@ def generate_support_plan_excel(session_data: dict) -> BytesIO:
     ws[f'D{current_row}'] = f'{datetime.now().strftime("%Y年%m月%d日")}　（保護者署名）'
     ws[f'D{current_row}'].font = small_font
 
-    # Save to BytesIO
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
 
-    return output
+def generate_support_schedule(ws, assessment_v1: dict):
+    """Generate support schedule sheet (appendix)"""
+
+    # Set column widths
+    ws.column_dimensions['A'].width = 20
+    ws.column_dimensions['B'].width = 18
+    ws.column_dimensions['C'].width = 18
+    ws.column_dimensions['D'].width = 18
+    ws.column_dimensions['E'].width = 18
+    ws.column_dimensions['F'].width = 18
+    ws.column_dimensions['G'].width = 18
+    ws.column_dimensions['H'].width = 18
+
+    # Styles
+    header_font = Font(name='Meiryo UI', size=14, bold=True)
+    normal_font = Font(name='Meiryo UI', size=10)
+    small_font = Font(name='Meiryo UI', size=9)
+
+    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left_align = Alignment(horizontal='left', vertical='top', wrap_text=True)
+
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    header_fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+
+    current_row = 1
+
+    # Title
+    ws.merge_cells(f'A{current_row}:H{current_row}')
+    cell = ws[f'A{current_row}']
+    cell.value = '個別支援計画別表'
+    cell.font = header_font
+    cell.alignment = center_align
+    current_row += 2
+
+    # Child name and date
+    child_profile = assessment_v1.get('child_profile', {})
+    child_name = child_profile.get('name', '〇〇 〇〇')
+
+    ws.merge_cells(f'A{current_row}:E{current_row}')
+    ws[f'A{current_row}'] = f'利用児氏名：{child_name}'
+    ws[f'A{current_row}'].font = normal_font
+    ws[f'A{current_row}'].fill = header_fill
+    ws[f'A{current_row}'].border = thin_border
+
+    ws.merge_cells(f'F{current_row}:H{current_row}')
+    ws[f'F{current_row}'] = f'作成日：{datetime.now().strftime("%Y年%m月%d日")}'
+    ws[f'F{current_row}'].font = normal_font
+    ws[f'F{current_row}'].alignment = Alignment(horizontal='right', vertical='center')
+    current_row += 2
+
+    # Table headers
+    days = ['月', '火', '水', '木', '金', '土', '日・祝日']
+    ws[f'A{current_row}'] = ''
+    ws[f'A{current_row}'].fill = header_fill
+    ws[f'A{current_row}'].border = thin_border
+
+    for col_idx, day in enumerate(days, start=2):
+        cell = ws.cell(row=current_row, column=col_idx)
+        cell.value = day
+        cell.font = Font(name='Meiryo UI', size=10, bold=True)
+        cell.alignment = center_align
+        cell.fill = header_fill
+        cell.border = thin_border
+
+    current_row += 1
+
+    # Rows (dummy data)
+    row_labels = [
+        ('提供時間', [
+            '利用開始・終了時間',
+            '',
+        ]),
+        ('延長支援時間\n※延長支援時間は、\n支援前・支援後\nそれぞれ1時間以上から', [
+            '【支援前】延長支援時間',
+            '【支援後】延長支援時間',
+            '',
+        ]),
+    ]
+
+    for label, sub_labels in row_labels:
+        start_row = current_row
+        for sub_label in sub_labels:
+            ws[f'A{current_row}'] = label if current_row == start_row else ''
+            ws[f'A{current_row}'].font = small_font
+            ws[f'A{current_row}'].alignment = left_align
+            ws[f'A{current_row}'].fill = header_fill
+            ws[f'A{current_row}'].border = thin_border
+
+            # Dummy data for each day
+            for col_idx in range(2, 9):
+                cell = ws.cell(row=current_row, column=col_idx)
+                if sub_label == '利用開始・終了時間':
+                    cell.value = '10時00分～15時00分\n5時00分' if col_idx in [2, 4, 6] else '～\n0:00'
+                elif '【支援前】' in sub_label:
+                    cell.value = '9時00分～10時00分' if col_idx in [2, 4, 6] else '～'
+                elif '【支援後】' in sub_label:
+                    cell.value = '15時00分～16時00分\n2時00分' if col_idx in [2, 4, 6] else '～'
+                else:
+                    cell.value = ''
+
+                cell.font = small_font
+                cell.alignment = center_align
+                cell.border = thin_border
+
+            ws.row_dimensions[current_row].height = 30
+            current_row += 1
+
+        if start_row < current_row - 1:
+            ws.merge_cells(f'A{start_row}:A{current_row - 1}')
+
+    # Extended support reason
+    ws.merge_cells(f'A{current_row}:H{current_row}')
+    ws[f'A{current_row}'] = '延長を必要とする理由'
+    ws[f'A{current_row}'].font = Font(name='Meiryo UI', size=10, bold=True)
+    ws[f'A{current_row}'].fill = header_fill
+    ws[f'A{current_row}'].border = thin_border
+    current_row += 1
+
+    ws.merge_cells(f'A{current_row}:H{current_row + 1}')
+    ws[f'A{current_row}'] = '例①）月・水・金については、保護者の就労を理由に支援前・支援後それぞれ1時間ずつの延長支援を行う。\n例②）保護者の職場の繁忙期（3月）については、月・水・金の支援後の延長支援時間が2時間になる日も生じることが想定されるため、保護者と連携を図りながら必要に応じて延長支援を行う。'
+    ws[f'A{current_row}'].font = small_font
+    ws[f'A{current_row}'].alignment = left_align
+    ws[f'A{current_row}'].border = thin_border
+    ws.row_dimensions[current_row].height = 50
+    current_row += 2
+
+    # Special notes
+    ws.merge_cells(f'A{current_row}:H{current_row}')
+    ws[f'A{current_row}'] = '特記事項'
+    ws[f'A{current_row}'].font = Font(name='Meiryo UI', size=10, bold=True)
+    ws[f'A{current_row}'].fill = header_fill
+    ws[f'A{current_row}'].border = thin_border
+    current_row += 1
+
+    ws.merge_cells(f'A{current_row}:H{current_row}')
+    ws[f'A{current_row}'] = ''
+    ws[f'A{current_row}'].border = thin_border
+    ws.row_dimensions[current_row].height = 40
 
 
 def extract_assessment_v1(assessment_result: dict) -> dict:
