@@ -966,6 +966,68 @@ async def get_subject(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch child: {str(e)}")
 
+@app.get("/api/sessions/{session_id}/download-excel")
+async def download_support_plan_excel(
+    session_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Download Individual Support Plan as Excel file
+
+    Args:
+        session_id: Session ID
+        x_api_token: API token
+
+    Returns:
+        Excel file (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
+    """
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Get session data
+        result = supabase.table('business_interview_sessions')\
+            .select('*')\
+            .eq('id', session_id)\
+            .single()\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session_data = result.data
+
+        # Check if assessment_result_v1 exists
+        if not session_data.get('assessment_result_v1'):
+            raise HTTPException(
+                status_code=400,
+                detail="Assessment result not found. Please run /api/assess first."
+            )
+
+        # Generate Excel
+        from services.excel_generator import generate_support_plan_excel
+
+        excel_bytes = generate_support_plan_excel(session_data)
+
+        # Return Excel file
+        return Response(
+            content=excel_bytes.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename=individual_support_plan_{session_id[:8]}.xlsx"
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating Excel: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate Excel: {str(e)}")
+
 # ==================== USERS API ====================
 
 @app.get("/api/users")

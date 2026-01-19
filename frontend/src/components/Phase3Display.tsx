@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface Phase3Data {
   assessment_v1?: {
@@ -47,9 +47,12 @@ interface Phase3Data {
 
 interface Props {
   data: Phase3Data;
+  sessionId?: string;
 }
 
-const Phase3Display: React.FC<Props> = ({ data }) => {
+const Phase3Display: React.FC<Props> = ({ data, sessionId }) => {
+  const [downloading, setDownloading] = useState(false);
+
   if (!data) return null;
 
   let assessment = data.assessment_v1;
@@ -553,6 +556,97 @@ const Phase3Display: React.FC<Props> = ({ data }) => {
               <strong>備考:</strong> {assessment.transition_support.notes}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Excel Download Button */}
+      {sessionId && (
+        <div style={{
+          marginTop: '32px',
+          padding: '20px',
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(147, 51, 234, 0.05) 100%)',
+          border: '2px dashed var(--accent-primary)',
+          borderRadius: '12px',
+          textAlign: 'center'
+        }}>
+          <h5 style={{
+            fontSize: '14px',
+            fontWeight: '600',
+            margin: '0 0 12px 0',
+            color: 'var(--text-primary)'
+          }}>
+            個別支援計画書ダウンロード
+          </h5>
+          <p style={{
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            margin: '0 0 16px 0'
+          }}>
+            リタリコ様式のExcelファイルとしてダウンロードできます
+          </p>
+          <button
+            onClick={async () => {
+              try {
+                setDownloading(true);
+                const response = await fetch(`/api/sessions/${sessionId}/download-excel`, {
+                  headers: {
+                    'X-API-Token': 'watchme-b2b-poc-2025'
+                  }
+                });
+
+                if (!response.ok) {
+                  const error = await response.json();
+                  throw new Error(error.detail || 'Failed to download Excel');
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `個別支援計画_${sessionId.slice(0, 8)}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+              } catch (error) {
+                console.error('Download error:', error);
+                alert(`ダウンロードに失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
+              } finally {
+                setDownloading(false);
+              }
+            }}
+            disabled={downloading}
+            style={{
+              background: downloading ? 'var(--text-muted)' : 'var(--accent-primary)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '12px 32px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: downloading ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              opacity: downloading ? 0.6 : 1
+            }}
+            onMouseOver={(e) => {
+              if (!downloading) {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+              }
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 12L6 8h2.5V4h3v4H14l-4 4zm-6 4h12v2H4v-2z"/>
+            </svg>
+            {downloading ? 'ダウンロード中...' : 'Excelダウンロード'}
+          </button>
         </div>
       )}
     </div>

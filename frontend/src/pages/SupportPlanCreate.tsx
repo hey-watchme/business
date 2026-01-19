@@ -751,7 +751,7 @@ const SupportPlanCreate: React.FC = () => {
                           <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
                             Phase 3: 個別支援計画
                           </h4>
-                          <Phase3Display data={(session as any).assessment_result_v1} />
+                          <Phase3Display data={(session as any).assessment_result_v1} sessionId={session.id} />
                         </div>
                       )}
 
