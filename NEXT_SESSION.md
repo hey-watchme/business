@@ -1,235 +1,382 @@
-# 次セッションへの引き継ぎ
+# 次のセッションへの引き継ぎ事項
 
-最終更新: 2026-01-17
+**最終更新**: 2026-01-18 23:45 JST
+**現在の状態**: Phase 0-3 完全稼働、管理画面実装待ち
 
 ---
 
-## 🚨 **緊急：Reactエラーで画面が真っ黒になる問題**
+## ✅ 現在の完成状況
 
-### 問題の詳細
+### Phase 0-3 完全実装完了
 
-**現象**:
-- 個別支援計画の詳細画面（ドロワー）を開くと画面が真っ黒になる
-- コンソールエラー: `Minified React error #31`
-  - URL: https://react.dev/errors/31?args[]=object%20with%20keys%20%7Bsummary%7D
-  - エラー内容: **Reactは子要素としてオブジェクトをレンダリングできない**
+| Phase | 状態 | 処理時間 | エンドポイント |
+|-------|------|---------|--------------|
+| Phase 0 | ✅ 稼働中 | 約4.5分 | Lambda自動実行 |
+| Phase 1 | ✅ 稼働中 | 5-7秒 | POST /api/analyze |
+| Phase 2 | ✅ 稼働中 | 6-7秒 | POST /api/structure-facts |
+| Phase 3 | ✅ 稼働中 | 17秒 | POST /api/assess |
 
-**エラーメッセージ**:
+**テスト結果**: すべて成功（session_id: `a522ab30-77ca-4599-81b8-48bc8deca835`）
+
+### データベース構造
+
+**business_interview_sessions テーブル**に以下のカラムが存在：
+
 ```
-Uncaught Error: Minified React error #31
-at In (index-3YdcdCBZ.js:8:37794)
-```
+-- Phase 0
+transcription                TEXT
+transcription_metadata       JSONB
 
-### 原因の推測
+-- Phase 1
+fact_extraction_prompt_v1    TEXT
+fact_extraction_result_v1    JSONB (extraction_v1)
 
-`SupportPlanCreate.tsx` のセッション詳細表示で、**JSONオブジェクトを直接レンダリング**している可能性が高い。
+-- Phase 2
+fact_structuring_prompt_v1   TEXT
+fact_structuring_result_v1   JSONB (fact_clusters_v1)
 
-**問題のあるコード例**:
-```tsx
-{session.transcription_metadata}  // ← オブジェクトをそのまま表示しようとしている
-{session.analysis_result}          // ← これもオブジェクトの可能性
-```
-
-### 修正方法
-
-1. **JSONオブジェクトは `JSON.stringify()` で文字列化**してから表示
-2. **型チェック**を追加して、オブジェクトか文字列か判定
-3. **条件レンダリング**で存在しないプロパティを除外
-
-**修正箇所**: `/Users/kaya.matsumoto/projects/watchme/business/frontend/src/pages/SupportPlanCreate.tsx:626-730`
-
-**修正例**:
-```tsx
-// ❌ 間違い
-{session.analysis_result}
-
-// ✅ 正しい
-{typeof session.analysis_result === 'object'
-  ? JSON.stringify(session.analysis_result, null, 2)
-  : session.analysis_result}
+-- Phase 3
+assessment_prompt_v1         TEXT
+assessment_result_v1         JSONB (assessment_v1)
 ```
 
 ---
 
-## ✅ 今回のセッションで完了した作業
+## 🎯 次のタスク: 管理画面に全プロセスを表示
 
-### 1. 無限ループの修正 ✅
-- **問題**: `useEffect([selectedPlan])` で無限ループ
-- **修正**: `useEffect([selectedPlan?.id])` に変更
-- **ファイル**: `SupportPlanCreate.tsx:28`
-- **コミット**: `d9a9141`
+### 目的
 
-### 2. セッション詳細の完全表示 ✅
-- セッション情報（ID、作成日時、音声ファイル）
-- 文字起こし結果（maxHeight: 200px、スクロール可能）
-- 文字起こしメタデータ（JSON表示）
-- 分析プロンプト
-- 分析結果
-- エラーメッセージ
-- **コミット**: `c028c1a`
+個別支援計画の詳細画面に、**3つのパイプライン（Phase 1-3）の結果とプロセスをすべて表示**する。
 
-### 3. ドロワーヘッダーのリデザイン ✅
-- タイトル（DBの`title`を表示）
-- ID（グレー、monospace）
-- 作成日時（カレンダーアイコン付き）
-- ステータスバッジ
-- 支援対象児童カード（アバター、名前、年齢・性別）
-- **コミット**: `063dc7f`
+### 要件
 
-### 4. マイクストリームのクリーンアップ ✅
-- **問題**: 録音終了後もブラウザタブに赤丸、macOSにマイクアイコンが残る
-- **修正**: `mediaRecorder.onstop`でアップロード前にストリームを停止
-- **ファイル**: `RecordingSession.tsx:59-69`
-- **コミット**: `92c73fd`
+1. **すべてのデータを一旦表示**
+   - Phase 1の結果（extraction_v1）
+   - Phase 2の結果（fact_clusters_v1）
+   - Phase 3の結果（assessment_v1）
+   - **各フェーズのプロンプトも表示**（`*_prompt_v1`カラム）
 
-### 5. JSONパースエラーの修正 ⚠️ **未完了**
-- `transcription_metadata`が文字列・オブジェクト両対応に修正
-- **しかし別のJSONオブジェクトでエラーが発生中**
-- **コミット**: `92c73fd`
+2. **段階的な整理**
+   - まずは全データを表示して、どう見えるか確認
+   - その後、不要な部分は非表示・下階層化
+   - 最終的に見やすい形に調整
 
----
+3. **アプローチ**
+   - 完成形を目指さず、途中経過として全部出す
+   - 実際に見てから判断する
 
-## 🔴 次セッションで最優先で修正すべき問題
+### 実装の方針
 
-### 1. Reactエラーの修正（最優先）
+#### フロントエンド（React）
 
-**タスク**:
-1. `SupportPlanCreate.tsx:626-730` を確認
-2. 全てのセッションプロパティで型チェックを追加
-   - `session.transcription` → 文字列、問題なし
-   - `session.transcription_metadata` → **修正済み**
-   - `session.analysis_prompt` → 確認必要
-   - `session.analysis_result` → **これが原因の可能性大**
-   - `session.error_message` → 確認必要
+**ファイル**: `frontend/src/pages/SessionDetail.tsx` （想定）
 
-**修正テンプレート**:
-```tsx
-{session.PROPERTY && (
-  <div>
-    {typeof session.PROPERTY === 'object'
-      ? <pre>{JSON.stringify(session.PROPERTY, null, 2)}</pre>
-      : <div>{session.PROPERTY}</div>
+**表示内容**:
+```
+📄 Session Detail
+
+基本情報
+- セッションID
+- 対象児童
+- 録音日時
+- ステータス
+
+Phase 0: 文字起こし
+- transcription（折りたたみ可）
+- 文字数
+
+Phase 1: 事実抽出（extraction_v1）
+├─ プロンプト表示（折りたたみ可）
+└─ 結果
+   ├─ basic_info
+   ├─ strengths
+   ├─ challenges
+   └─ ... (全11カテゴリ)
+
+Phase 2: 事実整理（fact_clusters_v1）
+├─ プロンプト表示（折りたたみ可）
+└─ 結果
+   ├─ child_profile
+   ├─ strengths_facts
+   ├─ challenges_facts
+   └─ ... (全11カテゴリ)
+
+Phase 3: 個別支援計画（assessment_v1）
+├─ プロンプト表示（折りたたみ可）
+└─ 結果
+   ├─ support_policy
+   ├─ long_term_goal
+   ├─ short_term_goals
+   ├─ support_items（5領域）
+   ├─ family_support
+   └─ transition_support
+```
+
+#### バックエンド（API）
+
+**必要なエンドポイント**:
+
+```
+GET /api/sessions/{session_id}/full-detail
+```
+
+**レスポンス例**:
+```json
+{
+  "session": {
+    "id": "...",
+    "subject_id": "...",
+    "recorded_at": "...",
+    "status": "completed"
+  },
+  "phase0": {
+    "transcription": "...",
+    "metadata": {...}
+  },
+  "phase1": {
+    "prompt": "...",
+    "result": {
+      "extraction_v1": {...}
     }
-  </div>
-)}
+  },
+  "phase2": {
+    "prompt": "...",
+    "result": {
+      "fact_clusters_v1": {...}
+    }
+  },
+  "phase3": {
+    "prompt": "...",
+    "result": {
+      "assessment_v1": {...}
+    }
+  }
+}
 ```
 
-### 2. デプロイの再実行
+### 実装の優先順位
 
-- GitHub Actions が Docker Hub タイムアウトで失敗
-- 修正後に再デプロイ
+1. **バックエンドAPI実装**（30分）
+   - GET /api/sessions/{session_id}/full-detail エンドポイント追加
+   - すべてのカラムを返す
+   - プロンプトも含める
 
----
+2. **フロントエンド実装**（2-3時間）
+   - SessionDetail ページ作成
+   - Accordion/Collapse コンポーネントで折りたたみ表示
+   - JSON Viewer コンポーネント（react-json-view等）
+   - プロンプト表示（code block）
 
-## 📋 完了したコミット履歴（本セッション）
-
-1. `d9a9141`: fix: prevent infinite loop in useEffect
-2. `c028c1a`: feat: display full session details
-3. `063dc7f`: feat: redesign support plan drawer header
-4. `92c73fd`: fix: handle transcription_metadata as both string and object
-
----
-
-## 🎯 今後の開発タスク
-
-### Phase 1: UI/UX改善（次セッション）
-
-1. **Reactエラー修正**（最優先）
-2. 個別支援計画の編集機能
-3. 支援対象児童の選択・追加機能
-4. セッションと支援計画の紐付け
-
-### Phase 2: Backend API拡張
-
-1. Subjects API（GET, POST, PUT）
-2. Users API（GET, POST, PUT）
-3. Subject Relations API
-
-### Phase 3: 認証・権限
-
-1. Supabase Auth統合
-2. RLSポリシー設定
-3. ログイン・サインアップ画面
+3. **確認・調整**（1時間）
+   - 実際に見て判断
+   - 不要な部分を非表示化
+   - UIの微調整
 
 ---
 
-## 📚 重要なファイルパス
+## 📁 関連ファイル
 
-### Frontend
-- **メイン画面**: `/Users/kaya.matsumoto/projects/watchme/business/frontend/src/pages/SupportPlanCreate.tsx`
-- **API Client**: `/Users/kaya.matsumoto/projects/watchme/business/frontend/src/api/client.ts`
-- **録音コンポーネント**: `/Users/kaya.matsumoto/projects/watchme/business/frontend/src/components/RecordingSession.tsx`
+### ドキュメント
 
-### Backend
-- **API実装**: `/Users/kaya.matsumoto/projects/watchme/business/backend/app.py`
-- **環境変数**: `/Users/kaya.matsumoto/projects/watchme/business/backend/.env`
+- **技術仕様書**: `/Users/kaya.matsumoto/projects/watchme/business/docs/INDIVIDUAL_SUPPORT_PLAN_SPEC.md`
+- **README**: `/Users/kaya.matsumoto/projects/watchme/business/README.md`
 
-### CI/CD
-- **GitHub Actions**: `/Users/kaya.matsumoto/projects/watchme/business/.github/workflows/deploy-to-ecr.yml`
-- **Docker Compose**: `/Users/kaya.matsumoto/projects/watchme/business/docker-compose.prod.yml`
+### バックエンド
 
----
+- **API**: `backend/app.py`
+- **バックグラウンド処理**: `backend/services/background_tasks.py`
+- **プロンプト**: `backend/services/prompts.py`
+- **共通処理**: `backend/services/llm_pipeline.py`
 
-## ⚠️ 重要な注意事項
+### フロントエンド
 
-### 1. ローカル環境について
+- **Pages**: `frontend/src/pages/` （SessionDetail.tsx を追加予定）
+- **API Client**: `frontend/src/lib/api.ts` （API呼び出し定義）
 
-**README.md:166-172に明記**:
-- ローカルでのテストは不可（CORSエラー）
-- テスト・動作確認は本番環境（EC2）で実施
-- Frontend: https://business.hey-watch.me
-- Backend: https://api.hey-watch.me/business
+### データベース
 
-### 2. データベース構造
-
-**テーブル**:
-- `business_support_plans`: 個別支援計画
-- `business_interview_sessions`: ヒアリングセッション
-- `subjects`: 支援対象児童（B2C/B2B共通）
-- `users`: ユーザー（B2C/B2B共通）
-
-**重要**: `auth.users`への直接参照は絶対禁止。必ず`public.users(user_id)`を使用。
-
-### 3. 環境変数追加時のルール
-
-必ず3箇所を更新：
-1. GitHub Secrets
-2. `.github/workflows/deploy-to-ecr.yml` (env: + echo)
-3. `docker-compose.prod.yml` (environment:)
+- **テーブル**: `business_interview_sessions`
+- **テストデータ session_id**: `a522ab30-77ca-4599-81b8-48bc8deca835`
 
 ---
 
-## 💡 今回のセッションで学んだこと
+## 💡 実装のヒント
 
-1. **READMEを最初に読む重要性**
-   - ローカル環境の制約がREADMEに明記されていた
-   - AIはドキュメントの冒頭しか読まないため、重要情報は最初に書く
+### 1. バックエンドAPI実装例
 
-2. **Reactエラー #31**
-   - 子要素としてオブジェクトを直接レンダリングできない
-   - 必ず型チェック + `JSON.stringify()` で対応
+```python
+@app.get("/api/sessions/{session_id}/full-detail")
+async def get_session_full_detail(
+    session_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Get full session details including all phases
+    """
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
 
-3. **マイクストリームのクリーンアップ**
-   - `mediaRecorder.stop()` だけでは不十分
-   - `stream.getTracks().forEach(track => track.stop())` が必須
+    result = supabase.table('business_interview_sessions')\
+        .select('*')\
+        .eq('id', session_id)\
+        .single()\
+        .execute()
 
-4. **GitHub Actions の一時的エラー**
-   - Docker Hub タイムアウトは再実行で解決
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session = result.data
+
+    return {
+        "session": {
+            "id": session.get('id'),
+            "subject_id": session.get('subject_id'),
+            "recorded_at": session.get('recorded_at'),
+            "status": session.get('status'),
+            "duration_seconds": session.get('duration_seconds')
+        },
+        "phase0": {
+            "transcription": session.get('transcription'),
+            "metadata": session.get('transcription_metadata')
+        },
+        "phase1": {
+            "prompt": session.get('fact_extraction_prompt_v1'),
+            "result": session.get('fact_extraction_result_v1')
+        },
+        "phase2": {
+            "prompt": session.get('fact_structuring_prompt_v1'),
+            "result": session.get('fact_structuring_result_v1')
+        },
+        "phase3": {
+            "prompt": session.get('assessment_prompt_v1'),
+            "result": session.get('assessment_result_v1')
+        }
+    }
+```
+
+### 2. フロントエンド実装例
+
+```tsx
+// frontend/src/pages/SessionDetail.tsx
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import ReactJson from 'react-json-view';
+
+export default function SessionDetail() {
+  const { sessionId } = useParams();
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    fetch(`/api/sessions/${sessionId}/full-detail`, {
+      headers: { 'X-API-Token': 'watchme-b2b-poc-2025' }
+    })
+      .then(res => res.json())
+      .then(setData);
+  }, [sessionId]);
+
+  if (!data) return <div>Loading...</div>;
+
+  return (
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-bold">Session Detail</h1>
+
+      {/* Phase 0 */}
+      <details className="border p-4 rounded">
+        <summary className="font-bold cursor-pointer">
+          Phase 0: 文字起こし
+        </summary>
+        <pre className="mt-4 whitespace-pre-wrap">
+          {data.phase0.transcription}
+        </pre>
+      </details>
+
+      {/* Phase 1 */}
+      <details className="border p-4 rounded">
+        <summary className="font-bold cursor-pointer">
+          Phase 1: 事実抽出
+        </summary>
+        <details className="mt-4">
+          <summary>プロンプト表示</summary>
+          <pre className="mt-2 text-xs bg-gray-100 p-2">
+            {data.phase1.prompt}
+          </pre>
+        </details>
+        <ReactJson
+          src={data.phase1.result}
+          collapsed={1}
+          displayDataTypes={false}
+        />
+      </details>
+
+      {/* Phase 2, Phase 3 も同様の構造 */}
+    </div>
+  );
+}
+```
+
+### 3. 必要なnpmパッケージ
+
+```bash
+npm install react-json-view
+```
 
 ---
 
-## 🔗 関連リンク
+## ⚠️ 注意事項
 
-- GitHub Repo: https://github.com/hey-watchme/business
-- Frontend (prod): https://business.hey-watch.me
-- Backend (prod): https://api.hey-watch.me/business
-- Supabase Dashboard: https://app.supabase.com
+1. **プロンプトは長文**
+   - Phase 3のプロンプトは特に長い（数千文字）
+   - デフォルトで折りたたみ表示必須
+
+2. **JSONデータの表示**
+   - `react-json-view` 等のライブラリを使用
+   - 折りたたみ・展開機能必須
+
+3. **パフォーマンス**
+   - 初回は全データ取得で問題なし
+   - 将来的にはページング・遅延読み込みを検討
+
+4. **デザイン**
+   - 完成度は気にしない
+   - まずは全部見えることが重要
 
 ---
 
-## 📞 次セッション開始時のアクション
+## 🚀 次のステップ（管理画面実装後）
 
-1. **Reactエラーを修正**（`SupportPlanCreate.tsx:626-730`）
-2. **git push してデプロイ**
-3. **本番環境で動作確認**（https://business.hey-watch.me）
-4. **問題なければ次のタスクへ**
+1. **Phase 4: PDF生成**
+   - assessment_v1 → リタリコ様式PDF
+   - HTML生成（Jinja2）
+   - PDF変換（weasyprint）
+
+2. **Human in the Loop UI**
+   - 各フェーズの結果を編集可能に
+   - 承認フロー
+
+3. **完全自動化**
+   - S3アップロード → Phase 3まで自動実行
+
+---
+
+## 📊 現在の進捗
+
+**全体進捗**: 75%
+
+- ✅ Phase 0-3 実装・テスト完了
+- ✅ 技術仕様書完成
+- 🔜 管理画面実装（次タスク）
+- 📋 Phase 4 PDF生成（未着手）
+
+---
+
+## 📝 重要なメモ
+
+- **DRY原則**: Phase 1-3は統一パターン（各約30行）
+- **共通処理**: `llm_pipeline.py` の `execute_llm_phase()`
+- **LLMモデル**: すべて OpenAI gpt-4o
+- **コスト**: 約$0.18/セッション
+- **処理時間**: Phase 0-3で約5分30秒
+
+---
+
+**次のセッション開始時**: まずバックエンドAPIエンドポイント追加から着手してください。

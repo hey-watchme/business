@@ -724,8 +724,8 @@ const SupportPlanCreate: React.FC = () => {
 
                       {/* Fact Extraction Result */}
                       {session.fact_extraction_result_v1 && (
-                        <div style={{ marginBottom: '12px' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>事実抽出結果</h4>
+                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 1: 事実抽出結果</h4>
                           <div style={{
                             background: 'var(--bg-secondary)',
                             border: '1px solid var(--border-primary)',
@@ -750,6 +750,102 @@ const SupportPlanCreate: React.FC = () => {
                               }
                               return '';
                             })()}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Fact Structuring Prompt */}
+                      {(session as any).fact_structuring_prompt_v1 && (
+                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 2: 事実整理プロンプト</h4>
+                          <div style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '12px',
+                            lineHeight: '1.6',
+                            color: 'var(--text-primary)',
+                            maxHeight: '150px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                          }}>
+                            {typeof (session as any).fact_structuring_prompt_v1 === 'object'
+                              ? JSON.stringify((session as any).fact_structuring_prompt_v1, null, 2)
+                              : (session as any).fact_structuring_prompt_v1}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Fact Structuring Result */}
+                      {(session as any).fact_structuring_result_v1 && (
+                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 2: 事実整理結果</h4>
+                          <div style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '12px',
+                            lineHeight: '1.6',
+                            color: 'var(--text-primary)',
+                            maxHeight: '200px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                          }}>
+                            {typeof (session as any).fact_structuring_result_v1 === 'string'
+                              ? (session as any).fact_structuring_result_v1
+                              : JSON.stringify((session as any).fact_structuring_result_v1, null, 2)}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Assessment Prompt */}
+                      {(session as any).assessment_prompt_v1 && (
+                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 3: 個別支援計画プロンプト</h4>
+                          <div style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '12px',
+                            lineHeight: '1.6',
+                            color: 'var(--text-primary)',
+                            maxHeight: '150px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                          }}>
+                            {typeof (session as any).assessment_prompt_v1 === 'object'
+                              ? JSON.stringify((session as any).assessment_prompt_v1, null, 2)
+                              : (session as any).assessment_prompt_v1}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Assessment Result */}
+                      {(session as any).assessment_result_v1 && (
+                        <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>Phase 3: 個別支援計画結果</h4>
+                          <div style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            fontSize: '12px',
+                            lineHeight: '1.6',
+                            color: 'var(--text-primary)',
+                            maxHeight: '200px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                          }}>
+                            {typeof (session as any).assessment_result_v1 === 'string'
+                              ? (session as any).assessment_result_v1
+                              : JSON.stringify((session as any).assessment_result_v1, null, 2)}
                           </div>
                         </div>
                       )}
