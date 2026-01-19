@@ -52,7 +52,22 @@ interface Props {
 const Phase3Display: React.FC<Props> = ({ data }) => {
   if (!data) return null;
 
-  const assessment = data.assessment_v1;
+  let assessment = data.assessment_v1;
+
+  // Handle wrapped JSON format: {"summary": "```json\n{...}\n```"}
+  if (!assessment && (data as any).summary) {
+    try {
+      const summaryText = (data as any).summary;
+      // Extract JSON from markdown code block
+      const jsonMatch = summaryText.match(/```json\s*\n([\s\S]*?)\n```/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[1]);
+        assessment = parsed.assessment_v1;
+      }
+    } catch (e) {
+      console.error('Failed to parse wrapped JSON:', e);
+    }
+  }
 
   if (!assessment) {
     return (
