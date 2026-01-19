@@ -38,7 +38,7 @@ def generate_support_plan_excel(session_data: dict) -> BytesIO:
 
     # === Sheet 2: Support Schedule (Appendix) ===
     ws2 = wb.create_sheet(title="別紙1-2（個別支援計画書別表）")
-    generate_support_schedule(ws2, assessment_v1)
+    generate_support_schedule(ws2, assessment_v1, session_data)
 
     # Save to BytesIO
     output = BytesIO()
@@ -81,15 +81,22 @@ def generate_main_support_plan(ws, assessment_v1: dict):
     # Title
     ws.merge_cells(f'A{current_row}:F{current_row}')
     cell = ws[f'A{current_row}']
-    cell.value = '個別支援計画書（参考記載例）'
+    cell.value = '個別支援計画書'
     cell.font = header_font
     cell.alignment = center_align
     current_row += 1
 
-    # Child name and date
-    child_profile = assessment_v1.get('child_profile', {})
-    child_name = child_profile.get('name', '〇〇 〇〇')
-    child_age = child_profile.get('age', '5')
+    # Child name and date - prioritize subjects table data
+    child_name = session_data.get('subject_name', '〇〇 〇〇')
+    child_age = session_data.get('subject_age', 5)
+
+    # Fallback to assessment_v1 child_profile if subjects data not available
+    if child_name == '〇〇 〇〇':
+        child_profile = assessment_v1.get('child_profile', {})
+        if child_profile.get('name'):
+            child_name = child_profile.get('name')
+        if child_profile.get('age'):
+            child_age = child_profile.get('age')
 
     ws.merge_cells(f'A{current_row}:D{current_row}')
     ws[f'A{current_row}'] = f'利用児氏名：{child_name}（{child_age}歳）'
@@ -339,7 +346,7 @@ def generate_main_support_plan(ws, assessment_v1: dict):
     ws[f'D{current_row}'].font = small_font
 
 
-def generate_support_schedule(ws, assessment_v1: dict):
+def generate_support_schedule(ws, assessment_v1: dict, session_data: dict = None):
     """Generate support schedule sheet (appendix)"""
 
     # Set column widths
@@ -379,9 +386,15 @@ def generate_support_schedule(ws, assessment_v1: dict):
     cell.alignment = center_align
     current_row += 2
 
-    # Child name and date
-    child_profile = assessment_v1.get('child_profile', {})
-    child_name = child_profile.get('name', '〇〇 〇〇')
+    # Child name and date - prioritize subjects table data
+    child_name = '〇〇 〇〇'
+    if session_data:
+        child_name = session_data.get('subject_name', child_name)
+
+    # Fallback to assessment_v1 child_profile
+    if child_name == '〇〇 〇〇':
+        child_profile = assessment_v1.get('child_profile', {})
+        child_name = child_profile.get('name', child_name)
 
     ws.merge_cells(f'A{current_row}:E{current_row}')
     ws[f'A{current_row}'] = f'利用児氏名：{child_name}'

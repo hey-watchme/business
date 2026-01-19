@@ -582,7 +582,7 @@ const Phase3Display: React.FC<Props> = ({ data, sessionId }) => {
             color: 'var(--text-secondary)',
             margin: '0 0 16px 0'
           }}>
-            リタリコ様式のExcelファイルとしてダウンロードできます
+            Excel形式でダウンロードできます
           </p>
           <button
             onClick={async () => {

@@ -1008,6 +1008,24 @@ async def download_support_plan_excel(
                 detail="Assessment result not found. Please run /api/assess first."
             )
 
+        # Get subject (child) information
+        subject_id = session_data.get('subject_id')
+        if subject_id:
+            try:
+                subject_result = supabase.table('subjects')\
+                    .select('subject_id, name, age')\
+                    .eq('subject_id', subject_id)\
+                    .single()\
+                    .execute()
+
+                if subject_result.data:
+                    # Add subject info to session_data
+                    session_data['subject_name'] = subject_result.data.get('name')
+                    session_data['subject_age'] = subject_result.data.get('age')
+            except Exception as e:
+                print(f"Failed to fetch subject info: {str(e)}")
+                # Continue without subject info
+
         # Generate Excel
         from services.excel_generator import generate_support_plan_excel
 
