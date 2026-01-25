@@ -34,7 +34,7 @@ def generate_support_plan_excel(session_data: dict) -> BytesIO:
         raise ValueError("assessment_v1 data not found")
 
     # === Sheet 1: Main Support Plan ===
-    generate_main_support_plan(ws1, assessment_v1)
+    generate_main_support_plan(ws1, assessment_v1, session_data)
 
     # === Sheet 2: Support Schedule (Appendix) ===
     ws2 = wb.create_sheet(title="別紙1-2（個別支援計画書別表）")
@@ -48,7 +48,7 @@ def generate_support_plan_excel(session_data: dict) -> BytesIO:
     return output
 
 
-def generate_main_support_plan(ws, assessment_v1: dict):
+def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = None):
     """Generate main support plan sheet"""
 
     # Set column widths
