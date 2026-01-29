@@ -77,6 +77,10 @@ export interface Subject {
   prefecture?: string | null;
   city?: string | null;
   cognitive_type?: string | null;
+  birth_date?: string | null;
+  diagnosis?: string[] | null;
+  school_name?: string | null;
+  school_type?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -5,11 +5,12 @@ import './SupportPlanModal.css';
 interface SupportPlanModalProps {
   onClose: () => void;
   onCreated: () => void;
+  subjectId: string;
 }
 
-const SupportPlanModal: React.FC<SupportPlanModalProps> = ({ onClose, onCreated }) => {
+const SupportPlanModal: React.FC<SupportPlanModalProps> = ({ onClose, onCreated, subjectId }) => {
   const [formData, setFormData] = useState<SupportPlanCreate>({
-    subject_id: '00000000-0000-0000-0000-000000000002',
+    subject_id: subjectId,
     title: '',
     plan_number: '',
     status: 'draft',

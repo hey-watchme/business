@@ -1,15 +1,24 @@
 import React from 'react';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import { type Subject } from '../api/client';
 import './Layout.css';
 
 interface LayoutProps {
   children: React.ReactNode;
   selectedMenuId?: string;
   onMenuSelect?: (menuId: string) => void;
+  selectedSubjectId?: string;
+  onSubjectSelect?: (subject: Subject) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, selectedMenuId, onMenuSelect }) => {
+const Layout: React.FC<LayoutProps> = ({
+  children,
+  selectedMenuId,
+  onMenuSelect,
+  selectedSubjectId,
+  onSubjectSelect
+}) => {
   return (
     <div className="layout">
       <Header
@@ -19,7 +28,12 @@ const Layout: React.FC<LayoutProps> = ({ children, selectedMenuId, onMenuSelect 
         userRole="管理者"
       />
       <div className="layout-body">
-        <Sidebar selectedMenuId={selectedMenuId} onMenuSelect={onMenuSelect} />
+        <Sidebar
+          selectedMenuId={selectedMenuId}
+          onMenuSelect={onMenuSelect}
+          selectedSubjectId={selectedSubjectId}
+          onSubjectSelect={onSubjectSelect}
+        />
         <main className="main-content">
           {children}
         </main>
