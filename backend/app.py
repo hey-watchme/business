@@ -119,6 +119,35 @@ class SupportPlanUpdate(BaseModel):
     plan_number: Optional[str] = None
     status: Optional[str] = None
     subject_id: Optional[str] = None
+    # Header information
+    facility_name: Optional[str] = None
+    manager_name: Optional[str] = None
+    monitoring_start: Optional[str] = None  # DATE as string
+    monitoring_end: Optional[str] = None
+    # Child information
+    child_birth_date: Optional[str] = None
+    guardian_name: Optional[str] = None
+    # Intentions
+    child_intention: Optional[str] = None
+    family_intention: Optional[str] = None
+    # Service schedule
+    service_schedule: Optional[str] = None
+    # Notes
+    notes: Optional[str] = None
+    # General policy
+    general_policy: Optional[str] = None
+    # Goals
+    long_term_goal: Optional[str] = None
+    long_term_period: Optional[str] = None
+    short_term_goal: Optional[str] = None
+    short_term_period: Optional[str] = None
+    # Support items (7-column table data)
+    support_items: Optional[list] = None
+    # Consent information
+    explainer_name: Optional[str] = None
+    consent_date: Optional[str] = None
+    guardian_signature: Optional[str] = None
+
 
 class SupportPlanResponse(BaseModel):
     id: str
@@ -671,7 +700,11 @@ async def get_support_plans(
 
     try:
         # Build query
-        query = supabase.table('business_support_plans').select('*')
+        query = supabase.table('business_support_plans').select('*, subjects!inner(name, age, birth_date)')
+
+
+
+
 
         if facility_id:
             query = query.eq('facility_id', facility_id)
@@ -727,10 +760,14 @@ async def get_support_plan(
     try:
         # Get support plan with subject info
         plan_result = supabase.table('business_support_plans')\
-            .select('*, subjects(subject_id, name, age, gender, avatar_url)')\
+            .select('*, subjects!inner(name, age, birth_date)')\
             .eq('id', plan_id)\
             .single()\
             .execute()
+
+
+
+
 
         if not plan_result.data:
             raise HTTPException(status_code=404, detail="Support plan not found")
@@ -767,8 +804,10 @@ async def update_support_plan(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        # Build update data
+        # Build update data from all possible fields
         update_data = {}
+        
+        # Basic fields
         if plan.title is not None:
             update_data['title'] = plan.title
         if plan.plan_number is not None:
@@ -777,6 +816,62 @@ async def update_support_plan(
             update_data['status'] = plan.status
         if plan.subject_id is not None:
             update_data['subject_id'] = plan.subject_id
+        
+        # Header information
+        if plan.facility_name is not None:
+            update_data['facility_name'] = plan.facility_name
+        if plan.manager_name is not None:
+            update_data['manager_name'] = plan.manager_name
+        if plan.monitoring_start is not None:
+            update_data['monitoring_start'] = plan.monitoring_start
+        if plan.monitoring_end is not None:
+            update_data['monitoring_end'] = plan.monitoring_end
+        
+        # Child information
+        if plan.child_birth_date is not None:
+            update_data['child_birth_date'] = plan.child_birth_date
+        if plan.guardian_name is not None:
+            update_data['guardian_name'] = plan.guardian_name
+        
+        # Intentions
+        if plan.child_intention is not None:
+            update_data['child_intention'] = plan.child_intention
+        if plan.family_intention is not None:
+            update_data['family_intention'] = plan.family_intention
+        
+        # Service schedule
+        if plan.service_schedule is not None:
+            update_data['service_schedule'] = plan.service_schedule
+        
+        # Notes
+        if plan.notes is not None:
+            update_data['notes'] = plan.notes
+        
+        # General policy
+        if plan.general_policy is not None:
+            update_data['general_policy'] = plan.general_policy
+        
+        # Goals
+        if plan.long_term_goal is not None:
+            update_data['long_term_goal'] = plan.long_term_goal
+        if plan.long_term_period is not None:
+            update_data['long_term_period'] = plan.long_term_period
+        if plan.short_term_goal is not None:
+            update_data['short_term_goal'] = plan.short_term_goal
+        if plan.short_term_period is not None:
+            update_data['short_term_period'] = plan.short_term_period
+        
+        # Support items (JSONB)
+        if plan.support_items is not None:
+            update_data['support_items'] = plan.support_items
+        
+        # Consent information
+        if plan.explainer_name is not None:
+            update_data['explainer_name'] = plan.explainer_name
+        if plan.consent_date is not None:
+            update_data['consent_date'] = plan.consent_date
+        if plan.guardian_signature is not None:
+            update_data['guardian_signature'] = plan.guardian_signature
 
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
@@ -796,6 +891,7 @@ async def update_support_plan(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update support plan: {str(e)}")
+
 
 @app.delete("/api/support-plans/{plan_id}")
 async def delete_support_plan(
@@ -854,7 +950,8 @@ async def get_subjects(
         # Query subjects using business_facility_subjects for filtering if facility_id is provided
         if facility_id:
             # We use business_facility_subjects!inner to only return subjects linked to this facility
-            query = supabase.table('subjects').select('*, business_facility_subjects!inner(facility_id)')
+            query = supabase.table('subjects').select('subject_id, name, age, gender, avatar_url, notes, prefecture, city, cognitive_type, birth_date, diagnosis, school_name, school_type, created_at, updated_at, business_facility_subjects!inner(facility_id)')
+
             query = query.eq('business_facility_subjects.facility_id', facility_id)
         else:
             # If no facility_id is provided, we return an empty list for safety
@@ -869,23 +966,23 @@ async def get_subjects(
             }
 
         result = query.order('name', desc=False).limit(limit).execute()
+        
+        if result.data and len(result.data) > 0:
+            print(f"DEBUG: Raw first subject from DB: {result.data[0]}")
+
+        subjects = []
 
         subjects = []
         for subject in result.data:
-            subjects.append({
-                "id": subject.get('subject_id'),
-                "facility_id": None,  # Not in subjects table (use subject_relations)
-                "name": subject.get('name'),
-                "age": subject.get('age'),
-                "gender": subject.get('gender'),
-                "avatar_url": subject.get('avatar_url'),
-                "notes": subject.get('notes'),
-                "prefecture": subject.get('prefecture'),
-                "city": subject.get('city'),
-                "cognitive_type": subject.get('cognitive_type'),
-                "created_at": subject.get('created_at'),
-                "updated_at": subject.get('updated_at')
-            })
+            # Create a copy and map subject_id to id for the frontend
+            s_data = subject.copy()
+            s_data['id'] = s_data.get('subject_id')
+            # Remove the join internal data
+            if 'business_facility_subjects' in s_data:
+                del s_data['business_facility_subjects']
+            subjects.append(s_data)
+
+
 
         # Calculate analytics from actual data
         total_count = len(subjects)

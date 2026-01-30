@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { api, type Subject } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useSubjects } from '../contexts/SubjectContext';
+import { calculateAge } from '../utils/date';
 import './ChildrenList.css';
 
 const ChildrenList: React.FC = () => {
@@ -41,6 +42,8 @@ const ChildrenList: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // Removed local implementation of calculateAge as it is imported from utils
+
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile?.facility_id) return;
@@ -55,6 +58,7 @@ const ChildrenList: React.FC = () => {
         facility_id: profile.facility_id,
         name: formData.name,
         age: formData.age ? parseInt(formData.age) : undefined,
+        birth_date: formData.birth_date || undefined,
         gender: formData.gender,
         notes: formData.notes
       });
@@ -70,7 +74,8 @@ const ChildrenList: React.FC = () => {
     }
   };
 
-  const getAgeLabel = (age: number | null | undefined): string => {
+  const getAgeLabel = (subject: Subject): string => {
+    const age = calculateAge(subject.birth_date) ?? subject.age;
     if (age === null || age === undefined) return '年齢不明';
     return `${age}歳`;
   };
@@ -86,6 +91,7 @@ const ChildrenList: React.FC = () => {
       default: return '性別不明';
     }
   };
+
 
   const getCognitiveTypeLabel = (type: string | null | undefined): string => {
     const labels: Record<string, string> = {
@@ -241,7 +247,7 @@ const ChildrenList: React.FC = () => {
                 <div className="subject-info">
                   <h3 className="subject-name">{subject.name}</h3>
                   <div className="subject-meta">
-                    <span className="subject-age">{getAgeLabel(subject.age)}</span>
+                    <span className="subject-age">{getAgeLabel(subject)}</span>
                     <span className="subject-gender">{getGenderLabel(subject.gender)}</span>
                   </div>
                   {subject.cognitive_type && (
@@ -293,9 +299,21 @@ const ChildrenList: React.FC = () => {
                     />
                   </div>
 
+                  <div className="form-group">
+                    <label htmlFor="birth_date">生年月日</label>
+                    <input
+                      type="date"
+                      id="birth_date"
+                      name="birth_date"
+                      className="form-input"
+                      value={formData.birth_date}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="age">年齢</label>
+                      <label htmlFor="age">年齢 (生年月日が不明な場合)</label>
                       <input
                         type="number"
                         id="age"
@@ -323,6 +341,7 @@ const ChildrenList: React.FC = () => {
                       </select>
                     </div>
                   </div>
+
 
                   <div className="form-group">
                     <label htmlFor="notes">備考・特性メモ</label>
@@ -390,7 +409,7 @@ const ChildrenList: React.FC = () => {
                 <div className="detail-info">
                   <div className="detail-row">
                     <span className="detail-label">年齢</span>
-                    <span className="detail-value">{getAgeLabel(selectedSubject.age)}</span>
+                    <span className="detail-value">{getAgeLabel(selectedSubject)}</span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-label">性別</span>

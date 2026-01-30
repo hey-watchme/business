@@ -6,6 +6,7 @@ import StaffList from './pages/StaffList';
 import Login from './pages/Login';
 import { useAuth } from './contexts/AuthContext';
 import { type Subject } from './api/client';
+import { calculateAge } from './utils/date';
 import './App.css';
 
 // Move StatCards outside to improve HMR and prevent re-definition
@@ -226,29 +227,73 @@ function App() {
                   letterSpacing: '0.5px'
                 }}>支援対象</span>
               </div>
-              <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '15px' }}>
-                {selectedSubject.age}歳 • {
-                  selectedSubject.gender === 'male' || selectedSubject.gender === '男性' ? '男の子' :
-                    selectedSubject.gender === 'female' || selectedSubject.gender === '女性' ? '女の子' :
-                      'その他'
-                } • {
-                  selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0
-                    ? selectedSubject.diagnosis.join(' / ')
-                    : selectedSubject.cognitive_type || '特性情報未設定'
-                }
-              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '12px' }}>
+                <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>
+                  {calculateAge(selectedSubject.birth_date) || selectedSubject.age}歳 • {selectedSubject.gender || '性別未設定'}{
+                    selectedSubject.birth_date && ` • 生年月日: ${selectedSubject.birth_date}`
+                  }
+                </p>
+
+                {selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0 && (
+                  <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>診断・特性:</span> {selectedSubject.diagnosis.join(' / ')}
+                  </p>
+                )}
+
+                {(selectedSubject.school_name || selectedSubject.school_type) && (
+                  <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>所属:</span> {selectedSubject.school_name}{selectedSubject.school_type && ` (${selectedSubject.school_type === 'kindergarten' ? '幼稚園' :
+                        selectedSubject.school_type === 'nursery' ? '保育園' :
+                          selectedSubject.school_type === 'elementary' ? '小学校' :
+                            selectedSubject.school_type === 'middle' ? '中学校' :
+                              selectedSubject.school_type === 'high' ? '高校' :
+                                selectedSubject.school_type === 'special' ? '特別支援' :
+                                  selectedSubject.school_type
+                      })`}
+                  </p>
+                )}
+
+                {(selectedSubject.prefecture || selectedSubject.city) && (
+                  <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>お住まい:</span> {selectedSubject.prefecture}{selectedSubject.city}
+                  </p>
+                )}
+
+                {(() => {
+                  try {
+                    const g = typeof selectedSubject.guardians === 'string'
+                      ? JSON.parse(selectedSubject.guardians)
+                      : selectedSubject.guardians;
+                    if (!g) return null;
+                    const labels = [];
+                    if (g.father?.name) labels.push(`父: ${g.father.name}`);
+                    if (g.mother?.name) labels.push(`母: ${g.mother.name}`);
+                    if (labels.length === 0) return null;
+                    return (
+                      <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>保護者:</span> {labels.join(' / ')}
+                      </p>
+                    );
+                  } catch (e) { return null; }
+                })()}
+              </div>
+
               {selectedSubject.notes && (
                 <p style={{
                   color: 'var(--text-muted)',
                   margin: '12px 0 0',
                   fontSize: '13px',
                   lineHeight: '1.6',
-                  maxWidth: '600px',
-                  whiteSpace: 'pre-wrap'
+                  maxWidth: '850px',
+                  whiteSpace: 'pre-wrap',
+                  padding: '8px 12px',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: '8px'
                 }}>
                   {selectedSubject.notes}
                 </p>
               )}
+
             </div>
           </div>
 

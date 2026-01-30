@@ -1,0 +1,147 @@
+.editable-input,
+.editable-textarea {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #1a1a1a;
+    background: #ffffff;
+    border: 1px solid var(--accent-primary);
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.editable-input:focus,
+.editable-textarea:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.2);
+}
+
+.editable-input::placeholder,
+.editable-textarea::placeholder {
+    color: #999999;
+}
+
+.editable-textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.editable-display {
+    display: block;
+    min-height: 20px;
+}
+
+.editable-display .placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Edit button icon */
+.edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: all 0.2s ease;
+}
+
+.doc-cell:hover .edit-btn,
+.editable-cell-wrapper:hover .edit-btn {
+    opacity: 1;
+}
+
+.edit-btn:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+}
+
+/* Editable cell wrapper */
+.editable-cell-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+}
+
+.editable-cell-wrapper .editable-content {
+    flex: 1;
+}
+
+/* Editing mode indicator */
+.editing-mode-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(124, 77, 255, 0.15), rgba(98, 0, 234, 0.1));
+    border: 1px solid var(--accent-primary);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.editing-mode-banner .edit-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent-primary);
+}
+
+.editing-mode-banner .edit-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.editing-mode-banner .save-btn {
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.editing-mode-banner .save-btn:hover {
+    background: var(--accent-secondary);
+}
+
+.editing-mode-banner .cancel-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.editing-mode-banner .cancel-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
+}
+
+/* Highlight editable cells in edit mode */
+.edit-mode .doc-cell.value {
+    position: relative;
+    transition: background-color 0.2s ease;
+}
+
+.edit-mode .doc-cell.value:hover {
+    background: rgba(124, 77, 255, 0.05);
+}

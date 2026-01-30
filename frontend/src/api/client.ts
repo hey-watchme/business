@@ -43,7 +43,39 @@ export interface SupportPlan {
     age?: number | null;
     gender?: string | null;
     avatar_url?: string | null;
+    birth_date?: string | null;
   } | null;
+
+  // Editable fields
+  facility_name?: string | null;
+  manager_name?: string | null;
+  monitoring_start?: string | null;
+  monitoring_end?: string | null;
+  child_birth_date?: string | null;
+  guardian_name?: string | null;
+  child_intention?: string | null;
+  family_intention?: string | null;
+  service_schedule?: string | null;
+  notes?: string | null;
+  general_policy?: string | null;
+  long_term_goal?: string | null;
+  long_term_period?: string | null;
+  short_term_goal?: string | null;
+  short_term_period?: string | null;
+  support_items?: SupportItem[] | null;
+  explainer_name?: string | null;
+  consent_date?: string | null;
+  guardian_signature?: string | null;
+}
+
+export interface SupportItem {
+  category: string;
+  target: string;
+  content: string;
+  timeline: string;
+  staff: string;
+  notes: string;
+  priority: number;
 }
 
 export interface SupportPlanCreate {
@@ -58,12 +90,41 @@ export interface SupportPlanUpdate {
   plan_number?: string | null;
   status?: 'draft' | 'active' | 'completed' | 'archived';
   subject_id?: string | null;
+  // Header information
+  facility_name?: string | null;
+  manager_name?: string | null;
+  monitoring_start?: string | null;
+  monitoring_end?: string | null;
+  // Child information
+  child_birth_date?: string | null;
+  guardian_name?: string | null;
+  // Intentions
+  child_intention?: string | null;
+  family_intention?: string | null;
+  // Service schedule
+  service_schedule?: string | null;
+  // Notes
+  notes?: string | null;
+  // General policy
+  general_policy?: string | null;
+  // Goals
+  long_term_goal?: string | null;
+  long_term_period?: string | null;
+  short_term_goal?: string | null;
+  short_term_period?: string | null;
+  // Support items (7-column table data)
+  support_items?: SupportItem[] | null;
+  // Consent information
+  explainer_name?: string | null;
+  consent_date?: string | null;
+  guardian_signature?: string | null;
 }
 
 export interface SupportPlansResponse {
   support_plans: SupportPlan[];
   count: number;
 }
+
 
 // Subject interfaces
 export interface Subject {
@@ -81,6 +142,8 @@ export interface Subject {
   diagnosis?: string[] | null;
   school_name?: string | null;
   school_type?: string | null;
+  guardians?: any | null;
+
   created_at: string;
   updated_at: string;
 }
@@ -205,11 +268,12 @@ export const api = {
   getSubject: (subjectId: string) =>
     apiRequest<SubjectDetailResponse>(`/api/subjects/${subjectId}`),
 
-  createSubject: (data: { facility_id: string; name: string; age?: number; gender?: string; notes?: string }) =>
+  createSubject: (data: { facility_id: string; name: string; age?: number; gender?: string; notes?: string; birth_date?: string }) =>
     apiRequest<Subject>(`/api/subjects`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
 
   linkSubject: (subjectId: string, facilityId: string) =>
     apiRequest<{ success: boolean; message: string }>(`/api/subjects/${subjectId}/link`, {

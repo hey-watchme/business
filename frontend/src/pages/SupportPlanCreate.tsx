@@ -5,8 +5,13 @@ import SupportPlanModal from '../components/SupportPlanModal';
 import Phase1Display from '../components/Phase1Display';
 import Phase2Display from '../components/Phase2Display';
 import Phase3Display from '../components/Phase3Display';
-import { api, type InterviewSession, type SupportPlan } from '../api/client';
+import EditableCell from '../components/EditableCell';
+import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate } from '../api/client';
+
+import { calculateAge, formatDate } from '../utils/date';
 import './SupportPlanCreate.css';
+import '../components/EditableCell.css';
+
 
 type RecordingMode = 'none' | 'setup' | 'recording';
 
@@ -24,6 +29,12 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Editing mode state
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<SupportPlanUpdate | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
 
   useEffect(() => {
     fetchSupportPlans();
@@ -119,16 +130,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('ja-JP', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // Removed local implementations of formatDate and calculateAge as they are imported from utils
+
 
   const formatDuration = (seconds: number | null | undefined) => {
     if (!seconds) return '-';
@@ -160,6 +163,73 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const handleRecordingCancel = () => {
     setRecordingMode('none');
   };
+
+  // Start editing a plan
+  const startEditing = (plan: SupportPlan) => {
+    setEditingPlanId(plan.id);
+    setEditData({
+      facility_name: plan.facility_name || 'ヨリドコロ横浜白楽',
+      manager_name: plan.manager_name || '児童発達支援管理責任者 山田太郎',
+      monitoring_start: plan.monitoring_start || '',
+      monitoring_end: plan.monitoring_end || '',
+      child_birth_date: plan.child_birth_date || '',
+      guardian_name: plan.guardian_name || '',
+      child_intention: plan.child_intention || '自立性を高め、集団での活動に楽しく参加できるようになりたい。',
+      family_intention: plan.family_intention || 'お友達とのコミュニケーションが円滑になり、自分の気持ちを言葉で伝えられるようになってほしい。',
+      service_schedule: plan.service_schedule || '',
+      notes: plan.notes || '',
+      general_policy: plan.general_policy || '',
+      long_term_goal: plan.long_term_goal || '',
+      long_term_period: plan.long_term_period || '1年',
+      short_term_goal: plan.short_term_goal || '',
+      short_term_period: plan.short_term_period || '6ヶ月',
+      support_items: plan.support_items || [],
+      explainer_name: plan.explainer_name || '',
+      consent_date: plan.consent_date || '',
+      guardian_signature: plan.guardian_signature || '',
+    });
+  };
+
+  // Update a single field
+  const updateField = (field: string, value: string) => {
+    if (editData) {
+      setEditData({ ...editData, [field]: value });
+    }
+  };
+
+  // Save changes
+  const saveChanges = async (planId: string) => {
+    if (!editData) return;
+
+    setIsSaving(true);
+    try {
+      await api.updateSupportPlan(planId, editData);
+      // Refresh the plans list
+      await fetchSupportPlans();
+      setEditingPlanId(null);
+      setEditData(null);
+    } catch (err) {
+      console.error('Failed to save changes:', err);
+      alert('保存に失敗しました。');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setEditingPlanId(null);
+    setEditData(null);
+  };
+
+  // Get display value (from editData if editing, otherwise from plan)
+  const getDisplayValue = (plan: SupportPlan, field: keyof SupportPlanUpdate, defaultValue: string = ''): string => {
+    if (editingPlanId === plan.id && editData) {
+      return (editData[field] as string) || defaultValue;
+    }
+    return (plan[field as keyof SupportPlan] as string) || defaultValue;
+  };
+
 
   const handleDownloadExcel = async (plan: SupportPlan) => {
     try {
@@ -307,8 +377,47 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             </div>
 
             {/* Official Document Header Section */}
-            <div className="official-document-header">
-              <h2 className="doc-main-title">個別支援計画書</h2>
+            <div className={`official-document-header ${editingPlanId === plan.id ? 'edit-mode' : ''}`}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 className="doc-main-title" style={{ margin: 0 }}>個別支援計画書</h2>
+                {editingPlanId === plan.id ? (
+                  <div className="editing-mode-banner" style={{ background: 'transparent', border: 'none', margin: 0, padding: 0 }}>
+                    <div className="edit-actions">
+                      <button
+                        className="cancel-btn"
+                        onClick={cancelEditing}
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        className="save-btn"
+                        onClick={() => saveChanges(plan.id)}
+                        disabled={isSaving}
+                      >
+                        {isSaving ? '保存中...' : '保存する'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    className="action-button"
+                    onClick={() => startEditing(plan)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'rgba(124, 77, 255, 0.1)',
+                      color: 'var(--accent-primary)',
+                      borderColor: 'rgba(124, 77, 255, 0.2)'
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                    </svg>
+                    編集
+                  </button>
+                )}
+              </div>
 
               {/* Main Info Table */}
               <div className="doc-info-table">
@@ -316,19 +425,39 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">事業所名</div>
-                      <div className="doc-cell value">ヨリドコロ横浜白楽</div>
+                      <div className="doc-cell value">
+                        <EditableCell
+                          value={getDisplayValue(plan, 'facility_name', 'ヨリドコロ横浜白楽')}
+                          field="facility_name"
+                          onChange={updateField}
+                          isEditing={editingPlanId === plan.id}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half">
                       <div className="doc-cell label">生年月日</div>
-                      <div className="doc-cell value">--- ({plan.subjects?.age ? `${plan.subjects.age}歳` : '---歳'})</div>
+                      <div className="doc-cell value">
+                        {plan.subjects?.birth_date || '---'} ({calculateAge(plan.subjects?.birth_date) || plan.subjects?.age || '---'}歳)
+                      </div>
                     </div>
+
+
+
+
                   </div>
                 </div>
                 <div className="doc-row">
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">計画作成者</div>
-                      <div className="doc-cell value">児童発達支援管理責任者 山田太郎</div>
+                      <div className="doc-cell value">
+                        <EditableCell
+                          value={getDisplayValue(plan, 'manager_name', '児童発達支援管理責任者 山田太郎')}
+                          field="manager_name"
+                          onChange={updateField}
+                          isEditing={editingPlanId === plan.id}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half">
                       <div className="doc-cell label">計画作成日</div>
@@ -344,7 +473,21 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </div>
                     <div className="doc-half">
                       <div className="doc-cell label">モニタリング期間</div>
-                      <div className="doc-cell value">2025年11月20日 〜 2026年3月31日</div>
+                      <div className="doc-cell value">
+                        <EditableCell
+                          value={getDisplayValue(plan, 'monitoring_start', '2025-11-20')}
+                          field="monitoring_start"
+                          onChange={updateField}
+                          isEditing={editingPlanId === plan.id}
+                          placeholder="開始日"
+                        /> 〜 <EditableCell
+                          value={getDisplayValue(plan, 'monitoring_end', '2026-03-31')}
+                          field="monitoring_end"
+                          onChange={updateField}
+                          isEditing={editingPlanId === plan.id}
+                          placeholder="終了日"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -354,11 +497,27 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     <div className="nested-info-table">
                       <div className="nested-info-row">
                         <div className="nested-label">ご本人</div>
-                        <div className="nested-value">自立性を高め、集団での活動に楽しく参加できるようになりたい。</div>
+                        <div className="nested-value">
+                          <EditableCell
+                            value={getDisplayValue(plan, 'child_intention', '自立性を高め、集団での活動に楽しく参加できるようになりたい。')}
+                            field="child_intention"
+                            onChange={updateField}
+                            isEditing={editingPlanId === plan.id}
+                            multiline={true}
+                          />
+                        </div>
                       </div>
                       <div className="nested-info-row">
                         <div className="nested-label">ご家族</div>
-                        <div className="nested-value">お友達とのコミュニケーションが円滑になり、自分の気持ちを言葉で伝えられるようになってほしい。</div>
+                        <div className="nested-value">
+                          <EditableCell
+                            value={getDisplayValue(plan, 'family_intention', 'お友達とのコミュニケーションが円滑になり、自分の気持ちを言葉で伝えられるようになってほしい。')}
+                            field="family_intention"
+                            onChange={updateField}
+                            isEditing={editingPlanId === plan.id}
+                            multiline={true}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -370,12 +529,14 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <div className="doc-row">
                   <div className="doc-cell label large">支援の標準的な提供時間等(曜日・頻度・時間)</div>
                   <div className="doc-cell value">
-                    <ul className="doc-list">
-                      <li>週一回(火曜日)</li>
-                      <li>サービス提供時間は原則。13時55分から17時の計3時間5分とする。</li>
-                      <li>欠席の振り替え、保護者の希望等があれば、契約用日以外に利用することがある</li>
-                      <li>上記以外の曜日にて利用する場合においても、サービス提供時間は原則13時55分から17時の計3時間5分とする。</li>
-                    </ul>
+                    <EditableCell
+                      value={getDisplayValue(plan, 'service_schedule', '週一回(火曜日)\nサービス提供時間は原則。13時55分から17時の計3時間5分とする。')}
+                      field="service_schedule"
+                      onChange={updateField}
+                      isEditing={editingPlanId === plan.id}
+                      multiline={true}
+                      placeholder="曜日・頻度・時間を入力..."
+                    />
                   </div>
                 </div>
               </div>
@@ -385,11 +546,14 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <div className="doc-row">
                   <div className="doc-cell label large">留意点・備考</div>
                   <div className="doc-cell value">
-                    <ul className="doc-list">
-                      <li>安全確保のために、感情が高ぶった時や、危険行動とは判断したとき、気持ちを落ち着かせるために抱き、抱える等一時的な行動の制限や場所の移動することがあります。</li>
-                      <li>学びやすさのために手を添えて課題を行う等、身体的な支援を行うことがあります。</li>
-                      <li>アレルギー:なし</li>
-                    </ul>
+                    <EditableCell
+                      value={getDisplayValue(plan, 'notes', '安全確保のために、感情が高ぶった時や、危険行動とは判断したとき、気持ちを落ち着かせるために抱き、抱える等一時的な行動の制限や場所の移動することがあります。')}
+                      field="notes"
+                      onChange={updateField}
+                      isEditing={editingPlanId === plan.id}
+                      multiline={true}
+                      placeholder="留意点・備考を入力..."
+                    />
                   </div>
                 </div>
               </div>
@@ -399,7 +563,14 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <div className="doc-row">
                   <div className="doc-cell label large">総合的な支援の方針</div>
                   <div className="doc-cell value" style={{ fontWeight: 500, lineHeight: 1.8 }}>
-                    明るく楽しいことや人との関わりを楽しめ、物事をすぐに理解できる。前向きな正弦さん。絵本やロールプレイなどを通して、登場人物の気持ちや状況を一緒に考えながら、感情語を学び、気持ちを言葉で表現できるよう支援します。小集団での活動では、職員が意思表現のモデルを示し、発言ややりとりの機会を逃さず、声をかけることで自分の考えを伝える経験を積み重ねられるようにします。また安心できる人との関わりを基盤に相手との適切な距離感を保ちながら、関係を広げていけるよう支援します。
+                    <EditableCell
+                      value={getDisplayValue(plan, 'general_policy', '明るく楽しいことや人との関わりを楽しめ、物事をすぐに理解できる。前向きな正弦さん。絵本やロールプレイなどを通して、登場人物の気持ちや状況を一緒に考えながら、感情語を学び、気持ちを言葉で表現できるよう支援します。')}
+                      field="general_policy"
+                      onChange={updateField}
+                      isEditing={editingPlanId === plan.id}
+                      multiline={true}
+                      placeholder="総合的な支援の方針を入力..."
+                    />
                   </div>
                 </div>
               </div>
@@ -410,11 +581,26 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">長期目標</div>
-                      <div className="doc-cell value">小学校での基本的生活習慣や集団参加の力を身に付けながら安心して学校生活を過ごす</div>
+                      <div className="doc-cell value">
+                        <EditableCell
+                          value={getDisplayValue(plan, 'long_term_goal', '小学校での基本的生活習慣や集団参加の力を身に付けながら安心して学校生活を過ごす')}
+                          field="long_term_goal"
+                          onChange={updateField}
+                          isEditing={editingPlanId === plan.id}
+                          multiline={true}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half" style={{ flex: '0 0 250px' }}>
                       <div className="doc-cell label" style={{ width: '80px' }}>期間</div>
-                      <div className="doc-cell value">1年</div>
+                      <div className="doc-cell value">
+                        <EditableCell
+                          value={getDisplayValue(plan, 'long_term_period', '1年')}
+                          field="long_term_period"
+                          onChange={updateField}
+                          isEditing={editingPlanId === plan.id}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -422,15 +608,31 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">短期目標</div>
-                      <div className="doc-cell value">友達と適切な距離や言葉遣いを意識して関わりながら見通しを持って集中して活動に取り組む。</div>
+                      <div className="doc-cell value">
+                        <EditableCell
+                          value={getDisplayValue(plan, 'short_term_goal', '友達と適切な距離や言葉遣いを意識して関わりながら見通しを持って集中して活動に取り組む。')}
+                          field="short_term_goal"
+                          onChange={updateField}
+                          isEditing={editingPlanId === plan.id}
+                          multiline={true}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half" style={{ flex: '0 0 250px' }}>
                       <div className="doc-cell label" style={{ width: '80px' }}>期間</div>
-                      <div className="doc-cell value">6ヶ月</div>
+                      <div className="doc-cell value">
+                        <EditableCell
+                          value={getDisplayValue(plan, 'short_term_period', '6ヶ月')}
+                          field="short_term_period"
+                          onChange={updateField}
+                          isEditing={editingPlanId === plan.id}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
+
 
               {/* Document Page Actions */}
               <div className="doc-footer">
@@ -550,12 +752,12 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     <div className="doc-half">
                       <div className="doc-cell label">保護者氏名</div>
                       <div className="doc-cell value" style={{ position: 'relative', minHeight: '50px' }}>
-                        <span style={{ 
-                          position: 'absolute', 
-                          bottom: '8px', 
-                          right: '12px', 
-                          fontSize: '11px', 
-                          color: '#999' 
+                        <span style={{
+                          position: 'absolute',
+                          bottom: '8px',
+                          right: '12px',
+                          fontSize: '11px',
+                          color: '#999'
                         }}>(自署または捺印)</span>
                       </div>
                     </div>

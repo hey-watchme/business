@@ -1,6 +1,7 @@
 import React from 'react';
 import { type Subject } from '../api/client';
 import { useSubjects } from '../contexts/SubjectContext';
+import { calculateAge } from '../utils/date';
 import './Sidebar.css';
 
 interface MenuItem {
@@ -125,15 +126,13 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <div className="subject-info">
                       <span className="subject-name">{subject.name}</span>
                       <span className="subject-meta">
-                        {subject.age}歳 • {
-                          subject.gender === 'male' || subject.gender === '男性' ? '男の子' :
-                            subject.gender === 'female' || subject.gender === '女性' ? '女の子' :
-                              'その他'
-                        }
+                        {calculateAge(subject.birth_date) || subject.age || '---'}歳 • {subject.gender || '性別不明'}
+
                       </span>
                     </div>
                   </button>
                 </li>
+
               ))
             )}
           </ul>
