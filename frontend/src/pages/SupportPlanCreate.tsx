@@ -350,14 +350,16 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 </div>
                 <div className="doc-row">
                   <div className="doc-cell label">利用者及びその家族の生活に対する意向・ニーズ（生活全般の質を向上させるための課題）</div>
-                  <div className="nested-info-table">
-                    <div className="nested-info-row">
-                      <div className="nested-label">ご本人</div>
-                      <div className="nested-value">自立性を高め、集団での活動に楽しく参加できるようになりたい。</div>
-                    </div>
-                    <div className="nested-info-row">
-                      <div className="nested-label">ご家族</div>
-                      <div className="nested-value">お友達とのコミュニケーションが円滑になり、自分の気持ちを言葉で伝えられるようになってほしい。</div>
+                  <div className="doc-cell value" style={{ padding: 0 }}>
+                    <div className="nested-info-table">
+                      <div className="nested-info-row">
+                        <div className="nested-label">ご本人</div>
+                        <div className="nested-value">自立性を高め、集団での活動に楽しく参加できるようになりたい。</div>
+                      </div>
+                      <div className="nested-info-row">
+                        <div className="nested-label">ご家族</div>
+                        <div className="nested-value">お友達とのコミュニケーションが円滑になり、自分の気持ちを言葉で伝えられるようになってほしい。</div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -444,6 +446,137 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                   Excelをダウンロード (1/2)
+                </button>
+              </div>
+            </div>
+
+            {/* Page 2: Support Details Table */}
+            <div className="official-document-header">
+              <div className="support-details-wrapper">
+                <table className="support-details-table">
+                  <thead>
+                    <tr>
+                      <th>項目</th>
+                      <th>具体的な到達目標</th>
+                      <th>
+                        具体的な支援内容・5領域との関係性等
+                        <br />
+                        <span style={{ fontSize: '10px', fontWeight: 'normal' }}>
+                          ※ 5領域「健康・生活」「運動・感覚」「認知・行動」「言語・コミュニケーション」「人間関係・社会性」
+                        </span>
+                      </th>
+                      <th>達成時期</th>
+                      <th>担当者<br />提供期間</th>
+                      <th>留意事項</th>
+                      <th>優先順位</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="center">本人支援</td>
+                      <td>友達との関わりの中で、適切な距離、適切なコミュニケーションを意識しながらやりとりを楽しむ</td>
+                      <td>小集団での遊びや活動を行う際、必要に応じて事前に人との距離はどれぐらいがいいかなどと具体的に伝える。</td>
+                      <td className="center">6ヶ月</td>
+                      <td>よりどころ、横浜白楽全職員</td>
+                      <td>専門的支援実地加算については別紙参照</td>
+                      <td className="center">1</td>
+                    </tr>
+                    <tr>
+                      <td className="center">本人支援</td>
+                      <td>状況や気持ちに応じて、チクチク言葉、ふわふわ言葉、ドキドキ、言葉を理解していく</td>
+                      <td>必要に応じて、職員が会話のモデルを示して、それはどんな言葉だったかなふわふわ言葉で言うと何かななどと一緒に確認をする。言語・コミュニケーション</td>
+                      <td className="center">6ヶ月</td>
+                      <td>よりどころ、横浜白楽全職員</td>
+                      <td>専門的支援実施加算については別紙参照</td>
+                      <td className="center">2</td>
+                    </tr>
+                    <tr>
+                      <td className="center"></td>
+                      <td></td>
+                      <td></td>
+                      <td className="center"></td>
+                      <td></td>
+                      <td></td>
+                      <td className="center"></td>
+                    </tr>
+                    <tr>
+                      <td className="center"></td>
+                      <td></td>
+                      <td></td>
+                      <td className="center"></td>
+                      <td></td>
+                      <td></td>
+                      <td className="center"></td>
+                    </tr>
+                    <tr>
+                      <td className="center"></td>
+                      <td></td>
+                      <td></td>
+                      <td className="center"></td>
+                      <td></td>
+                      <td></td>
+                      <td className="center"></td>
+                    </tr>
+                    <tr>
+                      <td className="center"></td>
+                      <td></td>
+                      <td></td>
+                      <td className="center"></td>
+                      <td></td>
+                      <td></td>
+                      <td className="center"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Agreement Statement */}
+              <div style={{ marginTop: '32px', marginBottom: '32px', fontSize: '14px', lineHeight: '1.8' }}>
+                提供する支援内容について、本計画書に基づき説明を受け、内容に同意しました。
+              </div>
+
+              {/* Explanation and Consent Table */}
+              <div className="doc-info-table">
+                <div className="doc-row">
+                  <div className="doc-cell label" style={{ width: '140px' }}>説明者</div>
+                  <div className="doc-cell value">児童発達支援管理責任者　山田太郎</div>
+                </div>
+                <div className="doc-row">
+                  <div className="doc-row-split">
+                    <div className="doc-half">
+                      <div className="doc-cell label">説明・同意日</div>
+                      <div className="doc-cell value">2025年11月18日</div>
+                    </div>
+                    <div className="doc-half">
+                      <div className="doc-cell label">保護者氏名</div>
+                      <div className="doc-cell value" style={{ position: 'relative', minHeight: '50px' }}>
+                        <span style={{ 
+                          position: 'absolute', 
+                          bottom: '8px', 
+                          right: '12px', 
+                          fontSize: '11px', 
+                          color: '#999' 
+                        }}>(自署または捺印)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Document Page Actions */}
+              <div className="doc-footer">
+                <span className="page-indicator">個別支援計画書 2/2ページ</span>
+                <button
+                  className="excel-download-mini-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadExcel(plan);
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                    <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Excelをダウンロード (2/2)
                 </button>
               </div>
             </div>

@@ -183,40 +183,57 @@ ASR_PROVIDER=deepgram
 
 ---
 
-## ⚠️ ローカル開発環境について
-
-**現在、ローカルでのテストは不可**
-
-- ローカルDocker環境は未整備
-- フロントエンド⇔バックエンド間でCORSエラーが発生
-- **テスト・動作確認は本番環境（EC2）で実施すること**
-
-### 開発フロー
-
-1. **コード修正（ローカル）**
-   - `backend/app.py` や `frontend/src/**` を修正
-
-2. **構文チェックのみ実施**
-   ```bash
-   # Python（backend）
-   python3 -m py_compile backend/app.py
-
-   # TypeScript（frontend）は自動チェック
-   ```
-
-3. **Git操作（⚠️ モノレポ構成）**
-   ```bash
-   # リポジトリルート（business/）で実行
-   cd /Users/kaya.matsumoto/projects/watchme/business
-   git add .
-   git commit -m "feat: 機能説明"
-   git push origin main
-   ```
-   **注意**: backend/ や frontend/ 内で個別に git 操作しない（GitHub Actions が2回実行される）
-
-4. **本番環境で動作確認**
-   - Frontend: https://business.hey-watch.me
-   - Backend: https://api.hey-watch.me/business
+## 💻 ローカル開発環境の起動方法
+ 
+ ローカル環境での開発・動作確認が可能です。
+ 
+ ### 1. バックエンド (Backend)
+ 
+ 1. ディレクトリ移動
+    ```bash
+    cd backend
+    ```
+ 
+ 2. 仮想環境の作成と有効化（推奨）
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+ 
+ 3. 依存ライブラリのインストール
+    ```bash
+    pip install -r requirements.txt
+    ```
+ 
+ 4. サーバー起動
+    ```bash
+    python3 app.py
+    ```
+    - サーバーは `http://localhost:8052` で起動します。
+    - APIドキュメント: `http://localhost:8052/docs`
+ 
+ ### 2. フロントエンド (Frontend)
+ 
+ 1. ディレクトリ移動
+    ```bash
+    cd frontend
+    ```
+ 
+ 2. 依存ライブラリのインストール
+    ```bash
+    npm install
+    ```
+ 
+ 3. 開発サーバー起動
+    ```bash
+    npm run dev
+    ```
+    - ブラウザで自動的に開かない場合は `http://localhost:5173` にアクセスしてください。
+ 
+ ### 3. 動作確認
+ 
+ ローカルサーバー起動後、ブラウザで `http://localhost:5173`（または表示されたURL）にアクセスして動作を確認してください。
+ フロントエンドはローカルのバックエンドAPI（`http://localhost:8052`）に接続するように設定されています。
 
 ---
 

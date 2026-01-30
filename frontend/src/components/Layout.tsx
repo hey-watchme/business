@@ -2,6 +2,7 @@ import React from 'react';
 import Header from './Header';
 import Sidebar from './Sidebar';
 import { type Subject } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import './Layout.css';
 
 interface LayoutProps {
@@ -19,13 +20,15 @@ const Layout: React.FC<LayoutProps> = ({
   selectedSubjectId,
   onSubjectSelect
 }) => {
+  const { profile } = useAuth();
+
   return (
     <div className="layout">
       <Header
-        companyName="株式会社すまいる"
-        facilityName="横浜市港北営業所"
-        userName="山田太郎"
-        userRole="管理者"
+        companyName={profile?.organization_name || '未設定'}
+        facilityName={profile?.facility_name || '未設定'}
+        userName={profile?.name || 'ゲスト'}
+        userRole={profile?.role === 'admin' ? '管理者' : 'スタッフ'}
       />
       <div className="layout-body">
         <Sidebar

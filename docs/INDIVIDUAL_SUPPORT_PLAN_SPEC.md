@@ -1,9 +1,9 @@
 # 個別支援計画 自動生成システム 技術仕様書
 
-**最終更新**: 2026-01-19 23:45 JST
+**最終更新**: 2026-01-30 21:30 JST
 **対象プロジェクト**: WatchMe Business API
-**システム状態**: Phase 0-4 稼働中 ✅
-**実装完了度**: 95% (Phase 0-4完了、PDF生成未実装)
+**システム状態**: Phase 0-4 稼働中、認証Phase B完了 ✅
+**実装完了度**: 80% (Phase 0-4完了、認証Phase B完了、Phase C-D未実装)
 
 ---
 
@@ -16,11 +16,12 @@
 5. [Phase 1: 事実抽出](#phase-1-事実抽出)
 6. [Phase 2: 事実整理](#phase-2-事実整理)
 7. [Phase 3: 個別支援計画生成](#phase-3-個別支援計画生成)
-8. [Phase 4: Excel出力](#phase-4-excel出力)
-9. [UI実装（管理画面表示）](#ui実装管理画面表示)
-10. [共通実装パターン](#共通実装パターン)
+8. [Phase 4: Excel/UI出力](#phase-4-excelui出力)
+9. [共通実装パターン](#共通実装パターン)
 10. [LLMモデル管理](#llmモデル管理)
 11. [テスト方法](#テスト方法)
+12. [今後の実装計画](#今後の実装計画)
+13. [認証設計](#認証設計)
 
 ---
 
@@ -418,33 +419,115 @@ fact_clusters_v1から**個別支援計画書**を生成する。
 
 ---
 
-## Phase 4: Excel出力
+## Phase 4: Excel/UI出力
 
 ### 概要
 
-- **実装日**: 2026-01-19
-- **状態**: ✅ 稼働中
-- **エンドポイント**: `GET /api/sessions/{session_id}/download-excel`
-- **使用ライブラリ**: openpyxl
-- **処理時間**: <1秒
+- **実装日**: 2026-01-30（UI 2ページ目追加）
+- **状態**: ✅ 稼働中（UI完了、データ連携は一部TODO）
+- **進捗**: 85%完了
 
-### 責務
+### 個別支援計画書 2ページ構成
 
-assessment_v1から**個別支援計画書のExcelファイル**を生成する（2シート構成）。
+個別支援計画書は **2ページ構成** の公文書形式で実装：
 
-### 出力ファイル構成
+| ページ | 内容 | 実装状態 |
+|-------|------|---------|
+| 1/2ページ | 計画書ヘッダー、児童情報、意向、支援方針 | ✅ 完了 |
+| 2/2ページ | 支援詳細テーブル（7列）、説明・同意欄 | ✅ 完了 |
 
-#### Sheet 1: 別紙1-1（個別支援計画書）
-- タイトル：個別支援計画書
-- 利用児氏名・年齢（subjectsテーブルから取得）
-- 総合的な支援方針
-- 長期目標・短期目標
+---
+
+### UI実装
+
+#### ページ1/2: 計画書ヘッダー・支援方針
+
+**ファイル**: `frontend/src/pages/SupportPlanCreate.tsx`
+
+**表示項目**:
+- ヘッダー情報
+  - 計画作成日
+  - 事業所名（⚠️ 要実装：認証から取得）
+  - 計画作成者（⚠️ 要実装：児発管ログイン情報から取得）
+  - モニタリング予定時期
+- 児童情報
+  - 児童名、年齢
+  - 障害種別、障害支援区分
+  - 保護者氏名、相談支援事業所
+- 利用者及びその家族の生活に対する意向・ニーズ
+  - 本人の意向
+  - 保護者の意向
+- 支援方針
+  - 子どもの理解・見立て
+  - 主要アプローチ
+  - 連携事項
+- 目標設定
+  - 長期目標
+  - 短期目標
 - 支援項目（5領域）
-  - 運動・感覚
-  - 言語・コミュニケーション
   - 健康・生活
+  - 運動・感覚
   - 認知・行動
+  - 言語・コミュニケーション
   - 人間関係・社会性
+- 家族支援
+- 移行支援・地域連携
+
+#### ページ2/2: 支援詳細テーブル・同意欄
+
+**ファイル**: `frontend/src/pages/SupportPlanCreate.tsx`
+
+**7列テーブル構造**:
+
+| 列 | 内容 | データソース |
+|----|------|-------------|
+| 項目 | 支援領域（5領域から） | LLM Phase 3 |
+| 具体的な到達目標 | 短期目標の詳細化 | LLM Phase 3 |
+| 具体的な支援内容・5領域との関係性等 | 支援方法と領域マッピング | LLM Phase 3 |
+| 達成時期 | 目標達成予定 | 手動入力 / LLM |
+| 担当者・提供期間 | 児発管/職員、実施期間 | 認証から取得 |
+| 留意事項 | 注意点・配慮事項 | LLM Phase 3 |
+| 優先順位 | 1-5の優先度 | 手動入力 |
+
+**5領域の説明テキスト**:
+```
+「5領域」は、児童発達支援・放課後等デイサービスにおける
+発達支援の重要な視点となる5つの領域です。
+```
+
+**説明・同意セクション**:
+- 同意文言: 「提供する支援内容について、本計画書に基づき説明を受け、内容に同意しました。」
+- 署名欄テーブル:
+  - 説明者（空欄）
+  - 説明・同意日（空欄）
+  - 保護者氏名（空欄）
+
+**CSSクラス**:
+- `.support-details-table`: 7列テーブルスタイル
+- `.support-details-wrapper`: 横スクロール対応ラッパー
+- `.official-document-header`: A4公文書スタイル
+
+---
+
+### Excel出力仕様
+
+#### ファイル構成
+
+**2シート構成**:
+
+1. **Sheet 1（メイン）**: 個別支援計画書本体
+2. **Sheet 2（別表）**: 個別支援計画書別表（週間スケジュール等）
+
+#### Sheet 1: 個別支援計画書（メイン）
+- 児童プロフィール（氏名・年齢）
+- 計画作成日
+- 本人・保護者の意向
+- 子どもの理解・見立て
+- 主要アプローチ
+- 連携事項
+- 長期目標
+- 短期目標
+- 支援項目（5領域）
 - 家族支援
 - 移行支援・地域連携
 
@@ -452,19 +535,22 @@ assessment_v1から**個別支援計画書のExcelファイル**を生成する�
 - 週間スケジュール（月〜日・祝日）
 - 提供時間（利用開始・終了時間）
 - 延長支援時間
-  - 【支援前】延長支援時間
-  - 【支援後】延長支援時間
 - 延長を必要とする理由
 - 特記事項
 
 ### 実装ファイル
 
+**バックエンド**:
 - `backend/services/excel_generator.py`: Excel生成ロジック
   - `generate_support_plan_excel()`: メイン関数
   - `generate_main_support_plan()`: Sheet 1生成
   - `generate_support_schedule()`: Sheet 2生成
   - `extract_assessment_v1()`: データ抽出（ラップされたJSON対応）
 - `backend/app.py`: ダウンロードエンドポイント
+
+**フロントエンド**:
+- `frontend/src/pages/SupportPlanCreate.tsx`: 2ページ構成の計画書UI
+- `frontend/src/pages/SupportPlanCreate.css`: 公文書スタイルCSS
 - `frontend/src/components/Phase3Display.tsx`: ダウンロードボタンUI
 
 ### API仕様
@@ -483,13 +569,13 @@ assessment_v1から**個別支援計画書のExcelファイル**を生成する�
 
 ---
 
-## UI実装（管理画面表示）
+## LLM結果の表示コンポーネント
 
 ### 概要
 
 - **実装日**: 2026-01-19
 - **状態**: ✅ 稼働中
-- **ページ**: 個別支援計画詳細画面（Session Detail Drawer）
+- **ページ**: セッション詳細ドロワー
 
 ### 実装コンポーネント
 
@@ -690,8 +776,294 @@ WHERE id = 'a522ab30-77ca-4599-81b8-48bc8deca835';
 
 ---
 
+## 今後の実装計画
+
+### 優先度順タスクリスト
+
+| 優先度 | タスク | 影響範囲 | 見積もり |
+|-------|--------|---------|---------|
+| 1 | 認証システム実装 | 全画面 | 中 |
+| 2 | 事業所名の自動取得 | 計画書ヘッダー | 小 |
+| 3 | 計画作成者（児発管）自動取得 | 計画書ヘッダー | 小 |
+| 4 | モニタリング期間の設定UI | 計画書ヘッダー | 小 |
+| 5 | 7列テーブルへのLLMデータ連携 | 2ページ目 | 中 |
+| 6 | 説明・同意日の入力UI | 2ページ目 | 小 |
+
+### データ要件分析
+
+#### 現在利用可能なデータ
+
+| データ項目 | ソース | 利用可能 |
+|-----------|--------|---------|
+| 児童名 | `subjects.name` | ✅ |
+| 年齢 | `subjects.age` | ✅ |
+| 障害種別 | `subjects.diagnosis` | ✅ |
+| 保護者氏名 | `subjects.guardian_name` | ✅ |
+| 計画作成日 | `support_plans.created_at` | ✅ |
+| 本人の意向 | LLM Phase 2 → 3 | ✅ |
+| 保護者の意向 | LLM Phase 2 → 3 | ✅ |
+| 支援方針 | LLM Phase 3 | ✅ |
+| 長期目標 | LLM Phase 3 | ✅ |
+| 短期目標 | LLM Phase 3 | ✅ |
+| 支援項目（5領域） | LLM Phase 3 | ✅ |
+| 家族支援 | LLM Phase 3 | ✅ |
+| 移行支援・地域連携 | LLM Phase 3 | ✅ |
+
+#### 新規作成・拡張が必要なデータ
+
+| データ項目 | 対応方法 | 実装方針 |
+|-----------|---------|---------|
+| 事業所名 | `business_facilities.name` カラム追加 | DB拡張 |
+| 計画作成者名 | `support_plans.manager_id` → `users.name` | 認証連携 |
+| モニタリング開始日 | `support_plans.monitoring_start` 追加 | DB拡張 |
+| モニタリング終了日 | `support_plans.monitoring_end` 追加 | DB拡張 |
+| 説明・同意日 | `support_plans.consent_date` 追加 | DB拡張 |
+| 担当者・提供期間 | 認証ユーザー情報から取得 | 認証連携 |
+
+### DBスキーマ変更計画
+
+#### business_facilities テーブル拡張
+
+```sql
+ALTER TABLE business_facilities
+ADD COLUMN name TEXT;  -- 事業所名
+```
+
+#### business_support_plans テーブル拡張
+
+```sql
+ALTER TABLE business_support_plans
+ADD COLUMN manager_id UUID REFERENCES users(id),  -- 計画作成者（児発管）
+ADD COLUMN monitoring_start DATE,  -- モニタリング開始日
+ADD COLUMN monitoring_end DATE,    -- モニタリング終了日
+ADD COLUMN consent_date DATE;      -- 説明・同意日
+```
+
+---
+
+## 認証設計
+
+### 現状の課題
+
+現在のシステムは固定APIトークン（`X-API-Token: watchme-b2b-poc-2025`）で認証しており、以下の問題がある：
+
+1. **ユーザー識別不可**: 誰がログインしているか分からない
+2. **事業所関連付け不可**: ユーザーと事業所の紐付けができない
+3. **権限管理不可**: 児発管と一般職員の区別ができない
+4. **監査ログ不可**: 誰が何をしたか追跡できない
+
+### ユーザー構造の理解
+
+WatchMeサービス全体のユーザー構造：
+
+```
+┌───────────────────────────────────────────────────────┐
+│                 users（WatchMe全ユーザー）              │
+│                                                        │
+│   ┌──────────────────┐    ┌──────────────────────┐    │
+│   │  個人ユーザー      │    │  ビジネスユーザー      │    │
+│   │  (保護者など)      │    │  (事業者職員)          │    │
+│   │                   │    │                       │    │
+│   │  facility_id=NULL │    │  facility_id=UUID ────┼────┼──→ 参照
+│   │                   │    │  role='manager'/'staff'│    │
+│   │  アクセス:        │    │  アクセス:             │    │
+│   │  - iOSアプリのみ  │    │  - iOSアプリ          │    │
+│   │                   │    │  - ビジネスサイト      │    │
+│   └──────────────────┘    └──────────────────────┘    │
+└───────────────────────────────────────────────────────┘
+                                                          │
+                                                          ▼
+                              ┌─────────────────────────────────┐
+                              │   business_facilities (事業所)   │
+                              │     └── organization_id ────────┼──→ business_organizations (法人)
+                              └─────────────────────────────────┘
+```
+
+**ポイント**:
+- `users` はWatchMe全体のユーザー基盤（独立した大きな枠組み）
+- 個人ユーザー（保護者）は `facility_id = NULL`
+- ビジネスユーザーは `facility_id` で事業所を「参照」している
+- `business_organizations` → `business_facilities` は事業者管理テーブル群
+
+### ビジネスサイトアクセス判定
+
+```python
+# ビジネスサイトにアクセス可能か判定
+def can_access_business_site(user):
+    return user.facility_id is not None
+```
+
+**同一事業所の情報共有**:
+```sql
+-- 同じ facility_id を持つユーザーは同じ情報にアクセス
+SELECT * FROM business_interview_sessions 
+WHERE facility_id = :current_user_facility_id
+```
+
+### 認証アーキテクチャ: Supabase Auth
+
+**メリット**:
+- 既存Supabase環境との親和性が高い
+- Row Level Security (RLS) でデータアクセス制御可能
+- JWT認証でフロント・バックエンド両対応
+- `auth.users` と `public.users` の連携が容易
+
+**認証フロー**:
+```
+[ユーザー] → [ログイン画面] → [Supabase Auth (auth.users)]
+                              ↓
+                    [JWT発行] → [フロントエンド保持]
+                              ↓
+              [API呼び出し時にJWT送信] → [バックエンド検証]
+                                       ↓
+                              [user_id取得] → [public.users参照]
+                                             ↓
+                              [facility_id確認] → [事業所情報取得]
+```
+
+### DBスキーマ変更
+
+#### 1. 新規テーブル: `business_organizations`
+
+```sql
+CREATE TABLE business_organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,                    -- 法人名（例: 株式会社リタリコ）
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### 2. 既存テーブル変更: `business_facilities`
+
+```sql
+-- organization_id カラム追加
+ALTER TABLE business_facilities
+ADD COLUMN organization_id UUID REFERENCES business_organizations(id);
+
+-- 既存レコードのマイグレーション（必要に応じて）
+-- UPDATE business_facilities SET organization_id = '...' WHERE id = '...';
+```
+
+#### 3. 既存テーブル: `users` （変更なし）
+
+`facility_id` カラムはすでに存在。外部キー制約の追加のみ検討：
+
+```sql
+-- 外部キー制約追加（オプション）
+ALTER TABLE users
+ADD CONSTRAINT fk_users_facility
+FOREIGN KEY (facility_id) REFERENCES business_facilities(id);
+```
+
+### ユーザーロール定義
+
+| role | 説明 | ビジネスサイト権限 |
+|------|------|-------------------|
+| `parent` | 保護者（個人ユーザー） | アクセス不可 |
+| `manager` | 児発管（計画作成者） | フルアクセス |
+| `staff` | 一般職員 | 閲覧のみ |
+
+### 画面別権限設計
+
+| 画面 | 児発管 (manager) | 職員 (staff) | 保護者 (parent) |
+|------|-----------------|--------------|-----------------|
+| ビジネスサイトトップ | ✅ | ✅ | ❌ |
+| セッション一覧 | ✅ 閲覧・作成 | ✅ 閲覧・作成 | ❌ |
+| 音声文字起こし | ✅ 実行 | ✅ 実行 | ❌ |
+| LLMパイプライン | ✅ 実行 | ✅ 閲覧のみ | ❌ |
+| 個別支援計画書 | ✅ 作成・編集 | ✅ 閲覧のみ | ❌ |
+| Excel出力 | ✅ 可能 | ✅ 可能 | ❌ |
+| 支援管理ページ | ✅ 作成・編集 | ❌ アクセス不可 | ❌ |
+
+### 実装ステップ
+
+#### Phase A: DBスキーマ準備 ✅ 完了
+
+| Step | 作業内容 | SQL | 状態 |
+|------|---------|-----|------|
+| A-1 | `business_organizations` テーブル作成 | CREATE TABLE | ✅ 完了 |
+| A-2 | `business_facilities` に `organization_id` 追加 | ALTER TABLE | ✅ 完了 |
+| A-3 | テストデータ投入 | INSERT | ✅ 完了 |
+
+#### Phase B: フロントエンド認証 ✅ 完了
+
+| Step | 作業内容 | ファイル | 状態 |
+|------|---------|---------|------|
+| B-1 | Supabase Client設定 | `frontend/src/lib/supabase.ts` | ✅ 完了 |
+| B-2 | 認証Context作成 | `frontend/src/contexts/AuthContext.tsx` | ✅ 完了 |
+| B-3 | ログイン画面作成 | `frontend/src/pages/Login.tsx` | ✅ 完了 |
+| B-4 | App.tsxに認証チェック追加 | `frontend/src/App.tsx` | ✅ 完了 |
+| B-5 | ヘッダーにユーザー・事業所情報表示 | `frontend/src/components/Layout.tsx` | ✅ 完了 |
+
+**実装済み機能**:
+- Google OAuth ログイン
+- メール/パスワード ログイン・サインアップ
+- ビジネスユーザー判定（`facility_id IS NOT NULL`）
+- ヘッダーに組織名・事業所名・ユーザー名表示
+
+#### Phase C: バックエンド認証 ⏳ 未実装
+
+| Step | 作業内容 | ファイル |
+|------|---------|---------|
+| C-1 | JWT検証ミドルウェア | `backend/middleware/auth.py` |
+| C-2 | ユーザー情報取得ヘルパー | `backend/services/user_service.py` |
+| C-3 | 既存エンドポイントに認証適用 | `backend/app.py` |
+
+#### Phase D: 計画書へのデータ連携 ⏳ 未実装
+
+| Step | 作業内容 | 詳細 |
+|------|---------|------|
+| D-1 | 事業所名自動取得 | `facility_id` → `business_facilities.name` |
+| D-2 | 法人名取得（必要に応じて） | `organization_id` → `business_organizations.name` |
+| D-3 | 計画作成者名自動取得 | `user_id` → `users.name` (role='manager') |
+
+### RLSポリシー設定 ✅ 完了
+
+認証を機能させるため、以下のRow Level Securityポリシーを追加：
+
+```sql
+-- users: 自分のレコードを読める
+CREATE POLICY "Users can read own record" ON public.users
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- business_facilities: 自分の事業所を読める
+CREATE POLICY "Users can read own facility" ON public.business_facilities
+  FOR SELECT USING (id IN (SELECT facility_id FROM public.users WHERE user_id = auth.uid()));
+
+-- business_organizations: 自分の組織を読める
+CREATE POLICY "Users can read own organization" ON public.business_organizations
+  FOR SELECT USING (id IN (
+    SELECT organization_id FROM public.business_facilities 
+    WHERE id IN (SELECT facility_id FROM public.users WHERE user_id = auth.uid())
+  ));
+```
+
+### テストデータ案
+
+```sql
+-- 法人
+INSERT INTO business_organizations (id, name) VALUES
+('org-001', '株式会社テスト福祉');
+
+-- 事業所
+UPDATE business_facilities 
+SET organization_id = 'org-001'
+WHERE id = '既存のfacility_id';
+
+-- テストユーザー（既存ユーザーを更新）
+UPDATE users 
+SET facility_id = '既存のfacility_id', role = 'manager'
+WHERE email = 'test-manager@example.com';
+```
+
+---
+
 ## 改訂履歴
 
+- 2026-01-30 21:30: 認証Phase B完了（フロントエンド認証、RLSポリシー設定）
+- 2026-01-30 20:00: 認証設計を全面改訂（WatchMe全体のユーザー構造を反映、organizations追加）
+- 2026-01-30 19:00: Phase 4を全面改訂（UI 2ページ目追加）、認証設計・実装計画セクション追加
 - 2026-01-18 23:30: 開発計画書から技術仕様書に全面改訂（Phase 0-3完了時点）
 - 2026-01-18 19:00: Phase 2プロンプト改善、DRY原則追加
 - 2026-01-18 初版: Phase 1完了、Phase 2実装中

@@ -3,6 +3,8 @@ import Layout from './components/Layout';
 import SupportPlanCreate from './pages/SupportPlanCreate';
 import ChildrenList from './pages/ChildrenList';
 import StaffList from './pages/StaffList';
+import Login from './pages/Login';
+import { useAuth } from './contexts/AuthContext';
 import { type Subject } from './api/client';
 import './App.css';
 
@@ -82,8 +84,81 @@ const StatCards = () => (
 );
 
 function App() {
+  const { user, profile, loading, isBusinessUser, signOut } = useAuth();
   const [selectedMenu, setSelectedMenu] = useState('dashboard');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+
+  // ローディング中
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
+        fontSize: '16px'
+      }}>
+        読み込み中...
+      </div>
+    );
+  }
+
+  // 未ログイン
+  if (!user) {
+    return <Login />;
+  }
+
+  // ログイン済みだがビジネスユーザーではない
+  if (!isBusinessUser) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+        color: 'white',
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: '20px',
+          padding: '48px',
+          maxWidth: '420px',
+          color: '#333'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+          <h2 style={{ marginBottom: '16px' }}>アクセス権限がありません</h2>
+          <p style={{ color: '#666', marginBottom: '24px', lineHeight: '1.6' }}>
+            このサービスを利用するには、事業所への登録が必要です。<br />
+            管理者にお問い合わせください。
+          </p>
+          <p style={{ color: '#888', fontSize: '14px', marginBottom: '24px' }}>
+            ログイン中: {profile?.email || user.email}
+          </p>
+          <button
+            onClick={signOut}
+            style={{
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '14px 32px',
+              borderRadius: '10px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            ログアウト
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleMenuSelect = (menuId: string) => {
     setSelectedMenu(menuId);

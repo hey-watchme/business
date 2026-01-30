@@ -36,9 +36,13 @@ def generate_support_plan_excel(session_data: dict) -> BytesIO:
     # === Sheet 1: Main Support Plan ===
     generate_main_support_plan(ws1, assessment_v1, session_data)
 
-    # === Sheet 2: Support Schedule (Appendix) ===
-    ws2 = wb.create_sheet(title="別紙1-2（個別支援計画書別表）")
-    generate_support_schedule(ws2, assessment_v1, session_data)
+    # === Sheet 2: Support Details (Page 2) ===
+    ws2 = wb.create_sheet(title="個別支援計画書（2/2ページ）")
+    generate_support_details_page2(ws2, assessment_v1, session_data)
+
+    # === Sheet 3: Support Schedule (Appendix) ===
+    ws3 = wb.create_sheet(title="別紙1-2（個別支援計画書別表）")
+    generate_support_schedule(ws3, assessment_v1, session_data)
 
     # Save to BytesIO
     output = BytesIO()
@@ -344,6 +348,143 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
     ws.merge_cells(f'D{current_row}:F{current_row}')
     ws[f'D{current_row}'] = f'{datetime.now().strftime("%Y年%m月%d日")}　（保護者署名）'
     ws[f'D{current_row}'].font = small_font
+
+
+def generate_support_details_page2(ws, assessment_v1: dict, session_data: dict = None):
+    """Generate support details page (2/2) with 7-column table"""
+
+    # Set column widths
+    ws.column_dimensions['A'].width = 12   # 項目
+    ws.column_dimensions['B'].width = 35   # 具体的な到達目標
+    ws.column_dimensions['C'].width = 45   # 具体的な支援内容・5領域との関係性等
+    ws.column_dimensions['D'].width = 12   # 達成時期
+    ws.column_dimensions['E'].width = 25   # 提供期間
+    ws.column_dimensions['F'].width = 30   # 留意事項
+    ws.column_dimensions['G'].width = 10   # 優先順位
+
+    # Styles
+    header_font = Font(name='Meiryo UI', size=14, bold=True)
+    normal_font = Font(name='Meiryo UI', size=10)
+    small_font = Font(name='Meiryo UI', size=9)
+    header_cell_font = Font(name='Meiryo UI', size=10, bold=True)
+
+    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left_align = Alignment(horizontal='left', vertical='top', wrap_text=True)
+
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    header_fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+
+    current_row = 1
+
+    # Title
+    ws.merge_cells(f'A{current_row}:G{current_row}')
+    cell = ws[f'A{current_row}']
+    cell.value = '個別支援計画書（2/2ページ）'
+    cell.font = header_font
+    cell.alignment = center_align
+    current_row += 1
+
+    # Child name and date
+    child_name = '〇〇 〇〇'
+    if session_data:
+        child_name = session_data.get('subject_name', child_name)
+
+    if child_name == '〇〇 〇〇':
+        child_profile = assessment_v1.get('child_profile', {})
+        child_name = child_profile.get('name', child_name)
+
+    ws.merge_cells(f'A{current_row}:D{current_row}')
+    ws[f'A{current_row}'] = f'利用児氏名：{child_name}'
+    ws[f'A{current_row}'].font = normal_font
+    ws[f'A{current_row}'].alignment = left_align
+
+    ws.merge_cells(f'E{current_row}:G{current_row}')
+    ws[f'E{current_row}'] = f'作成日：{datetime.now().strftime("%Y年%m月%d日")}'
+    ws[f'E{current_row}'].font = normal_font
+    ws[f'E{current_row}'].alignment = Alignment(horizontal='right', vertical='center')
+    current_row += 2
+
+    # Table headers (7 columns)
+    headers = [
+        '項目',
+        '具体的な到達目標',
+        '具体的な支援内容・5領域との関係性等',
+        '達成時期',
+        '提供期間',
+        '留意事項',
+        '優先順位'
+    ]
+
+    for col_idx, header_text in enumerate(headers, start=1):
+        cell = ws.cell(row=current_row, column=col_idx)
+        cell.value = header_text
+        cell.font = header_cell_font
+        cell.alignment = center_align
+        cell.fill = header_fill
+        cell.border = thin_border
+
+    ws.row_dimensions[current_row].height = 40
+    current_row += 1
+
+    # Data rows - 支援項目データ
+    support_items = [
+        {
+            '項目': '本人支援',
+            '具体的な到達目標': '友達との関わりの中で、適切な距離、適切なコミュニケーションを意識しながらやりとりを楽しむ',
+            '具体的な支援内容・5領域との関係性等': '小集団での遊びや活動を行う際、必要に応じて事前に人との距離はどれぐらいがいいかなどと具体的に伝える。',
+            '達成時期': '6ヶ月',
+            '提供期間': 'よりどころ、横浜白楽全職員',
+            '留意事項': '専門的支援実地加算については別紙参照',
+            '優先順位': '1'
+        },
+        # Additional rows can be added here
+    ]
+
+    # Try to extract support items from assessment_v1
+    goals = assessment_v1.get('support_goals', [])
+    if goals:
+        support_items = []
+        for idx, goal in enumerate(goals, start=1):
+            support_items.append({
+                '項目': '本人支援',
+                '具体的な到達目標': goal.get('goal', ''),
+                '具体的な支援内容・5領域との関係性等': goal.get('methods', ''),
+                '達成時期': '6ヶ月',
+                '提供期間': 'よりどころ、横浜白楽全職員',
+                '留意事項': goal.get('considerations', '専門的支援実地加算については別紙参照'),
+                '優先順位': str(idx)
+            })
+
+    # Write data rows
+    for item in support_items:
+        row_height = max(60, len(item['具体的な支援内容・5領域との関係性等']) // 20 * 15)
+
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=current_row, column=col_idx)
+            cell.value = item.get(header, '')
+            cell.font = normal_font
+            cell.alignment = left_align if col_idx in [2, 3, 6] else center_align
+            cell.border = thin_border
+
+        ws.row_dimensions[current_row].height = row_height
+        current_row += 1
+
+    # Add empty rows for manual entry
+    for _ in range(5):
+        for col_idx in range(1, 8):
+            cell = ws.cell(row=current_row, column=col_idx)
+            cell.value = ''
+            cell.border = thin_border
+            cell.alignment = left_align
+
+        ws.row_dimensions[current_row].height = 60
+        current_row += 1
 
 
 def generate_support_schedule(ws, assessment_v1: dict, session_data: dict = None):
