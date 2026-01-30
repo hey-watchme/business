@@ -116,27 +116,51 @@
 ```sql
 CREATE TABLE business_interview_sessions (
   id UUID PRIMARY KEY,
-  facility_id UUID NOT NULL,
-  child_id UUID NOT NULL,
-  staff_id UUID,
+  facility_id UUID NOT NULL, -- 所属事業所
+  subject_id UUID NOT NULL,  -- 対象児童 (subjects.subject_id)
+  staff_id UUID,             -- 担当スタッフ
   s3_audio_path TEXT NOT NULL,
   duration_seconds INTEGER,
-
-  -- 文字起こし
-  transcription TEXT,
-  transcription_metadata JSONB,
-
-  -- Phase 1: 事実抽出
-  fact_extraction_prompt_v1 TEXT,
-  fact_extraction_result_v1 JSONB,
-
-  -- ステータス管理
-  status TEXT NOT NULL, -- 'uploaded' | 'transcribing' | 'transcribed' | 'analyzing' | 'completed' | 'failed'
-  error_message TEXT,
-
+  
+  -- 文字起こし・分析結果... (省略)
+  status TEXT NOT NULL,
   recorded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### `subjects` (児童基本情報)
+
+児童の基本特性を保持するテーブル。複数の事業所で共有可能。
+
+```sql
+CREATE TABLE subjects (
+  subject_id UUID PRIMARY KEY,
+  name TEXT NOT NULL,
+  age INTEGER,
+  gender TEXT,
+  avatar_url TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+  -- その他、診断名、学校情報など
+);
+```
+
+#### `business_facility_subjects` (児童-事業所紐付け) ✅ **マルチテナンシー対応**
+
+1名の児童が複数の事業所を併用する場合に対応するための中間テーブル。
+
+```sql
+CREATE TABLE business_facility_subjects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  facility_id UUID NOT NULL REFERENCES business_facilities(id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES subjects(subject_id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'active', -- 'active', 'inactive', 'archived'
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(facility_id, subject_id)
 );
 ```
 
@@ -182,7 +206,7 @@ failed (error_messageに詳細)
 Content-Type: multipart/form-data
 - audio: File (webm/wav)
 - facility_id: UUID
-- child_id: UUID
+- subject_id: UUID
 ```
 
 **レスポンス** (200 OK):

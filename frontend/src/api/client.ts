@@ -205,6 +205,18 @@ export const api = {
   getSubject: (subjectId: string) =>
     apiRequest<SubjectDetailResponse>(`/api/subjects/${subjectId}`),
 
+  createSubject: (data: { facility_id: string; name: string; age?: number; gender?: string; notes?: string }) =>
+    apiRequest<Subject>(`/api/subjects`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  linkSubject: (subjectId: string, facilityId: string) =>
+    apiRequest<{ success: boolean; message: string }>(`/api/subjects/${subjectId}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ facility_id: facilityId }),
+    }),
+
   // Users API
   getUsers: (facilityId?: string) => {
     let url = `/api/users?limit=100`;

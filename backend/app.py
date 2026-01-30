@@ -146,6 +146,17 @@ class SubjectResponse(BaseModel):
     created_at: str
     updated_at: str
 
+class SubjectCreate(BaseModel):
+    facility_id: str
+    name: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    notes: Optional[str] = None
+    birth_date: Optional[str] = None
+
+class SubjectLinkRequest(BaseModel):
+    facility_id: str
+
 @app.get("/health")
 async def health_check():
     return {
@@ -840,11 +851,22 @@ async def get_subjects(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        # Query subjects (integrated architecture)
-        query = supabase.table('subjects').select('*')
-
-        # Note: facility_id filtering removed (subjects table uses subject_relations for access control)
-        # TODO: Implement subject_relations filtering when facility management is ready
+        # Query subjects using business_facility_subjects for filtering if facility_id is provided
+        if facility_id:
+            # We use business_facility_subjects!inner to only return subjects linked to this facility
+            query = supabase.table('subjects').select('*, business_facility_subjects!inner(facility_id)')
+            query = query.eq('business_facility_subjects.facility_id', facility_id)
+        else:
+            # If no facility_id is provided, we return an empty list for safety
+            # (unless the user is a super-admin, which we haven't implemented yet)
+            return {
+                "subjects": [],
+                "analytics": {
+                    "total_count": 0,
+                    "gender_distribution": {"male": 0, "female": 0, "other": 0, "unknown": 0},
+                    "age_groups": {"0-3": 0, "4-6": 0, "7-9": 0, "10+": 0, "unknown": 0}
+                }
+            }
 
         result = query.order('name', desc=False).limit(limit).execute()
 
@@ -867,8 +889,8 @@ async def get_subjects(
 
         # Calculate analytics from actual data
         total_count = len(subjects)
-        male_count = sum(1 for s in subjects if s.get('gender') == '男性')
-        female_count = sum(1 for s in subjects if s.get('gender') == '女性')
+        male_count = sum(1 for s in subjects if s.get('gender') in ['男性', 'male'])
+        female_count = sum(1 for s in subjects if s.get('gender') in ['女性', 'female'])
 
         # Calculate age groups
         age_groups = {"0-3": 0, "4-6": 0, "7-9": 0, "10+": 0, "unknown": 0}
@@ -900,7 +922,99 @@ async def get_subjects(
         }
 
     except Exception as e:
+        print(f"Error in get_subjects: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch children: {str(e)}")
+
+
+@app.post("/api/subjects", response_model=SubjectResponse)
+async def create_subject(
+    subject: SubjectCreate,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # 1. Create subject
+        subject_id = str(uuid.uuid4())
+        subject_data = {
+            'subject_id': subject_id,
+            'name': subject.name,
+            'age': subject.age,
+            'gender': subject.gender,
+            'notes': subject.notes,
+            'birth_date': subject.birth_date
+        }
+        
+        sub_res = supabase.table('subjects').insert(subject_data).execute()
+        if not sub_res.data:
+            raise HTTPException(status_code=500, detail="Failed to create subject")
+
+        # 2. Create relation in business_facility_subjects
+        rel_data = {
+            'subject_id': subject_id,
+            'facility_id': subject.facility_id,
+            'status': 'active'
+        }
+        supabase.table('business_facility_subjects').insert(rel_data).execute()
+
+        new_subject = sub_res.data[0]
+        return SubjectResponse(
+            id=new_subject.get('subject_id'),
+            facility_id=subject.facility_id,
+            name=new_subject.get('name'),
+            age=new_subject.get('age'),
+            gender=new_subject.get('gender'),
+            avatar_url=new_subject.get('avatar_url'),
+            notes=new_subject.get('notes'),
+            prefecture=new_subject.get('prefecture'),
+            city=new_subject.get('city'),
+            cognitive_type=new_subject.get('cognitive_type'),
+            created_at=new_subject.get('created_at'),
+            updated_at=new_subject.get('updated_at')
+        )
+
+    except Exception as e:
+        print(f"Error creating subject: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/subjects/{subject_id}/link")
+async def link_subject_to_facility(
+    subject_id: str,
+    link_request: SubjectLinkRequest,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Create relation in business_facility_subjects
+        rel_data = {
+            'subject_id': subject_id,
+            'facility_id': link_request.facility_id,
+            'status': 'active'
+        }
+        
+        # Use upsert to handle cases where relation might already exist
+        result = supabase.table('business_facility_subjects').upsert(
+            rel_data, 
+            on_conflict='subject_id, facility_id'
+        ).execute()
+        
+        return {"success": True, "message": "Subject linked to facility successfully"}
+
+    except Exception as e:
+        print(f"Error linking subject: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/subjects/{subject_id}")
 async def get_subject(
@@ -1065,7 +1179,17 @@ async def get_users(
         # Query users from public.users table
         query = supabase.table('users').select('*')
 
-        # Note: facility_id filtering temporarily disabled (returns all users)
+        if facility_id:
+            query = query.eq('facility_id', facility_id)
+        else:
+            # If no facility_id is provided, return empty for safety in B2B context
+            return {
+                "users": [],
+                "analytics": {
+                    "total_count": 0,
+                    "role_distribution": {}
+                }
+            }
 
         result = query.order('name', desc=False).limit(limit).execute()
 
@@ -1098,7 +1222,6 @@ async def get_users(
                 "role_distribution": role_counts
             }
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch users: {str(e)}")
 

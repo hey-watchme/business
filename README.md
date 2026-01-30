@@ -43,7 +43,6 @@ business/
 
 - **[個別支援計画生成システム 技術仕様書](./docs/INDIVIDUAL_SUPPORT_PLAN_SPEC.md)** - Phase 0-3 完全仕様（★最重要）
 - **[認証・アカウント設計](./docs/AUTHENTICATION_DESIGN.md)** - Organization/Facility設計・認証体系
-- **[実装計画書](./docs/IMPLEMENTATION_PLAN.md)** - 初期実装計画（参考）
 - **[DB定義](./infrastructure/supabase/create_tables.sql)** - Supabaseテーブル定義
 
 ## 🚀 技術スタック
@@ -174,6 +173,8 @@ ASR_PROVIDER=deepgram
 - Phase 2: 事実整理（支援計画用に再分類、約6-7秒）
 - Phase 3: 個別支援計画生成（5領域の支援項目、約17秒）
 - イベント駆動型完全自動化（Lambda）
+- B2B UI/UX 改善（ヘッダーからの組織・施設ナビゲーション、CSS設計の整理）
+- セキュリティ強化（APIレベルでの施設IDフィルタリングの厳格化）
 - DRY原則に基づく統一実装パターン
 
 **🚧 未実装:**
@@ -234,6 +235,16 @@ ASR_PROVIDER=deepgram
  
  ローカルサーバー起動後、ブラウザで `http://localhost:5173`（または表示されたURL）にアクセスして動作を確認してください。
  フロントエンドはローカルのバックエンドAPI（`http://localhost:8052`）に接続するように設定されています。
+ 
+ ⚠️ **重要: ローカル開発時のバックエンド接続先設定**
+ フロントエンドがローカルのバックエンドAPI（`http://localhost:8052`）に接続しているか確認してください。
+ 
+ - 設定ファイル: `frontend/.env.local`
+ - 確認項目: `VITE_API_BASE_URL` が `http://localhost:8052` になっていること
+ 
+ もし `https://api.hey-watch.me/business`（本番）を向いていると、ローカルで修正したDBフィルタリングや新機能が反映されず、本番の全データが表示されるなどのトラブルの原因になります。
+ 
+ 本番のデータを確認したい時以外は、必ず `localhost` を向けるようにしてください。
 
 ---
 

@@ -268,6 +268,61 @@ function App() {
             <StatCards />
           </div>
         );
+      case 'organization-detail':
+        return (
+          <div style={{ padding: '24px' }}>
+            <h1 className="page-title">{profile?.organization_name}について</h1>
+            <p className="page-subtitle">オーガニゼーション基本情報と施設一覧</p>
+            <div style={{
+              marginTop: '32px',
+              background: 'var(--bg-tertiary)',
+              padding: '24px',
+              borderRadius: '12px',
+              border: '1px solid var(--border-color)'
+            }}>
+              <h3 style={{ marginBottom: '16px' }}>企業情報</h3>
+              <p style={{ color: 'var(--text-secondary)' }}>現在、詳細情報は準備中です。</p>
+            </div>
+            <div style={{ marginTop: '32px' }}>
+              <h3 style={{ marginBottom: '16px' }}>所属施設一覧</h3>
+              <div className="subjects-grid">
+                <div
+                  className="subject-card"
+                  style={{ width: '300px' }}
+                  onClick={() => setSelectedMenu('facility-detail')}
+                >
+                  <div className="subject-info">
+                    <h4 className="subject-name">{profile?.facility_name}</h4>
+                    <span className="subject-meta">メイン拠点</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'facility-detail':
+        return (
+          <div style={{ padding: '24px' }}>
+            <h1 className="page-title">{profile?.facility_name}</h1>
+            <p className="page-subtitle">施設の詳細情報と管理</p>
+            <div style={{
+              marginTop: '32px',
+              background: 'var(--bg-tertiary)',
+              padding: '24px',
+              borderRadius: '12px',
+              border: '1px solid var(--border-color)'
+            }}>
+              <h3 style={{ marginBottom: '16px' }}>施設基本情報</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>施設コード</span>
+                <span>{profile?.facility_id || '---'}</span>
+                <span style={{ color: 'var(--text-secondary)' }}>所属企業</span>
+                <span>{profile?.organization_name}</span>
+              </div>
+              <p style={{ color: 'var(--text-secondary)', marginTop: '24px' }}>現在、詳細情報は準備中です。</p>
+            </div>
+          </div>
+        );
       case 'children':
         return <ChildrenList />;
       case 'staff':
@@ -306,6 +361,9 @@ function App() {
     <Layout
       selectedMenuId={selectedMenu}
       onMenuSelect={handleMenuSelect}
+      onSettingsClick={() => setSelectedMenu('settings')}
+      onOrganizationClick={() => setSelectedMenu('organization-detail')}
+      onFacilityClick={() => setSelectedMenu('facility-detail')}
       selectedSubjectId={selectedSubject?.id}
       onSubjectSelect={handleSubjectSelect}
     >

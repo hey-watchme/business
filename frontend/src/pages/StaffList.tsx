@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, type User, type UsersResponse } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import './ChildrenList.css';
 
 const StaffList: React.FC = () => {
@@ -8,16 +9,18 @@ const StaffList: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { profile } = useAuth();
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [profile?.facility_id]);
 
   const fetchUsers = async () => {
+    if (!profile?.facility_id || profile.facility_id === 'temp') return;
     try {
       setLoading(true);
       setError(null);
-      const response = await api.getUsers();
+      const response = await api.getUsers(profile.facility_id);
       setUsers(response.users);
       setAnalytics(response.analytics);
     } catch (err) {
@@ -140,7 +143,7 @@ const StaffList: React.FC = () => {
                 <div className="subject-actions">
                   <button className="icon-button">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path d="M10 4V16M4 10H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <path d="M10 4V16M4 10H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                     </svg>
                   </button>
                 </div>
@@ -200,14 +203,14 @@ const StaffList: React.FC = () => {
                 <div className="detail-actions">
                   <button className="primary-button">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ marginRight: '8px' }}>
-                      <path d="M14.8 4.2L15.8 5.2L7 14H6V13L14.8 4.2Z" stroke="white" strokeWidth="1.5"/>
+                      <path d="M14.8 4.2L15.8 5.2L7 14H6V13L14.8 4.2Z" stroke="white" strokeWidth="1.5" />
                     </svg>
                     編集
                   </button>
                   <button className="secondary-button">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ marginRight: '8px' }}>
-                      <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M10 6V10L13 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" />
+                      <path d="M10 6V10L13 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                     アクセス履歴
                   </button>

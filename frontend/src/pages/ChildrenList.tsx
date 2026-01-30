@@ -1,30 +1,72 @@
-import React, { useState, useEffect } from 'react';
-import { api, type Subject, type SubjectsResponse } from '../api/client';
+import React, { useState } from 'react';
+import { api, type Subject } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
+import { useSubjects } from '../contexts/SubjectContext';
 import './ChildrenList.css';
 
 const ChildrenList: React.FC = () => {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [analytics, setAnalytics] = useState<SubjectsResponse['analytics'] | null>(null);
+  const { subjects, analytics, loading, refreshSubjects } = useSubjects();
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { profile } = useAuth();
 
-  useEffect(() => {
-    fetchSubjects();
-  }, []);
+  // Registration Modal States
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    age: '',
+    gender: '未指定',
+    notes: '',
+    birth_date: ''
+  });
 
-  const fetchSubjects = async () => {
+  const handleRegisterClick = () => {
+    setFormData({
+      name: '',
+      age: '',
+      gender: '未指定',
+      notes: '',
+      birth_date: ''
+    });
+    setIsRegisterModalOpen(true);
+  };
+
+  const handleRegisterClose = () => {
+    if (isSubmitting) return;
+    setIsRegisterModalOpen(false);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile?.facility_id) return;
+    if (!formData.name.trim()) {
+      alert('お名前を入力してください');
+      return;
+    }
+
     try {
-      setLoading(true);
-      setError(null);
-      const response = await api.getSubjects();
-      setSubjects(response.subjects);
-      setAnalytics(response.analytics);
+      setIsSubmitting(true);
+      await api.createSubject({
+        facility_id: profile.facility_id,
+        name: formData.name,
+        age: formData.age ? parseInt(formData.age) : undefined,
+        gender: formData.gender,
+        notes: formData.notes
+      });
+
+      // Success
+      setIsRegisterModalOpen(false);
+      await refreshSubjects(); // This will update both ChildrenList and Sidebar!
     } catch (err) {
-      console.error('Failed to fetch subjects:', err);
-      setError('児童情報の取得に失敗しました');
+      console.error('Failed to register subject:', err);
+      alert('登録に失敗しました');
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -35,9 +77,12 @@ const ChildrenList: React.FC = () => {
 
   const getGenderLabel = (gender: string | null | undefined): string => {
     switch (gender) {
-      case 'male': return '男';
-      case 'female': return '女';
-      case 'other': return 'その他';
+      case 'male':
+      case '男性': return '男';
+      case 'female':
+      case '女性': return '女';
+      case 'other':
+      case 'その他': return 'その他';
       default: return '性別不明';
     }
   };
@@ -64,9 +109,12 @@ const ChildrenList: React.FC = () => {
 
   const getGenderColor = (gender: string | null | undefined): string => {
     switch (gender) {
-      case 'male': return '#4FC3F7';
-      case 'female': return '#F48FB1';
-      case 'other': return '#9C27B0';
+      case 'male':
+      case '男性': return '#4FC3F7';
+      case 'female':
+      case '女性': return '#F48FB1';
+      case 'other':
+      case 'その他': return '#9C27B0';
       default: return '#999';
     }
   };
@@ -75,14 +123,14 @@ const ChildrenList: React.FC = () => {
     <div className="children-list">
       <div className="page-header">
         <h1 className="page-title">児童管理</h1>
-        <button className="primary-button">
+        <button className="primary-button" onClick={handleRegisterClick}>
           <span className="button-icon">+</span>
           新規児童登録
         </button>
       </div>
 
       {/* Analytics Section */}
-      {analytics && (
+      {analytics && analytics.total_count > 0 && (
         <div className="analytics-section">
           <div className="analytics-card">
             <div className="analytics-value">{analytics.total_count}</div>
@@ -122,16 +170,16 @@ const ChildrenList: React.FC = () => {
               </div>
               <div className="gender-labels">
                 <span className="gender-label">
-                  <span className="gender-dot" style={{ backgroundColor: '#4FC3F7' }}/>
+                  <span className="gender-dot" style={{ backgroundColor: '#4FC3F7' }} />
                   男児 {analytics.gender_distribution.male}名
                 </span>
                 <span className="gender-label">
-                  <span className="gender-dot" style={{ backgroundColor: '#F48FB1' }}/>
+                  <span className="gender-dot" style={{ backgroundColor: '#F48FB1' }} />
                   女児 {analytics.gender_distribution.female}名
                 </span>
                 {(analytics.gender_distribution.other > 0 || analytics.gender_distribution.unknown > 0) && (
                   <span className="gender-label">
-                    <span className="gender-dot" style={{ backgroundColor: '#999' }}/>
+                    <span className="gender-dot" style={{ backgroundColor: '#999' }} />
                     その他 {analytics.gender_distribution.other + analytics.gender_distribution.unknown}名
                   </span>
                 )}
@@ -158,31 +206,24 @@ const ChildrenList: React.FC = () => {
 
       {/* Children List */}
       <div className="content-area">
-        {loading && (
+        {loading && subjects.length === 0 && (
           <div className="loading-state">
             <div className="spinner" />
             <p>データを読み込み中...</p>
           </div>
         )}
 
-        {error && (
-          <div className="error-state">
-            <p>{error}</p>
-            <button onClick={fetchSubjects}>再試行</button>
-          </div>
-        )}
-
-        {!loading && !error && subjects.length === 0 && (
+        {!loading && subjects.length === 0 && (
           <div className="empty-state">
             <p>児童が登録されていません</p>
-            <button className="primary-button">
+            <button className="primary-button" onClick={handleRegisterClick}>
               <span className="button-icon">+</span>
               最初の児童を登録
             </button>
           </div>
         )}
 
-        {!loading && !error && subjects.length > 0 && (
+        {subjects.length > 0 && (
           <div className="subjects-grid">
             {subjects.map(subject => (
               <div
@@ -217,7 +258,7 @@ const ChildrenList: React.FC = () => {
                 <div className="subject-actions">
                   <button className="icon-button">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path d="M10 4V16M4 10H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <path d="M10 4V16M4 10H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                     </svg>
                   </button>
                 </div>
@@ -227,8 +268,99 @@ const ChildrenList: React.FC = () => {
         )}
       </div>
 
+      {/* Register Modal */}
+      {isRegisterModalOpen && (
+        <div className="modal-overlay" onClick={handleRegisterClose}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>新規児童登録</h2>
+              <button className="close-button" onClick={handleRegisterClose}>×</button>
+            </div>
+            <form onSubmit={handleRegisterSubmit}>
+              <div className="modal-body">
+                <div className="registration-form">
+                  <div className="form-group">
+                    <label htmlFor="name">氏名</label>
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      className="form-input"
+                      placeholder="例：山田 太郎"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="age">年齢</label>
+                      <input
+                        type="number"
+                        id="age"
+                        name="age"
+                        className="form-input"
+                        placeholder="例：5"
+                        min="0"
+                        value={formData.age}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="gender">性別</label>
+                      <select
+                        id="gender"
+                        name="gender"
+                        className="form-select"
+                        value={formData.gender}
+                        onChange={handleInputChange}
+                      >
+                        <option value="未指定">未指定</option>
+                        <option value="男性">男児</option>
+                        <option value="女性">女児</option>
+                        <option value="その他">その他</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="notes">備考・特性メモ</label>
+                    <textarea
+                      id="notes"
+                      name="notes"
+                      className="form-textarea"
+                      placeholder="支援にあたっての留意事項など"
+                      value={formData.notes}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="cancel-button"
+                  onClick={handleRegisterClose}
+                  disabled={isSubmitting}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? '登録中...' : '登録する'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Drawer for selected subject */}
-      {selectedSubject && (
+      {selectedSubject && !isRegisterModalOpen && (
         <>
           <div
             className="drawer-overlay"
@@ -290,13 +422,13 @@ const ChildrenList: React.FC = () => {
                 <div className="detail-actions">
                   <button className="primary-button">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ marginRight: '8px' }}>
-                      <path d="M4 13L9 18L16 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M4 13L9 18L16 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     個別支援計画を作成
                   </button>
                   <button className="secondary-button">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ marginRight: '8px' }}>
-                      <path d="M14.8 4.2L15.8 5.2L7 14H6V13L14.8 4.2Z" stroke="currentColor" strokeWidth="1.5"/>
+                      <path d="M14.8 4.2L15.8 5.2L7 14H6V13L14.8 4.2Z" stroke="currentColor" strokeWidth="1.5" />
                     </svg>
                     編集
                   </button>

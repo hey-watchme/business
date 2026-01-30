@@ -58,7 +58,7 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
       <div className="recording-setup-container">
         <button className="close-button" onClick={onCancel}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </button>
 
@@ -68,11 +68,11 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
               <div className="user-preview">
                 <div className="user-avatar-large">
                   <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                    <circle cx="30" cy="20" r="10" fill="currentColor" opacity="0.5"/>
-                    <path d="M10 50C10 40 19 32 30 32C41 32 50 40 50 50" fill="currentColor" opacity="0.5"/>
+                    <circle cx="30" cy="20" r="10" fill="currentColor" opacity="0.5" />
+                    <path d="M10 50C10 40 19 32 30 32C41 32 50 40 50 50" fill="currentColor" opacity="0.5" />
                   </svg>
                 </div>
-                <h2 className="user-name">山田太郎</h2>
+                <h2 className="setup-user-name">山田太郎</h2>
                 <p className="user-role">職員</p>
               </div>
 
@@ -95,15 +95,15 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
               <div className="controls-preview">
                 <button className="control-button mic-button active">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="2"/>
-                    <path d="M5 11C5 11 5 18 12 18C19 18 19 11 19 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    <path d="M12 18V22" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="2" />
+                    <path d="M5 11C5 11 5 18 12 18C19 18 19 11 19 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M12 18V22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 </button>
                 <button className="control-button settings-button">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                    <path d="M12 1V5M12 19V23M23 12H19M5 12H1M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                    <path d="M12 1V5M12 19V23M23 12H19M5 12H1M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 </button>
               </div>
@@ -144,8 +144,8 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
                 {micPermission === 'granted' && (
                   <>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M6 10L8.5 12.5L14 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
+                      <path d="M6 10L8.5 12.5L14 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <span>マイクは正常に動作しています</span>
                   </>
@@ -153,8 +153,8 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
                 {micPermission === 'denied' && (
                   <>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M12 8L8 12M8 8L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
+                      <path d="M12 8L8 12M8 8L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                     </svg>
                     <span>マイクへのアクセスが拒否されました</span>
                   </>
@@ -181,8 +181,8 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
                 disabled={micPermission !== 'granted' || !selectedChild}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <circle cx="10" cy="10" r="8" fill="currentColor"/>
-                  <circle cx="10" cy="10" r="4" fill="white"/>
+                  <circle cx="10" cy="10" r="8" fill="currentColor" />
+                  <circle cx="10" cy="10" r="4" fill="white" />
                 </svg>
                 録音を開始
               </button>
