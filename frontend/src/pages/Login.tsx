@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import './Login.css';
@@ -13,16 +13,32 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [signUpSuccess, setSignUpSuccess] = useState(false);
 
+  // コンポーネントマウント時に古いセッションをクリアする
+  useEffect(() => {
+    const clearSession = async () => {
+      // ログイン画面にいるということは、有効なユーザーがいないということ。
+      // 念のため明示的にsignOutして、localStorage等のゴミを一掃する
+      await supabase.auth.signOut();
+    };
+    clearSession();
+  }, []);
+
   const handleGoogleLogin = async () => {
     setError(null);
     setLoading(true);
     try {
       // 常に現在のオリジン（http://localhost... または https://business...）をリダイレクト先とする
       const redirectUrl = window.location.origin;
+      console.log('Using redirect URL:', redirectUrl);
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
       if (error) {
