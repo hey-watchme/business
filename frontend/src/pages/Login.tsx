@@ -16,8 +16,14 @@ export default function Login() {
   // コンポーネントマウント時に古いセッションをクリアする
   useEffect(() => {
     const clearSession = async () => {
-      // ログイン画面にいるということは、有効なユーザーがいないということ。
-      // 念のため明示的にsignOutして、localStorage等のゴミを一掃する
+      // URLにハッシュ（アクセストークン等）が含まれている場合は、
+      // ログイン処理の途中（Googleからのリダイレクト直後）なのでサインアウトしてはいけない
+      if (window.location.hash && window.location.hash.includes('access_token')) {
+        console.log('Access token detected in URL, skipping cleanup.');
+        return;
+      }
+
+      // それ以外（単にログイン画面を開いた時）は、古いゴミを一掃する
       await supabase.auth.signOut();
     };
     clearSession();
