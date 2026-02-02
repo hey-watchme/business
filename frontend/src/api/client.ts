@@ -46,7 +46,7 @@ export interface SupportPlan {
     birth_date?: string | null;
   } | null;
 
-  // Editable fields
+  // Editable fields (legacy, for backwards compatibility)
   facility_name?: string | null;
   manager_name?: string | null;
   monitoring_start?: string | null;
@@ -66,16 +66,93 @@ export interface SupportPlan {
   explainer_name?: string | null;
   consent_date?: string | null;
   guardian_signature?: string | null;
+
+  // === 2-column structure fields (AI-generated vs User-edited) ===
+
+  // Child intention
+  child_intention_ai_generated?: string | null;
+  child_intention_user_edited?: string | null;
+
+  // Family intention
+  family_intention_ai_generated?: string | null;
+  family_intention_user_edited?: string | null;
+
+  // General policy (child_understanding)
+  general_policy_ai_generated?: string | null;
+  general_policy_user_edited?: string | null;
+
+  // Key approaches
+  key_approaches_ai_generated?: string[] | null;
+  key_approaches_user_edited?: string[] | null;
+
+  // Collaboration notes
+  collaboration_notes_ai_generated?: string | null;
+  collaboration_notes_user_edited?: string | null;
+
+  // Long-term goal
+  long_term_goal_ai_generated?: string | null;
+  long_term_goal_user_edited?: string | null;
+  long_term_period_ai_generated?: string | null;
+  long_term_period_user_edited?: string | null;
+  long_term_rationale_ai_generated?: string | null;
+  long_term_rationale_user_edited?: string | null;
+
+  // Short-term goals (JSONB array)
+  short_term_goals_ai_generated?: Array<{ goal: string; timeline: string }> | null;
+  short_term_goals_user_edited?: Array<{ goal: string; timeline: string }> | null;
+
+  // Support items (JSONB array)
+  support_items_ai_generated?: SupportItem[] | null;
+  support_items_user_edited?: SupportItem[] | null;
+
+  // Family support (JSONB)
+  family_support_ai_generated?: {
+    goal?: string;
+    methods?: string[];
+    timeline?: string;
+    notes?: string;
+  } | null;
+  family_support_user_edited?: {
+    goal?: string;
+    methods?: string[];
+    timeline?: string;
+    notes?: string;
+  } | null;
+
+  // Transition support (JSONB)
+  transition_support_ai_generated?: {
+    goal?: string;
+    methods?: string[];
+    partner_organization?: string;
+    timeline?: string;
+    notes?: string;
+  } | null;
+  transition_support_user_edited?: {
+    goal?: string;
+    methods?: string[];
+    partner_organization?: string;
+    timeline?: string;
+    notes?: string;
+  } | null;
 }
 
 export interface SupportItem {
   category: string;
   target: string;
-  content: string;
+  methods: string[];    // Support methods array (assessment_v1 format)
+  content?: string;     // Legacy field, prefer methods
   timeline: string;
   staff: string;
   notes: string;
   priority: number;
+}
+
+// Response from sync-from-assessment API
+export interface SyncFromAssessmentResponse {
+  success: boolean;
+  plan_id: string;
+  synced_fields: string[];
+  message: string;
 }
 
 export interface SupportPlanCreate {
@@ -254,6 +331,12 @@ export const api = {
   deleteSupportPlan: (planId: string) =>
     apiRequest<void>(`/api/support-plans/${planId}`, {
       method: 'DELETE',
+    }),
+
+  // Sync assessment_v1 data to support plan xxx_ai_generated columns
+  syncFromAssessment: (planId: string) =>
+    apiRequest<SyncFromAssessmentResponse>(`/api/support-plans/${planId}/sync-from-assessment`, {
+      method: 'POST',
     }),
 
   // Subjects API

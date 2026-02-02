@@ -1,0 +1,232 @@
+/* EditableTableRow Component Styles */
+
+.support-table-row {
+    transition: background-color 0.2s ease;
+}
+
+.support-table-row:hover {
+    background: rgba(124, 77, 255, 0.03);
+}
+
+.support-table-row.edited {
+    /* Subtle indicator that row was edited */
+    border-left: 3px solid var(--accent-primary, #7c4dff);
+}
+
+.support-table-row.editing {
+    background: rgba(124, 77, 255, 0.08);
+}
+
+/* Cell styles */
+.support-table-row td {
+    padding: 12px 8px;
+    vertical-align: top;
+    border: 1px solid var(--border-color, #e0e0e0);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.cell-category {
+    width: 100px;
+    text-align: center;
+}
+
+.cell-target {
+    width: 180px;
+}
+
+.cell-methods {
+    width: 250px;
+}
+
+.cell-timeline {
+    width: 80px;
+    text-align: center;
+}
+
+.cell-staff {
+    width: 120px;
+}
+
+.cell-notes {
+    width: 180px;
+}
+
+.cell-priority {
+    width: 60px;
+    text-align: center;
+}
+
+.cell-actions {
+    width: 50px;
+    text-align: center;
+    padding: 8px !important;
+}
+
+/* Methods list */
+.methods-list {
+    margin: 0;
+    padding-left: 16px;
+}
+
+.methods-list li {
+    margin-bottom: 4px;
+}
+
+/* Edit button */
+.row-edit-btn,
+.row-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted, #999);
+    opacity: 0;
+    transition: all 0.2s ease;
+}
+
+.support-table-row:hover .row-edit-btn,
+.support-table-row:hover .row-delete-btn {
+    opacity: 1;
+}
+
+.row-edit-btn:hover {
+    background: var(--bg-hover, #f0f0f0);
+    color: var(--accent-primary, #7c4dff);
+    border-color: var(--accent-primary, #7c4dff);
+}
+
+.row-delete-btn:hover {
+    background: #fff5f5;
+    color: #dc3545;
+    border-color: #dc3545;
+}
+
+.cell-actions.editing {
+    vertical-align: top;
+    padding-top: 12px !important;
+}
+
+.cell-actions.editing .row-delete-btn {
+    opacity: 1;
+}
+
+/* Form fields in edit mode */
+.support-table-row .field-input,
+.support-table-row .field-textarea,
+.support-table-row .field-select {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #1a1a1a;
+    background: #ffffff;
+    border: 1px solid var(--accent-primary, #7c4dff);
+    border-radius: 4px;
+    outline: none;
+}
+
+.support-table-row .field-input:focus,
+.support-table-row .field-textarea:focus,
+.support-table-row .field-select:focus {
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
+}
+
+.support-table-row .field-textarea {
+    min-height: 60px;
+    resize: vertical;
+    line-height: 1.4;
+}
+
+.support-table-row .priority-input {
+    width: 50px;
+    text-align: center;
+}
+
+/* Row actions row */
+.row-actions-row td {
+    padding: 8px 12px !important;
+    background: rgba(124, 77, 255, 0.05);
+    border: none;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.row-error {
+    font-size: 12px;
+    color: #dc3545;
+    margin-bottom: 8px;
+}
+
+.row-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.row-actions .cancel-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    background: #fff;
+    color: var(--text-secondary, #666);
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.row-actions .cancel-btn:hover:not(:disabled) {
+    background: var(--bg-hover, #f5f5f5);
+    border-color: var(--text-muted, #999);
+}
+
+.row-actions .save-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--text-muted, #999);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: not-allowed;
+    transition: all 0.2s ease;
+}
+
+.row-actions .save-btn.active {
+    background: var(--accent-primary, #7c4dff);
+    cursor: pointer;
+}
+
+.row-actions .save-btn.active:hover {
+    background: var(--accent-secondary, #6200ea);
+}
+
+.row-actions .save-btn:disabled,
+.row-actions .cancel-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .support-table-row td {
+        font-size: 11px;
+        padding: 8px 6px;
+    }
+
+    .cell-category {
+        width: 80px;
+    }
+
+    .cell-target,
+    .cell-methods,
+    .cell-notes {
+        width: auto;
+    }
+}

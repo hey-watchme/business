@@ -940,6 +940,156 @@ async def delete_support_plan(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete support plan: {str(e)}")
 
+
+class SyncFromAssessmentResponse(BaseModel):
+    success: bool
+    plan_id: str
+    synced_fields: list
+    message: str
+
+
+@app.post("/api/support-plans/{plan_id}/sync-from-assessment", response_model=SyncFromAssessmentResponse)
+async def sync_from_assessment(
+    plan_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Sync assessment_v1 data to business_support_plans xxx_ai_generated columns
+
+    This endpoint transfers AI-generated data from the session's assessment_result_v1
+    to the support plan's xxx_ai_generated columns for Human-in-the-Loop editing.
+
+    Args:
+        plan_id: Support plan ID
+        x_api_token: API token
+
+    Returns:
+        SyncFromAssessmentResponse with synced field names
+    """
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # 1. Get support plan with linked sessions
+        plan_result = supabase.table('business_support_plans')\
+            .select('id')\
+            .eq('id', plan_id)\
+            .single()\
+            .execute()
+
+        if not plan_result.data:
+            raise HTTPException(status_code=404, detail="Support plan not found")
+
+        # 2. Get sessions linked to this plan
+        sessions_result = supabase.table('business_interview_sessions')\
+            .select('id, assessment_result_v1')\
+            .eq('support_plan_id', plan_id)\
+            .order('recorded_at', desc=True)\
+            .limit(1)\
+            .execute()
+
+        if not sessions_result.data:
+            raise HTTPException(status_code=400, detail="No session linked to this plan")
+
+        session = sessions_result.data[0]
+        assessment_result = session.get('assessment_result_v1')
+
+        if not assessment_result:
+            raise HTTPException(status_code=400, detail="No assessment_v1 found in session")
+
+        # 3. Extract assessment_v1 from various formats
+        from services.excel_generator import extract_assessment_v1
+        assessment_v1 = extract_assessment_v1(assessment_result)
+
+        if not assessment_v1:
+            raise HTTPException(status_code=400, detail="Failed to extract assessment_v1")
+
+        # 4. Build update data according to mapping
+        update_data = {}
+        synced_fields = []
+
+        # family_child_intentions -> child_intention, family_intention
+        if assessment_v1.get('family_child_intentions'):
+            intentions = assessment_v1['family_child_intentions']
+            if intentions.get('child'):
+                update_data['child_intention_ai_generated'] = intentions['child']
+                synced_fields.append('child_intention')
+            if intentions.get('parents'):
+                update_data['family_intention_ai_generated'] = intentions['parents']
+                synced_fields.append('family_intention')
+
+        # support_policy -> general_policy, key_approaches, collaboration_notes
+        if assessment_v1.get('support_policy'):
+            policy = assessment_v1['support_policy']
+            if policy.get('child_understanding'):
+                update_data['general_policy_ai_generated'] = policy['child_understanding']
+                synced_fields.append('general_policy')
+            if policy.get('key_approaches'):
+                update_data['key_approaches_ai_generated'] = policy['key_approaches']
+                synced_fields.append('key_approaches')
+            if policy.get('collaboration_notes'):
+                update_data['collaboration_notes_ai_generated'] = policy['collaboration_notes']
+                synced_fields.append('collaboration_notes')
+
+        # long_term_goal
+        if assessment_v1.get('long_term_goal'):
+            ltg = assessment_v1['long_term_goal']
+            if ltg.get('goal'):
+                update_data['long_term_goal_ai_generated'] = ltg['goal']
+                synced_fields.append('long_term_goal')
+            if ltg.get('timeline'):
+                update_data['long_term_period_ai_generated'] = ltg['timeline']
+                synced_fields.append('long_term_period')
+            if ltg.get('rationale'):
+                update_data['long_term_rationale_ai_generated'] = ltg['rationale']
+                synced_fields.append('long_term_rationale')
+
+        # short_term_goals (JSONB array)
+        if assessment_v1.get('short_term_goals'):
+            update_data['short_term_goals_ai_generated'] = assessment_v1['short_term_goals']
+            synced_fields.append('short_term_goals')
+
+        # support_items (JSONB array)
+        if assessment_v1.get('support_items'):
+            update_data['support_items_ai_generated'] = assessment_v1['support_items']
+            synced_fields.append('support_items')
+
+        # family_support (JSONB)
+        if assessment_v1.get('family_support'):
+            update_data['family_support_ai_generated'] = assessment_v1['family_support']
+            synced_fields.append('family_support')
+
+        # transition_support (JSONB)
+        if assessment_v1.get('transition_support'):
+            update_data['transition_support_ai_generated'] = assessment_v1['transition_support']
+            synced_fields.append('transition_support')
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No data to sync from assessment_v1")
+
+        # 5. Update business_support_plans
+        supabase.table('business_support_plans')\
+            .update(update_data)\
+            .eq('id', plan_id)\
+            .execute()
+
+        return SyncFromAssessmentResponse(
+            success=True,
+            plan_id=plan_id,
+            synced_fields=synced_fields,
+            message=f"Synced {len(synced_fields)} fields from assessment_v1"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error syncing from assessment: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync: {str(e)}")
+
 @app.get("/api/subjects")
 async def get_subjects(
     x_api_token: str = Header(None, alias="X-API-Token"),
