@@ -201,6 +201,7 @@ async def upload_audio(
     facility_id: str = Form(...),
     subject_id: str = Form(...),
     support_plan_id: Optional[str] = Form(None),
+    staff_id: Optional[str] = Form(None),
     x_api_token: str = Header(None, alias="X-API-Token")
 ):
     # Validate token
@@ -243,6 +244,10 @@ async def upload_audio(
             # Add support_plan_id if provided
             if support_plan_id:
                 session_data['support_plan_id'] = support_plan_id
+
+            # Add staff_id if provided (from authenticated user)
+            if staff_id:
+                session_data['staff_id'] = staff_id
 
             supabase.table('business_interview_sessions').insert(session_data).execute()
 

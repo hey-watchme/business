@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './RecordingSession.css';
+import { useAuth } from '../contexts/AuthContext';
 
 interface RecordingSessionProps {
   childName: string;
@@ -16,6 +17,7 @@ interface TranscriptMessage {
 }
 
 const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportPlanId, onStop }) => {
+  const { profile } = useAuth();
   const [recordingTime, setRecordingTime] = useState(0);
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -120,6 +122,10 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
     formData.append('subject_id', '00000000-0000-0000-0000-000000000002');
     if (supportPlanId) {
       formData.append('support_plan_id', supportPlanId);
+    }
+    // Add staff_id from authenticated user
+    if (profile?.user_id) {
+      formData.append('staff_id', profile.user_id);
     }
 
     try {
