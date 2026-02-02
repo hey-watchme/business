@@ -650,6 +650,11 @@ async def create_support_plan(
         facility_id = "00000000-0000-0000-0000-000000000001"  # Test facility
         created_by = None  # Will be set by auth later
 
+        # Calculate monitoring period (6 months from creation date)
+        from datetime import datetime, timedelta
+        monitoring_start = datetime.now().date()
+        monitoring_end = (monitoring_start + timedelta(days=180))  # 6 months (~180 days)
+
         # Insert into database
         result = supabase.table('business_support_plans').insert({
             'id': plan_id,
@@ -658,7 +663,9 @@ async def create_support_plan(
             'title': plan.title,
             'plan_number': plan.plan_number,
             'status': plan.status,
-            'created_by': created_by
+            'created_by': created_by,
+            'monitoring_start': monitoring_start.isoformat(),
+            'monitoring_end': monitoring_end.isoformat()
         }).execute()
 
         if not result.data:

@@ -9,6 +9,13 @@ import { type Subject } from './api/client';
 import { calculateAge } from './utils/date';
 import './App.css';
 
+// Format date as "YYYY年MM月DD日"
+const formatDateOnly = (dateString: string | null | undefined): string => {
+  if (!dateString) return '---';
+  const date = new Date(dateString);
+  return `${date.getFullYear()}年${(date.getMonth() + 1).toString().padStart(2, '0')}月${date.getDate().toString().padStart(2, '0')}日`;
+};
+
 // Move StatCards outside to improve HMR and prevent re-definition
 const StatCards = () => (
   <div className="dashboard-grid">
@@ -227,57 +234,36 @@ function App() {
                   letterSpacing: '0.5px'
                 }}>支援対象</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '12px' }}>
-                <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '15px' }}>
-                  {calculateAge(selectedSubject.birth_date) || selectedSubject.age}歳 • {selectedSubject.gender || '性別未設定'}{
-                    selectedSubject.birth_date && ` • 生年月日: ${selectedSubject.birth_date}`
-                  }
-                </p>
-
-                {selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0 && (
-                  <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>診断・特性:</span> {selectedSubject.diagnosis.join(' / ')}
-                  </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                {/* 基本情報 */}
+                <div style={{ display: 'flex', gap: '16px', fontSize: '15px' }}>
+                  <div><span style={{ color: 'var(--text-muted)' }}>生年月日:</span> <span style={{ color: 'var(--text-primary)' }}>{formatDateOnly(selectedSubject.birth_date)}</span></div>
+                  <div><span style={{ color: 'var(--text-muted)' }}>年齢:</span> <span style={{ color: 'var(--text-primary)' }}>{calculateAge(selectedSubject.birth_date) ?? '---'}歳</span></div>
+                  <div><span style={{ color: 'var(--text-muted)' }}>性別:</span> <span style={{ color: 'var(--text-primary)' }}>{
+                    selectedSubject.gender === 'male' || selectedSubject.gender === '男性' ? '男性' :
+                      selectedSubject.gender === 'female' || selectedSubject.gender === '女性' ? '女性' :
+                        'その他'
+                  }</span></div>
+                </div>
+                {/* 診断・特性 */}
+                {(selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0) && (
+                  <div style={{ fontSize: '14px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>診断・特性:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.diagnosis.join(', ')}</span>
+                  </div>
                 )}
-
-                {(selectedSubject.school_name || selectedSubject.school_type) && (
-                  <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>所属:</span> {selectedSubject.school_name}{selectedSubject.school_type && ` (${selectedSubject.school_type === 'kindergarten' ? '幼稚園' :
-                        selectedSubject.school_type === 'nursery' ? '保育園' :
-                          selectedSubject.school_type === 'elementary' ? '小学校' :
-                            selectedSubject.school_type === 'middle' ? '中学校' :
-                              selectedSubject.school_type === 'high' ? '高校' :
-                                selectedSubject.school_type === 'special' ? '特別支援' :
-                                  selectedSubject.school_type
-                      })`}
-                  </p>
+                {/* 所属 */}
+                {selectedSubject.school_name && (
+                  <div style={{ fontSize: '14px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>所属:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.school_name} ({selectedSubject.school_type || '学校'})</span>
+                  </div>
                 )}
-
-                {(selectedSubject.prefecture || selectedSubject.city) && (
-                  <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>お住まい:</span> {selectedSubject.prefecture}{selectedSubject.city}
-                  </p>
+                {/* お住まい */}
+                {selectedSubject.location && (
+                  <div style={{ fontSize: '14px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>お住まい:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.location}</span>
+                  </div>
                 )}
-
-                {(() => {
-                  try {
-                    const g = typeof selectedSubject.guardians === 'string'
-                      ? JSON.parse(selectedSubject.guardians)
-                      : selectedSubject.guardians;
-                    if (!g) return null;
-                    const labels = [];
-                    if (g.father?.name) labels.push(`父: ${g.father.name}`);
-                    if (g.mother?.name) labels.push(`母: ${g.mother.name}`);
-                    if (labels.length === 0) return null;
-                    return (
-                      <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '14px' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>保護者:</span> {labels.join(' / ')}
-                      </p>
-                    );
-                  } catch (e) { return null; }
-                })()}
               </div>
-
               {selectedSubject.notes && (
                 <p style={{
                   color: 'var(--text-muted)',
@@ -293,7 +279,6 @@ function App() {
                   {selectedSubject.notes}
                 </p>
               )}
-
             </div>
           </div>
 
@@ -311,61 +296,6 @@ function App() {
               <p className="page-subtitle">全体の統計情報やパフォーマンスメトリクスを表示します。</p>
             </div>
             <StatCards />
-          </div>
-        );
-      case 'organization-detail':
-        return (
-          <div style={{ padding: '24px' }}>
-            <h1 className="page-title">{profile?.organization_name}について</h1>
-            <p className="page-subtitle">オーガニゼーション基本情報と施設一覧</p>
-            <div style={{
-              marginTop: '32px',
-              background: 'var(--bg-tertiary)',
-              padding: '24px',
-              borderRadius: '12px',
-              border: '1px solid var(--border-color)'
-            }}>
-              <h3 style={{ marginBottom: '16px' }}>企業情報</h3>
-              <p style={{ color: 'var(--text-secondary)' }}>現在、詳細情報は準備中です。</p>
-            </div>
-            <div style={{ marginTop: '32px' }}>
-              <h3 style={{ marginBottom: '16px' }}>所属施設一覧</h3>
-              <div className="subjects-grid">
-                <div
-                  className="subject-card"
-                  style={{ width: '300px' }}
-                  onClick={() => setSelectedMenu('facility-detail')}
-                >
-                  <div className="subject-info">
-                    <h4 className="subject-name">{profile?.facility_name}</h4>
-                    <span className="subject-meta">メイン拠点</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      case 'facility-detail':
-        return (
-          <div style={{ padding: '24px' }}>
-            <h1 className="page-title">{profile?.facility_name}</h1>
-            <p className="page-subtitle">施設の詳細情報と管理</p>
-            <div style={{
-              marginTop: '32px',
-              background: 'var(--bg-tertiary)',
-              padding: '24px',
-              borderRadius: '12px',
-              border: '1px solid var(--border-color)'
-            }}>
-              <h3 style={{ marginBottom: '16px' }}>施設基本情報</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>施設コード</span>
-                <span>{profile?.facility_id || '---'}</span>
-                <span style={{ color: 'var(--text-secondary)' }}>所属企業</span>
-                <span>{profile?.organization_name}</span>
-              </div>
-              <p style={{ color: 'var(--text-secondary)', marginTop: '24px' }}>現在、詳細情報は準備中です。</p>
-            </div>
           </div>
         );
       case 'children':
@@ -406,9 +336,6 @@ function App() {
     <Layout
       selectedMenuId={selectedMenu}
       onMenuSelect={handleMenuSelect}
-      onSettingsClick={() => setSelectedMenu('settings')}
-      onOrganizationClick={() => setSelectedMenu('organization-detail')}
-      onFacilityClick={() => setSelectedMenu('facility-detail')}
       selectedSubjectId={selectedSubject?.id}
       onSubjectSelect={handleSubjectSelect}
     >

@@ -1061,9 +1061,486 @@ WHERE email = 'test-manager@example.com';
 
 ## 改訂履歴
 
+- 2026-02-02 23:00: Phase 5（Human-in-the-Loop編集システム）設計追加、ギャップ分析完了、2カラム版管理設計確定
 - 2026-01-30 21:30: 認証Phase B完了（フロントエンド認証、RLSポリシー設定）
 - 2026-01-30 20:00: 認証設計を全面改訂（WatchMe全体のユーザー構造を反映、organizations追加）
 - 2026-01-30 19:00: Phase 4を全面改訂（UI 2ページ目追加）、認証設計・実装計画セクション追加
 - 2026-01-18 23:30: 開発計画書から技術仕様書に全面改訂（Phase 0-3完了時点）
 - 2026-01-18 19:00: Phase 2プロンプト改善、DRY原則追加
 - 2026-01-18 初版: Phase 1完了、Phase 2実装中
+
+---
+
+## Phase 5: Human-in-the-Loop 編集システム
+
+### 概要
+
+- **設計日**: 2026-02-02
+- **状態**: 🚧 設計完了、実装待ち
+- **目的**: AI生成した個別支援計画書を、Web管理画面からインライン編集できるシステム
+
+### 設計思想
+
+1. **AI生成値と修正後値の分離保存**: データ品質の検証を可能にするため、2カラム構造で管理
+2. **プレビュー = Excel**: プレビューで見えているものがそのままExcel出力される（完全一致）
+3. **インライン編集**: 各項目に鉛筆アイコン、クリックで編集モード、保存ボタン（青色アクティブ）で確定
+4. **情報不足時の対応**: 「情報が取得できませんでした」をそのまま表示、無理に生成しない
+
+---
+
+### 現状のギャップ分析（2026-02-02時点）
+
+#### A. 現在のUI出力（ハードコード問題）
+
+`frontend/src/pages/SupportPlanCreate.tsx` の「Official Document Header Section」:
+
+| 項目 | 現在の状態 | データソース |
+|------|-----------|-------------|
+| 事業所名 | ⚠️ ハードコード "ヨリドコロ横浜白楽" | 必要: `business_facilities.name` |
+| 計画作成者 | ⚠️ ハードコード "山田太郎" | 必要: `users.name` (role='manager') |
+| 本人の意向 | ⚠️ ハードコード | 必要: `assessment_v1.family_child_intentions.child` |
+| 保護者の意向 | ⚠️ ハードコード | 必要: `assessment_v1.family_child_intentions.parents` |
+| 総合的な支援の方針 | ⚠️ ハードコード | 必要: `assessment_v1.support_policy.child_understanding` |
+| 長期目標 | ⚠️ ハードコード | 必要: `assessment_v1.long_term_goal.goal` |
+| 短期目標 | ⚠️ ハードコード | 必要: `assessment_v1.short_term_goals[0].goal` |
+| 支援の提供時間 | ⚠️ ハードコード リスト | 必要: 新規カラム or 手動入力 |
+| 留意点・備考 | ⚠️ ハードコード リスト | 必要: 新規カラム or 手動入力 |
+| 7列テーブル（Page 2） | ⚠️ 完全ハードコード | 必要: `assessment_v1.support_items[]` |
+| 説明者 | ⚠️ ハードコード | 必要: `users.name` |
+| 説明・同意日 | ⚠️ ハードコード | 必要: 新規カラム `consent_date` |
+
+#### B. assessment_v1に存在する情報
+
+✅ **活用可能（自動転記対象）**:
+
+```json
+{
+  "assessment_v1": {
+    "support_policy": {
+      "child_understanding": "子どもの理解・見立て（200-400文字）",
+      "key_approaches": ["視覚的スケジュール", "事前説明"],
+      "collaboration_notes": "保育園との情報共有"
+    },
+    "family_child_intentions": {
+      "child": "楽しく遊びたい（本人）",
+      "parents": "場面に合った行動を..."
+    },
+    "long_term_goal": {
+      "goal": "視覚的なスケジュールを手掛かりに...",
+      "timeline": "6か月後",
+      "rationale": "本人の視覚優位な特性を活かし..."
+    },
+    "short_term_goals": [
+      {"goal": "...", "timeline": "3か月後"}
+    ],
+    "support_items": [
+      {
+        "category": "運動・感覚",
+        "target": "目標",
+        "methods": ["方法1", "方法2"],
+        "staff": "担当者",
+        "timeline": "6か月後",
+        "priority": 2
+      }
+    ],
+    "family_support": {},
+    "transition_support": {}
+  }
+}
+```
+
+⚠️ **注意**: `support_items[].notes` フィールドが欠落 → Phase 3プロンプト改善必要
+
+#### C. assessment_v1に存在しない情報（別ソースが必要）
+
+| 情報 | データソース | 対応方法 |
+|------|-------------|---------|
+| 事業所名 | `business_facilities.name` | 認証連携（facility_id JOIN） |
+| 計画作成者名 | `users.name` (role='manager') | 認証連携（created_by JOIN） |
+| 障害種別 | `subjects.diagnosis` | ✅ 既存カラム |
+| 障害支援区分 | - | 新規カラム `subjects.support_class` |
+| 保護者氏名 | `subjects.guardian_name` | ✅ 既存カラム（要確認） |
+| 相談支援事業所 | - | 新規カラム `subjects.consultation_agency` |
+| 支援の提供時間 | - | 新規カラム or 手動入力 |
+| 説明・同意日 | - | 新規カラム `business_support_plans.consent_date` |
+
+---
+
+### データベース設計（2カラム版管理）
+
+#### 設計方針
+
+- **2カラム方式**: 各項目ごとに `xxx_ai_generated` と `xxx_user_edited` のペア
+- **表示優先順位**: `user_edited IS NOT NULL ? user_edited : ai_generated`
+- **メリット**: SQL検索が容易、パフォーマンスが良い、シンプル
+
+#### business_support_plans テーブル（全面改訂版）
+
+```sql
+-- マイグレーション: 004_support_plans_versioning.sql
+
+-- 既存テーブルを削除して再作成（開発中のためデータ保存不要）
+DROP TABLE IF EXISTS business_support_plans CASCADE;
+
+CREATE TABLE business_support_plans (
+    -- 基本情報
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    facility_id UUID NOT NULL REFERENCES business_facilities(id),
+    subject_id UUID REFERENCES subjects(id),
+    title TEXT,
+    plan_number TEXT,
+    status TEXT DEFAULT 'draft',
+    created_by UUID REFERENCES users(user_id),
+    
+    -- タイムスタンプ
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- モニタリング期間
+    monitoring_start DATE,
+    monitoring_end DATE,
+    
+    -- ===== 2カラム版管理フィールド =====
+    
+    -- 本人の意向
+    child_intention_ai_generated TEXT,
+    child_intention_user_edited TEXT,
+    
+    -- 保護者の意向
+    family_intention_ai_generated TEXT,
+    family_intention_user_edited TEXT,
+    
+    -- 総合的な支援の方針（子どもの理解・見立て）
+    general_policy_ai_generated TEXT,
+    general_policy_user_edited TEXT,
+    
+    -- 主要アプローチ（JSONBで配列）
+    key_approaches_ai_generated JSONB,
+    key_approaches_user_edited JSONB,
+    
+    -- 連携事項
+    collaboration_notes_ai_generated TEXT,
+    collaboration_notes_user_edited TEXT,
+    
+    -- 長期目標
+    long_term_goal_ai_generated TEXT,
+    long_term_goal_user_edited TEXT,
+    long_term_period_ai_generated TEXT DEFAULT '1年',
+    long_term_period_user_edited TEXT,
+    long_term_rationale_ai_generated TEXT,
+    long_term_rationale_user_edited TEXT,
+    
+    -- 短期目標（JSONBで配列）
+    short_term_goals_ai_generated JSONB,
+    short_term_goals_user_edited JSONB,
+    
+    -- 支援項目（7列テーブル、JSONBで配列）
+    support_items_ai_generated JSONB,
+    support_items_user_edited JSONB,
+    
+    -- 家族支援
+    family_support_ai_generated JSONB,
+    family_support_user_edited JSONB,
+    
+    -- 移行支援・地域連携
+    transition_support_ai_generated JSONB,
+    transition_support_user_edited JSONB,
+    
+    -- ===== 手動入力専用フィールド =====
+    
+    -- 支援の標準的な提供時間（手動入力）
+    service_schedule TEXT,
+    
+    -- 留意点・備考（手動入力）
+    notes TEXT,
+    
+    -- 説明・同意
+    explainer_name TEXT,
+    consent_date DATE,
+    guardian_signature TEXT
+);
+
+-- インデックス
+CREATE INDEX idx_support_plans_facility ON business_support_plans(facility_id);
+CREATE INDEX idx_support_plans_subject ON business_support_plans(subject_id);
+CREATE INDEX idx_support_plans_created_by ON business_support_plans(created_by);
+
+-- Updated_at トリガー
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_support_plans_updated_at
+    BEFORE UPDATE ON business_support_plans
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+```
+
+#### subjects テーブル拡張
+
+```sql
+-- マイグレーション: 005_subjects_extension.sql
+
+ALTER TABLE subjects
+ADD COLUMN IF NOT EXISTS support_class TEXT,       -- 障害支援区分（例: 区分3）
+ADD COLUMN IF NOT EXISTS consultation_agency TEXT; -- 相談支援事業所名
+```
+
+---
+
+### 自動転記マッピング
+
+#### assessment_v1 → business_support_plans
+
+| assessment_v1 パス | business_support_plans カラム |
+|-------------------|------------------------------|
+| `family_child_intentions.child` | `child_intention_ai_generated` |
+| `family_child_intentions.parents` | `family_intention_ai_generated` |
+| `support_policy.child_understanding` | `general_policy_ai_generated` |
+| `support_policy.key_approaches` | `key_approaches_ai_generated` |
+| `support_policy.collaboration_notes` | `collaboration_notes_ai_generated` |
+| `long_term_goal.goal` | `long_term_goal_ai_generated` |
+| `long_term_goal.timeline` | `long_term_period_ai_generated` |
+| `long_term_goal.rationale` | `long_term_rationale_ai_generated` |
+| `short_term_goals` | `short_term_goals_ai_generated` |
+| `support_items` | `support_items_ai_generated` |
+| `family_support` | `family_support_ai_generated` |
+| `transition_support` | `transition_support_ai_generated` |
+
+---
+
+### 実装ステップ（確定版）
+
+#### Step 1: DBマイグレーション作成
+
+**ファイル**: `backend/migrations/004_support_plans_versioning.sql`
+
+**作業内容**:
+- business_support_plans テーブルを2カラム構造に全面改訂
+- 既存データは削除OK（開発中）
+
+**テスト方法**:
+```sql
+-- Supabase SQL Editorで実行後、確認クエリ
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'business_support_plans';
+```
+
+#### Step 2: Phase 3 プロンプト改善
+
+**ファイル**: `backend/services/prompts.py` の `build_assessment_prompt()`
+
+**変更内容**:
+1. `support_items[].notes` フィールドを追加生成
+2. 情報不足時は「情報が取得できませんでした」を返す指示追加
+
+**テスト方法**:
+```bash
+# 既存セッションで再実行
+curl -X POST https://api.hey-watch.me/business/api/assess \
+  -H "X-API-Token: watchme-b2b-poc-2025" \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "a522ab30-77ca-4599-81b8-48bc8deca835"}'
+
+# 結果確認
+SELECT assessment_result_v1->'assessment_v1'->'support_items'->0->>'notes'
+FROM business_interview_sessions
+WHERE id = 'a522ab30-77ca-4599-81b8-48bc8deca835';
+```
+
+#### Step 3: 自動転記API実装
+
+**ファイル**: `backend/app.py`
+
+**エンドポイント**: `POST /api/support-plans/{plan_id}/sync-from-assessment`
+
+**処理内容**:
+1. plan_idからsupport_planを取得
+2. 関連するsession_idからassessment_v1を取得
+3. マッピングテーブルに従って `xxx_ai_generated` カラムに保存
+
+**テスト方法**:
+```bash
+curl -X POST http://localhost:8052/api/support-plans/{plan_id}/sync-from-assessment \
+  -H "X-API-Token: watchme-b2b-poc-2025"
+
+# 確認
+SELECT child_intention_ai_generated, general_policy_ai_generated
+FROM business_support_plans WHERE id = '{plan_id}';
+```
+
+#### Step 4: EditableField コンポーネント作成
+
+**ファイル**: `frontend/src/components/EditableField.tsx`
+
+**機能**:
+- 表示モード: 値 + 鉛筆アイコン
+- 編集モード: 入力UI + 保存ボタン（青色、未保存時アクティブ）
+- 型別UI:
+  - `text`: 1行テキスト入力
+  - `textarea`: 複数行テキスト入力
+  - `date`: 日付ピッカー
+  - `list`: 箇条書き編集（配列）
+- 保存: EnterキーまたはSaveボタンでPUT `/api/support-plans/{id}` 呼び出し
+
+**Props**:
+```typescript
+interface EditableFieldProps {
+  planId: string;
+  field: string;           // カラム名（xxx_user_edited）
+  value: string | null;    // 現在値
+  aiValue: string | null;  // AI生成値（フォールバック用）
+  type: 'text' | 'textarea' | 'date' | 'list';
+  onSave: (field: string, value: string) => Promise<void>;
+}
+```
+
+**テスト方法**:
+- 鉛筆アイコンクリック → 編集モードに切り替わる
+- 値を変更 → 保存ボタンがアクティブ（青色）になる
+- Enter/保存ボタン → API呼び出し、値が更新される
+- ページリロード → 更新された値が表示される
+
+#### Step 5: EditableTableRow コンポーネント作成
+
+**ファイル**: `frontend/src/components/EditableTableRow.tsx`
+
+**機能**:
+- 7列テーブルの1行を管理
+- 行編集ボタン → 7列全てが編集モードに
+- 保存ボタン1つで行全体を更新
+- `support_items_user_edited` の該当indexを更新
+
+**構造**:
+```typescript
+interface SupportItem {
+  category: string;      // 項目（5領域）
+  target: string;        // 具体的な到達目標
+  methods: string[];     // 具体的な支援内容
+  timeline: string;      // 達成時期
+  staff: string;         // 担当者・提供期間
+  notes: string;         // 留意事項
+  priority: number;      // 優先順位
+}
+```
+
+**テスト方法**:
+- 行編集ボタンクリック → 7列全てが入力可能に
+- 各列の値を変更
+- 保存ボタン → 行全体がAPI更新
+- ページリロード → 更新された行が表示される
+
+#### Step 6: UI全面改修
+
+**ファイル**: `frontend/src/pages/SupportPlanCreate.tsx`
+
+**作業内容**:
+1. ハードコードされた全項目を削除
+2. `plan.xxx_user_edited ?? plan.xxx_ai_generated` でデータ取得
+3. 各項目をEditableFieldでラップ
+4. 7列テーブルをEditableTableRowでラップ
+
+**テスト方法**:
+- ページ表示 → AI生成値が表示される（ハードコードなし）
+- 任意の項目を編集 → 保存成功
+- ページリロード → 編集した値が保持されている
+
+#### Step 7: Excel出力統一
+
+**ファイル**: `backend/services/excel_generator.py`
+
+**変更内容**:
+- assessment_v1から直接取得 → business_support_plansから取得に変更
+- 取得ロジック: `user_edited if user_edited else ai_generated`
+- プレビューと完全一致した出力
+
+**テスト方法**:
+- UIで編集した値がある状態でExcelダウンロード
+- Excelの内容がUIプレビューと一致していることを確認
+
+#### Step 8: 認証連携
+
+**ファイル**: 
+- `frontend/src/components/RecordingSession.tsx`
+- `backend/app.py`
+
+**作業内容**:
+1. RecordingSessionでAuthContextからuser_idを取得しstaff_idとして送信
+2. business_interview_sessions.staff_idに記録
+3. business_support_plans.created_byに設定
+
+**テスト方法**:
+- ログイン状態で録音実行
+- business_interview_sessions.staff_idにユーザーIDが記録されている
+- 計画作成時にcreated_byが設定されている
+
+---
+
+### テスト計画
+
+#### 単体テスト
+
+| テスト項目 | 期待結果 | 確認方法 |
+|-----------|---------|---------|
+| DBマイグレーション | テーブルが2カラム構造で作成 | `\d business_support_plans` |
+| 自動転記API | assessment_v1がai_generatedに保存 | SELECTクエリ |
+| EditableField表示 | 値 + 鉛筆アイコンが表示 | 目視確認 |
+| EditableField編集 | 入力UI + 青色保存ボタン | 目視確認 |
+| EditableField保存 | user_editedカラムが更新 | SELECTクエリ |
+| EditableTableRow | 7列同時編集、1ボタンで保存 | 目視確認 |
+
+#### 統合テスト
+
+| シナリオ | 手順 | 期待結果 |
+|---------|------|---------|
+| E2E: 録音→計画生成→編集→Excel | 1. 録音アップロード<br>2. Phase 0-3実行<br>3. 自動転記API実行<br>4. UI表示確認<br>5. 任意項目を編集<br>6. Excelダウンロード | ExcelがUIと一致 |
+| 情報不足時 | 1. 情報が少ない録音で計画生成<br>2. UI表示確認 | 「情報が取得できませんでした」表示 |
+| 編集→リロード | 1. 項目を編集<br>2. ページリロード | 編集した値が保持 |
+
+#### 回帰テスト
+
+| 確認項目 | 期待結果 |
+|---------|---------|
+| 既存の録音アップロード | 正常動作 |
+| 既存のPhase 0-3パイプライン | 正常動作 |
+| 既存のExcel出力 | 正常動作（改修後のロジック） |
+
+---
+
+### 標準テストデータ
+
+**session_id**: `a522ab30-77ca-4599-81b8-48bc8deca835`
+
+- 対象: 松本正弦（5歳、ASD、境界知能 IQ81、白幡幼稚園）
+- 文字起こし: 15,255語
+- 参加者: 父・母
+- 録音日: 2026-01-13
+- Phase 0-3: ✅ 完了済み
+
+---
+
+### 実装優先順位
+
+1. **Step 1: DBマイグレーション** - 基盤整備（他のStep依存）
+2. **Step 2: プロンプト改善** - 独立して実行可能
+3. **Step 3: 自動転記API** - Step 1完了後
+4. **Step 4-5: コンポーネント作成** - 並行して実行可能
+5. **Step 6: UI改修** - Step 3-5完了後
+6. **Step 7: Excel統一** - Step 6完了後
+7. **Step 8: 認証連携** - 独立して実行可能
+
+---
+
+### 未実装・今後の課題
+
+| 項目 | 優先度 | 備考 |
+|------|--------|------|
+| 別表（週間スケジュール）UI | 低 | メイン2ページ完成後に着手 |
+| バックエンド認証（Phase C） | 中 | JWT検証ミドルウェア |
+| 変更履歴の可視化 | 低 | 将来的な品質検証用 |
+| 一括編集モード | 低 | 複数項目を同時に編集 |
