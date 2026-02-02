@@ -11,15 +11,23 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 
 
-def generate_support_plan_excel(session_data: dict) -> BytesIO:
+def generate_support_plan_excel(
+    session_data: dict,
+    plan_id: str = None
+) -> BytesIO:
     """
     Generate Individual Support Plan Excel file (2 sheets)
 
     Args:
         session_data: Dict containing assessment_result_v1 and child profile
+        plan_id: Optional business_support_plans ID for user-edited data
 
     Returns:
         BytesIO: Excel file binary data
+
+    Data Priority:
+        1. If plan_id provided -> fetch from business_support_plans (2-column logic)
+        2. If plan_id not provided -> fallback to assessment_v1 (backward compatibility)
     """
     wb = Workbook()
 
@@ -33,12 +41,36 @@ def generate_support_plan_excel(session_data: dict) -> BytesIO:
     if not assessment_v1:
         raise ValueError("assessment_v1 data not found")
 
+    # Fetch plan data if plan_id provided
+    plan_data = None
+    if plan_id:
+        from supabase import create_client
+        import os
+
+        try:
+            supabase = create_client(
+                os.getenv("SUPABASE_URL"),
+                os.getenv("SUPABASE_ANON_KEY")
+            )
+
+            result = supabase.table('business_support_plans')\
+                .select('*')\
+                .eq('id', plan_id)\
+                .single()\
+                .execute()
+
+            if result.data:
+                plan_data = result.data
+        except Exception as e:
+            print(f"Warning: Failed to fetch plan data: {str(e)}")
+            # Continue with assessment_v1 only
+
     # === Sheet 1: Main Support Plan ===
-    generate_main_support_plan(ws1, assessment_v1, session_data)
+    generate_main_support_plan(ws1, assessment_v1, session_data, plan_data)
 
     # === Sheet 2: Support Details (Page 2) ===
     ws2 = wb.create_sheet(title="個別支援計画書（2/2ページ）")
-    generate_support_details_page2(ws2, assessment_v1, session_data)
+    generate_support_details_page2(ws2, assessment_v1, session_data, plan_data)
 
     # === Sheet 3: Support Schedule (Appendix) ===
     ws3 = wb.create_sheet(title="別紙1-2（個別支援計画書別表）")
@@ -52,8 +84,21 @@ def generate_support_plan_excel(session_data: dict) -> BytesIO:
     return output
 
 
-def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = None):
-    """Generate main support plan sheet"""
+def generate_main_support_plan(
+    ws,
+    assessment_v1: dict,
+    session_data: dict = None,
+    plan_data: dict = None
+):
+    """
+    Generate main support plan sheet
+
+    Args:
+        ws: Worksheet object
+        assessment_v1: Assessment data (fallback)
+        session_data: Session data (child profile, etc.)
+        plan_data: Optional business_support_plans record (2-column structure)
+    """
 
     # Set column widths
     ws.column_dimensions['A'].width = 15
@@ -113,7 +158,22 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
     current_row += 2
 
     # Family/Child Intentions
-    intentions = assessment_v1.get('family_child_intentions', {})
+    if plan_data:
+        child_intention = get_field_value(
+            plan_data,
+            'child_intention',
+            assessment_v1.get('family_child_intentions', {}).get('child')
+        )
+        family_intention = get_field_value(
+            plan_data,
+            'family_intention',
+            assessment_v1.get('family_child_intentions', {}).get('parents')
+        )
+    else:
+        intentions = assessment_v1.get('family_child_intentions', {})
+        child_intention = intentions.get('child')
+        family_intention = intentions.get('parents')
+
     ws.merge_cells(f'A{current_row}:F{current_row}')
     cell = ws[f'A{current_row}']
     cell.value = '利用児及び家族の生活に対する意向'
@@ -125,10 +185,10 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
     ws.merge_cells(f'A{current_row}:F{current_row}')
     cell = ws[f'A{current_row}']
     intention_text = []
-    if intentions.get('child'):
-        intention_text.append(f"• {intentions['child']}（本人）")
-    if intentions.get('parents'):
-        intention_text.append(f"• {intentions['parents']}（保護者）")
+    if child_intention:
+        intention_text.append(f"• {child_intention}（本人）")
+    if family_intention:
+        intention_text.append(f"• {family_intention}（保護者）")
     cell.value = '\n'.join(intention_text) if intention_text else ''
     cell.font = normal_font
     cell.alignment = left_align
@@ -137,7 +197,15 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
     current_row += 2
 
     # Support Policy
-    support_policy = assessment_v1.get('support_policy', {})
+    if plan_data:
+        general_policy = get_field_value(
+            plan_data,
+            'general_policy',
+            assessment_v1.get('support_policy', {}).get('child_understanding')
+        )
+    else:
+        general_policy = assessment_v1.get('support_policy', {}).get('child_understanding', '')
+
     ws.merge_cells(f'A{current_row}:F{current_row}')
     cell = ws[f'A{current_row}']
     cell.value = '総合的な支援の方針'
@@ -148,7 +216,7 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
 
     ws.merge_cells(f'A{current_row}:F{current_row}')
     cell = ws[f'A{current_row}']
-    cell.value = support_policy.get('child_understanding', '')
+    cell.value = general_policy if general_policy else ''
     cell.font = normal_font
     cell.alignment = left_align
     cell.border = thin_border
@@ -156,7 +224,15 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
     current_row += 2
 
     # Long-term Goal
-    long_term_goal = assessment_v1.get('long_term_goal', {})
+    if plan_data:
+        lt_goal = get_field_value(
+            plan_data,
+            'long_term_goal',
+            assessment_v1.get('long_term_goal', {}).get('goal')
+        )
+    else:
+        lt_goal = assessment_v1.get('long_term_goal', {}).get('goal', '')
+
     ws.merge_cells(f'A{current_row}:F{current_row}')
     cell = ws[f'A{current_row}']
     cell.value = '長期目標（内容・期間等）'
@@ -167,7 +243,7 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
 
     ws.merge_cells(f'A{current_row}:F{current_row}')
     cell = ws[f'A{current_row}']
-    cell.value = long_term_goal.get('goal', '')
+    cell.value = lt_goal if lt_goal else ''
     cell.font = normal_font
     cell.alignment = left_align
     cell.border = thin_border
@@ -175,7 +251,19 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
     current_row += 2
 
     # Short-term Goals
-    short_term_goals = assessment_v1.get('short_term_goals', [])
+    if plan_data:
+        short_term_goals = get_field_value(
+            plan_data,
+            'short_term_goals',
+            assessment_v1.get('short_term_goals', [])
+        )
+    else:
+        short_term_goals = assessment_v1.get('short_term_goals', [])
+
+    # JSONB array safety check
+    if not isinstance(short_term_goals, list):
+        short_term_goals = []
+
     ws.merge_cells(f'A{current_row}:F{current_row}')
     cell = ws[f'A{current_row}']
     cell.value = '短期目標（内容・期間等）'
@@ -211,7 +299,17 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
     current_row += 1
 
     # Support Items (5 domains)
-    support_items = assessment_v1.get('support_items', [])
+    if plan_data:
+        support_items = get_field_value(
+            plan_data,
+            'support_items',
+            assessment_v1.get('support_items', [])
+        )
+    else:
+        support_items = assessment_v1.get('support_items', [])
+
+    if not isinstance(support_items, list):
+        support_items = []
 
     for item in support_items:
         start_row = current_row
@@ -258,7 +356,18 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
         current_row += 1
 
     # Family Support
-    family_support = assessment_v1.get('family_support', {})
+    if plan_data:
+        family_support = get_field_value(
+            plan_data,
+            'family_support',
+            assessment_v1.get('family_support', {})
+        )
+    else:
+        family_support = assessment_v1.get('family_support', {})
+
+    if not isinstance(family_support, dict):
+        family_support = {}
+
     if family_support:
         ws[f'A{current_row}'] = '家族支援'
         ws[f'A{current_row}'].font = small_font
@@ -294,7 +403,18 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
         current_row += 1
 
     # Transition Support
-    transition_support = assessment_v1.get('transition_support', {})
+    if plan_data:
+        transition_support = get_field_value(
+            plan_data,
+            'transition_support',
+            assessment_v1.get('transition_support', {})
+        )
+    else:
+        transition_support = assessment_v1.get('transition_support', {})
+
+    if not isinstance(transition_support, dict):
+        transition_support = {}
+
     if transition_support:
         ws[f'A{current_row}'] = '移行支援'
         ws[f'A{current_row}'].font = small_font
@@ -350,8 +470,21 @@ def generate_main_support_plan(ws, assessment_v1: dict, session_data: dict = Non
     ws[f'D{current_row}'].font = small_font
 
 
-def generate_support_details_page2(ws, assessment_v1: dict, session_data: dict = None):
-    """Generate support details page (2/2) with 7-column table"""
+def generate_support_details_page2(
+    ws,
+    assessment_v1: dict,
+    session_data: dict = None,
+    plan_data: dict = None
+):
+    """
+    Generate support details page (2/2) with 7-column table
+
+    Args:
+        ws: Worksheet object
+        assessment_v1: Assessment data (fallback)
+        session_data: Session data (child profile, etc.)
+        plan_data: Optional business_support_plans record (2-column structure)
+    """
 
     # Set column widths
     ws.column_dimensions['A'].width = 12   # 項目
@@ -432,34 +565,53 @@ def generate_support_details_page2(ws, assessment_v1: dict, session_data: dict =
     ws.row_dimensions[current_row].height = 40
     current_row += 1
 
-    # Data rows - 支援項目データ
-    support_items = [
-        {
-            '項目': '本人支援',
-            '具体的な到達目標': '友達との関わりの中で、適切な距離、適切なコミュニケーションを意識しながらやりとりを楽しむ',
-            '具体的な支援内容・5領域との関係性等': '小集団での遊びや活動を行う際、必要に応じて事前に人との距離はどれぐらいがいいかなどと具体的に伝える。',
-            '達成時期': '6ヶ月',
-            '提供期間': 'よりどころ、横浜白楽全職員',
-            '留意事項': '専門的支援実地加算については別紙参照',
-            '優先順位': '1'
-        },
-        # Additional rows can be added here
-    ]
+    # Data rows - Extract support items with 2-column priority logic
+    if plan_data:
+        support_items_raw = get_field_value(
+            plan_data,
+            'support_items',
+            assessment_v1.get('support_items', [])
+        )
+    else:
+        support_items_raw = assessment_v1.get('support_items', [])
 
-    # Try to extract support items from assessment_v1
-    goals = assessment_v1.get('support_goals', [])
-    if goals:
-        support_items = []
-        for idx, goal in enumerate(goals, start=1):
-            support_items.append({
-                '項目': '本人支援',
-                '具体的な到達目標': goal.get('goal', ''),
-                '具体的な支援内容・5領域との関係性等': goal.get('methods', ''),
-                '達成時期': '6ヶ月',
-                '提供期間': 'よりどころ、横浜白楽全職員',
-                '留意事項': goal.get('considerations', '専門的支援実地加算については別紙参照'),
-                '優先順位': str(idx)
-            })
+    if not isinstance(support_items_raw, list):
+        support_items_raw = []
+
+    # Convert to 7-column table structure
+    support_items = []
+    for idx, item in enumerate(support_items_raw, start=1):
+        # Extract methods array and join with line breaks
+        methods = item.get('methods', [])
+        if isinstance(methods, list):
+            methods_text = '\n'.join([f"• {method}" for method in methods])
+        else:
+            methods_text = str(methods) if methods else ''
+
+        support_items.append({
+            '項目': item.get('category', '本人支援'),
+            '具体的な到達目標': item.get('target', ''),
+            '具体的な支援内容・5領域との関係性等': methods_text,
+            '達成時期': item.get('timeline', '6ヶ月'),
+            '提供期間': item.get('staff', '児童発達支援管理責任者、全職員'),
+            '留意事項': item.get('notes', ''),
+            '優先順位': str(item.get('priority', idx))
+        })
+
+    # If no support items, add empty rows for manual entry
+    if not support_items:
+        support_items = [
+            {
+                '項目': '',
+                '具体的な到達目標': '',
+                '具体的な支援内容・5領域との関係性等': '',
+                '達成時期': '',
+                '提供期間': '',
+                '留意事項': '',
+                '優先順位': ''
+            }
+            for _ in range(5)
+        ]
 
     # Write data rows
     for item in support_items:
@@ -670,3 +822,33 @@ def extract_assessment_v1(assessment_result: dict) -> dict:
                 pass
 
     return {}
+
+
+def get_field_value(plan: dict, field_prefix: str, fallback=None):
+    """
+    Get field value with 2-column priority logic
+
+    Priority:
+    1. {field_prefix}_user_edited (if not null)
+    2. {field_prefix}_ai_generated
+    3. fallback (if provided)
+
+    Args:
+        plan: business_support_plans record
+        field_prefix: Field name without suffix (e.g., "child_intention")
+        fallback: Optional fallback value
+
+    Returns:
+        Field value (str, list, dict, or None)
+    """
+    if not plan:
+        return fallback
+
+    user_edited = plan.get(f'{field_prefix}_user_edited')
+    ai_generated = plan.get(f'{field_prefix}_ai_generated')
+
+    if user_edited is not None:
+        return user_edited
+    if ai_generated is not None:
+        return ai_generated
+    return fallback

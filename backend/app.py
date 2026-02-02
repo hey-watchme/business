@@ -7,7 +7,7 @@ from typing import Optional
 
 import boto3
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Response
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -1337,6 +1337,7 @@ async def get_subject(
 @app.get("/api/sessions/{session_id}/download-excel")
 async def download_support_plan_excel(
     session_id: str,
+    plan_id: Optional[str] = Query(None, description="Optional support plan ID for user-edited data"),
     x_api_token: str = Header(None, alias="X-API-Token")
 ):
     """
@@ -1344,10 +1345,15 @@ async def download_support_plan_excel(
 
     Args:
         session_id: Session ID
+        plan_id: Optional business_support_plans ID for user-edited data
         x_api_token: API token
 
     Returns:
         Excel file (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
+
+    Data Source Priority:
+        1. If plan_id provided -> business_support_plans (with user edits)
+        2. If plan_id not provided -> assessment_v1 (AI-generated only)
     """
     # Validate token
     if x_api_token != API_TOKEN:
@@ -1376,6 +1382,10 @@ async def download_support_plan_excel(
                 detail="Assessment result not found. Please run /api/assess first."
             )
 
+        # If plan_id not provided, try to get from session
+        if not plan_id:
+            plan_id = session_data.get('support_plan_id')
+
         # Get subject (child) information
         subject_id = session_data.get('subject_id')
         if subject_id:
@@ -1394,10 +1404,10 @@ async def download_support_plan_excel(
                 print(f"Failed to fetch subject info: {str(e)}")
                 # Continue without subject info
 
-        # Generate Excel
+        # Generate Excel with plan_id
         from services.excel_generator import generate_support_plan_excel
 
-        excel_bytes = generate_support_plan_excel(session_data)
+        excel_bytes = generate_support_plan_excel(session_data, plan_id=plan_id)
 
         # Return Excel file
         return Response(
