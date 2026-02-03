@@ -575,6 +575,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                     作成日: {formatDate(plan.created_at)}
                   </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                    プランID: {plan.id}
+                  </span>
                 </div>
               </div>
               <div className="session-actions">
@@ -1025,18 +1028,24 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
               </div>
             </div>
 
-            {/* Parent Meeting Section (Integrated Latest Session) */}
+            {/* Assessment Section (Integrated Latest Session) */}
             <div className="meeting-section">
               <div className="meeting-header">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
-                <h4 className="meeting-title">保護者ミーティング</h4>
+                <h4 className="meeting-title">アセスメント</h4>
               </div>
 
               {plan.sessions && plan.sessions.length > 0 ? (
                 <div className="meeting-content">
                   <div className="meeting-info-grid">
+                    <div className="meta-item" style={{ gridColumn: '1 / -1' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 7V5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V7M3 7L12 13L21 7M3 7V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <span style={{ fontFamily: 'monospace', fontSize: '11px' }}>セッションID: {plan.sessions[0].id}</span>
+                    </div>
                     <div className="meta-item">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -1048,15 +1057,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </div>
                     <div className="meta-item">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                      </svg>
-                      参加者: 保護者・スタッフ
-                    </div>
-                    <div className="meta-item">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
                         <polyline points="12 6 12 12 16 14"></polyline>
                       </svg>
@@ -1065,6 +1065,15 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     <div className="meta-item">
                       {getStatusIcon(plan.sessions[0].status)}
                       ステータス: {getStatusLabel(plan.sessions[0].status)}
+                    </div>
+                    <div className="meta-item">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
+                      参加者: 未設定（保護者情報）、未設定（スタッフ）
                     </div>
                   </div>
 
@@ -1081,7 +1090,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 </div>
               ) : (
                 <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                  ミーティングデータが紐付けられていません
+                  アセスメントデータが紐付けられていません
                 </div>
               )}
             </div>
@@ -1096,7 +1105,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
               ) : (
                 <div style={{ padding: '24px', background: 'rgba(124, 77, 255, 0.03)', borderRadius: '12px', border: '1px dashed var(--border-color)', textAlign: 'center' }}>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: 0 }}>
-                    ミーティング分析を完了すると、ここに支援計画案が表示されます。
+                    アセスメント分析を完了すると、ここに支援計画案が表示されます。
                   </p>
                 </div>
               )}

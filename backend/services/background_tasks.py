@@ -122,9 +122,9 @@ def analyze_background(
         print(f"[Background] Starting analysis for session: {session_id}")
         start_time = time.time()
 
-        # Get session and related data from DB (single query with joins)
+        # Get session from DB
         result = supabase.table('business_interview_sessions')\
-            .select('*, support_plan:support_plan_id(*, subject:subject_id(*))')\
+            .select('*')\
             .eq('id', session_id)\
             .single()\
             .execute()
@@ -146,22 +146,33 @@ def analyze_background(
 
         # Initialize variables with default values
         subject = None
-        attendees = session.get('attendees', {})
+        attendees = session.get('attendees') or {}  # Handle None from DB
         age_text = "不明"
 
-        # Extract subject info if available
-        if session.get('support_plan') and session['support_plan'].get('subject'):
-            subject = session['support_plan']['subject']
+        # Get subject info directly from session's subject_id
+        subject_id = session.get('subject_id')
+        if subject_id:
+            try:
+                subject_result = supabase.table('subjects')\
+                    .select('*')\
+                    .eq('subject_id', subject_id)\
+                    .execute()
 
-            # Calculate age from birth_date if available
-            if subject.get('birth_date'):
-                try:
-                    birth_date = datetime.fromisoformat(subject['birth_date'].replace('Z', '+00:00'))
-                    age = (datetime.now() - birth_date).days // 365
-                    age_text = f"{age}歳"
-                except (ValueError, TypeError, KeyError) as e:
-                    print(f"[Warning] Failed to calculate age: {e}")
-                    age_text = "不明"
+                if subject_result and subject_result.data and len(subject_result.data) > 0:
+                    subject = subject_result.data[0]
+
+                    # Calculate age from birth_date if available
+                    if subject.get('birth_date'):
+                        try:
+                            birth_date = datetime.fromisoformat(subject['birth_date'].replace('Z', '+00:00'))
+                            age = (datetime.now() - birth_date).days // 365
+                            age_text = f"{age}歳"
+                        except (ValueError, TypeError, KeyError) as e:
+                            print(f"[Warning] Failed to calculate age: {e}")
+                            age_text = "不明"
+            except Exception as e:
+                print(f"[Warning] Failed to fetch subject: {e}")
+                # Continue with default values
 
         # Generate extraction_v1 prompt with pre-filled information
         prompt = f"""あなたは児童発達支援のヒアリング記録を整理するアシスタントです。
@@ -313,7 +324,10 @@ def analyze_background(
             print(f"[Background] SQS message sent for session: {session_id}")
 
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         print(f"[Background] ERROR in analysis: {str(e)}")
+        print(f"[Background] Traceback:\n{error_details}")
         # Update DB with error
         if supabase:
             supabase.table('business_interview_sessions').update({
