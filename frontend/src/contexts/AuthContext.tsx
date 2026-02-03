@@ -10,7 +10,6 @@ interface UserProfile {
   facility_id: string | null;
   facility_name: string | null;
   organization_name: string | null;
-  avatar_url: string | null;
 }
 
 interface AuthContextType {
@@ -38,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('fetchProfile: querying users table...');
       const { data, error } = await supabase
         .from('users')
-        .select('user_id, name, email, role, facility_id, avatar_url')
+        .select('user_id, name, email, role, facility_id')
         .eq('user_id', userId)
         .single();
 
@@ -46,12 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('Profile fetch error:', error);
         return null;
       }
-
+      
       console.log('fetchProfile: got data', data);
-
+      
       let facilityName: string | null = null;
       let organizationName: string | null = null;
-
+      
       // 事業所名・組織名を取得
       if (data.facility_id) {
         const { data: facilityData } = await supabase
@@ -59,22 +58,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .select('name, organization_id')
           .eq('id', data.facility_id)
           .single();
-
+        
         if (facilityData) {
           facilityName = facilityData.name;
-
+          
           if (facilityData.organization_id) {
             const { data: orgData } = await supabase
               .from('business_organizations')
               .select('name')
               .eq('id', facilityData.organization_id)
               .single();
-
+            
             organizationName = orgData?.name ?? null;
           }
         }
       }
-
+      
       return {
         user_id: data.user_id,
         name: data.name,
@@ -83,7 +82,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         facility_id: data.facility_id,
         facility_name: facilityName,
         organization_name: organizationName,
-        avatar_url: data.avatar_url,
       } as UserProfile;
     } catch (err) {
       console.error('Profile fetch exception:', err);
@@ -93,15 +91,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     console.log('AuthContext: setting up onAuthStateChange');
-
+    
     // onAuthStateChangeは初期状態も含めてイベントを発火する
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('onAuthStateChange:', event, !!session);
-
+        
         setSession(session);
         setUser(session?.user ?? null);
-
+        
         if (session?.user) {
           // 非同期でプロフィール取得（loadingは先にfalseにする）
           setProfile({
@@ -112,10 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             facility_id: 'temp',  // 仮設定
             facility_name: null,
             organization_name: null,
-            avatar_url: null,
           });
           setLoading(false);
-
+          
           // バックグラウンドでプロフィール取得を試みる
           fetchProfile(session.user.id).then((userProfile) => {
             if (userProfile) {

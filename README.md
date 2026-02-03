@@ -163,25 +163,6 @@ ASR_PROVIDER=deepgram
 
 詳細: [lambda/audio-upload-handler/README.md](./lambda/audio-upload-handler/README.md)
 
-## 🔧 開発状況
-
-**進捗**: 約75% (Phase 0-3完了、Phase 4未実装)
-
-**✅ 完了機能:**
-- Phase 0: 音声アップロード・自動文字起こし（Speechmatics、話者分離）
-- Phase 1: 事実抽出（11カテゴリ、約5-7秒）
-- Phase 2: 事実整理（支援計画用に再分類、約6-7秒）
-- Phase 3: 個別支援計画生成（5領域の支援項目、約17秒）
-- イベント駆動型完全自動化（Lambda）
-- B2B UI/UX 改善（ヘッダーからの組織・施設ナビゲーション、CSS設計の整理）
-- セキュリティ強化（APIレベルでの施設IDフィルタリングの厳格化）
-- DRY原則に基づく統一実装パターン
-
-**🚧 未実装:**
-- Phase 4: PDF生成（リタリコ様式）
-
-詳細は **[個別支援計画生成システム 技術仕様書](./docs/INDIVIDUAL_SUPPORT_PLAN_SPEC.md)** 参照
-
 ---
 
 ## 💻 ローカル開発環境の起動方法

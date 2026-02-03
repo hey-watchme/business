@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import RecordingSetup from '../components/RecordingSetup';
 import RecordingSession from '../components/RecordingSession';
-import SupportPlanModal from '../components/SupportPlanModal';
 import Phase1Display from '../components/Phase1Display';
 import Phase2Display from '../components/Phase2Display';
 import Phase3Display from '../components/Phase3Display';
-import EditableCell from '../components/EditableCell';
-import { api, type InterviewSession, type SupportPlan } from '../api/client';
+import EditableField from '../components/EditableField';
+import EditableTableRow, { type SupportItem } from '../components/EditableTableRow';
+import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate } from '../api/client';
 import { calculateAge } from '../utils/date';
 import './SupportPlanCreate.css';
 
@@ -23,9 +23,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [supportPlans, setSupportPlans] = useState<SupportPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<SupportPlan | null>(null);
   const [planSessions, setPlanSessions] = useState<InterviewSession[]>([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     fetchSupportPlans();
@@ -75,6 +76,122 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       setPlanSessions([]);
     }
   };
+
+  // ===== 2-column structure helpers and handlers =====
+
+  // Save handler for single field
+  const handleFieldSave = useCallback(async (planId: string, field: string, value: string) => {
+    try {
+      const updateData: SupportPlanUpdate = { [field]: value };
+      const updated = await api.updateSupportPlan(planId, updateData);
+
+      // Update local state
+      setSupportPlans(prev => prev.map(p => p.id === updated.id ? updated : p));
+      if (selectedPlan?.id === updated.id) {
+        setSelectedPlan(updated);
+      }
+    } catch (err) {
+      console.error('Failed to save field:', err);
+      throw err;
+    }
+  }, [selectedPlan?.id]);
+
+  // Save handler for support items array
+  const handleSupportItemSave = useCallback(async (planId: string, index: number, item: SupportItem) => {
+    const plan = supportPlans.find(p => p.id === planId);
+    if (!plan) return;
+
+    const currentItems = plan.support_items_user_edited ?? plan.support_items_ai_generated ?? [];
+    const updatedItems = [...currentItems];
+    updatedItems[index] = item;
+
+    try {
+      const updated = await api.updateSupportPlan(planId, {
+        support_items: updatedItems
+      });
+
+      setSupportPlans(prev => prev.map(p => p.id === updated.id ? updated : p));
+      if (selectedPlan?.id === updated.id) {
+        setSelectedPlan(updated);
+      }
+    } catch (err) {
+      console.error('Failed to save support item:', err);
+      throw err;
+    }
+  }, [supportPlans, selectedPlan?.id]);
+
+  // Delete handler for support items
+  const handleSupportItemDelete = useCallback(async (planId: string, index: number) => {
+    const plan = supportPlans.find(p => p.id === planId);
+    if (!plan) return;
+
+    const currentItems = plan.support_items_user_edited ?? plan.support_items_ai_generated ?? [];
+    const updatedItems = currentItems.filter((_, i) => i !== index);
+
+    try {
+      const updated = await api.updateSupportPlan(planId, {
+        support_items: updatedItems
+      });
+
+      setSupportPlans(prev => prev.map(p => p.id === updated.id ? updated : p));
+      if (selectedPlan?.id === updated.id) {
+        setSelectedPlan(updated);
+      }
+    } catch (err) {
+      console.error('Failed to delete support item:', err);
+      throw err;
+    }
+  }, [supportPlans, selectedPlan?.id]);
+
+  // Add new support item
+  const handleAddSupportItem = useCallback(async (planId: string) => {
+    const plan = supportPlans.find(p => p.id === planId);
+    if (!plan) return;
+
+    const currentItems = plan.support_items_user_edited ?? plan.support_items_ai_generated ?? [];
+    const newItem: SupportItem = {
+      category: '',
+      target: '',
+      methods: [],
+      timeline: '6ヶ月',
+      staff: '',
+      notes: '',
+      priority: currentItems.length + 1
+    };
+
+    try {
+      const updated = await api.updateSupportPlan(planId, {
+        support_items: [...currentItems, newItem]
+      });
+
+      setSupportPlans(prev => prev.map(p => p.id === updated.id ? updated : p));
+      if (selectedPlan?.id === updated.id) {
+        setSelectedPlan(updated);
+      }
+    } catch (err) {
+      console.error('Failed to add support item:', err);
+      throw err;
+    }
+  }, [supportPlans, selectedPlan?.id]);
+
+  // Sync from assessment API handler
+  const handleSyncFromAssessment = useCallback(async (planId: string) => {
+    try {
+      const result = await api.syncFromAssessment(planId);
+      if (result.success) {
+        // Refresh plan data
+        const updated = await api.getSupportPlan(planId);
+        setSupportPlans(prev => prev.map(p => p.id === updated.id ? updated : p));
+        if (selectedPlan?.id === updated.id) {
+          setSelectedPlan(updated);
+        }
+        alert(`${result.synced_fields.length}件のフィールドを同期しました`);
+      }
+    } catch (err) {
+      console.error('Sync from assessment failed:', err);
+      alert('AI分析結果の同期に失敗しました');
+    }
+  }, [selectedPlan?.id]);
 
   const getStatusIcon = (status: InterviewSession['status']) => {
     switch (status) {
@@ -142,77 +259,179 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     });
   };
 
-  const getMonitoringPeriod = (plan: SupportPlan) => {
-    // If monitoring dates exist in DB, use them
-    if (plan.monitoring_start && plan.monitoring_end) {
-      return `${formatDateOnly(plan.monitoring_start)} 〜 ${formatDateOnly(plan.monitoring_end)}`;
-    }
-    // Fallback: calculate from created_at (6 months)
-    if (plan.created_at) {
-      const startDate = new Date(plan.created_at);
-      const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 6);
-      return `${formatDateOnly(startDate.toISOString())} 〜 ${formatDateOnly(endDate.toISOString())}`;
-    }
-    return '---';
-  };
-
   const formatDuration = (seconds: number | null | undefined) => {
     if (!seconds) return '-';
     const mins = Math.floor(seconds / 60);
     return `${mins}分`;
   };
 
+  // Check if any session is still processing (not yet completed)
+  const isProcessing = (sessions: InterviewSession[]): boolean => {
+    if (!sessions || sessions.length === 0) return false;
+    return sessions.some(session =>
+      session.status !== 'completed' && session.status !== 'error'
+    );
+  };
 
-  const getPlanStatusLabel = (status: SupportPlan['status']) => {
-    switch (status) {
-      case 'active': return '運用中';
-      case 'completed': return '完了';
-      case 'archived': return 'アーカイブ';
-      default: return '下書き';
+  // Get processing status message (detailed version for drawer)
+  const getProcessingMessage = (sessions: InterviewSession[]): string => {
+    if (!sessions || sessions.length === 0) return '';
+    const processingSession = sessions.find(s =>
+      s.status !== 'completed' && s.status !== 'error'
+    );
+    if (!processingSession) return '';
+
+    switch (processingSession.status) {
+      case 'uploaded':
+        return '音声ファイルをアップロード済み。文字起こし処理待ち...';
+      case 'transcribing':
+        return '文字起こし処理中...（数分かかります）';
+      case 'transcribed':
+        return 'Phase 1: 事実抽出中...';
+      case 'analyzing':
+        return 'Phase 2-3: AI分析中...（まもなく完了します）';
+      default:
+        return '処理中...';
     }
   };
 
+  // Get plan status badge (for plan card)
+  const getPlanStatusBadge = (plan: SupportPlan): { label: string; icon: string; color: string } => {
+    const sessions = plan.sessions || [];
+
+    if (sessions.length === 0) {
+      return {
+        label: '手動作成',
+        icon: '✏️',
+        color: '#6B7280' // gray
+      };
+    }
+
+    const latestSession = sessions[0];
+
+    switch (latestSession.status) {
+      case 'uploaded':
+        return { label: '録音完了・処理待ち', icon: '🔄', color: '#F59E0B' }; // amber
+      case 'transcribing':
+        return { label: '文字起こし中...', icon: '🔄', color: '#3B82F6' }; // blue
+      case 'transcribed':
+        return { label: '事実抽出待ち', icon: '🔄', color: '#8B5CF6' }; // violet
+      case 'analyzing':
+        return { label: 'AI分析中...', icon: '🔄', color: '#8B5CF6' }; // violet
+      case 'completed':
+        return { label: 'アセスメント完了', icon: '✅', color: '#10B981' }; // green
+      case 'error':
+        return { label: 'エラー発生', icon: '⚠️', color: '#EF4444' }; // red
+      default:
+        return { label: '処理中', icon: '🔄', color: '#6B7280' }; // gray
+    }
+  };
 
   const handleRecordingStart = (childName: string) => {
     setSelectedChild(childName);
     setRecordingMode('recording');
   };
 
-  const handleRecordingStop = () => {
+  const handleRecordingStop = async () => {
     setRecordingMode('none');
-    // TODO: Add session to list after recording
+
+    // Refresh support plans to show the new session
+    await fetchSupportPlans();
+
+    // If there's a selected plan, refresh its details to show the new session
+    if (selectedPlan) {
+      await fetchPlanDetails(selectedPlan.id);
+      // Keep the drawer open to show the processing status
+    }
   };
 
   const handleRecordingCancel = () => {
     setRecordingMode('none');
   };
 
+  const handleCreatePlan = () => {
+    // Show modal to choose creation method
+    setShowCreateModal(true);
+  };
+
+  const handleManualCreate = async () => {
+    if (creating) return;
+
+    setCreating(true);
+    setShowCreateModal(false);
+    try {
+      // Generate automatic title with current date
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const title = `個別支援計画書-${dateStr}`;
+
+      // Create plan immediately without modal
+      await api.createSupportPlan({
+        subject_id: initialSubjectId || '',
+        title: title,
+        status: 'draft'
+      });
+
+      // Refresh the list
+      await fetchSupportPlans();
+    } catch (error) {
+      console.error('Failed to create plan:', error);
+      alert('計画書の作成に失敗しました。');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleAssessmentCreate = async () => {
+    if (creating) return;
+
+    setCreating(true);
+    setShowCreateModal(false);
+
+    try {
+      // Generate automatic title with current date
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const title = `個別支援計画書-${dateStr}`;
+
+      // Create plan first (before recording)
+      const newPlan = await api.createSupportPlan({
+        subject_id: initialSubjectId || '',
+        title: title,
+        status: 'draft'
+      });
+
+      // Refresh the list
+      await fetchSupportPlans();
+
+      // Select the newly created plan
+      setSelectedPlan(newPlan);
+
+      // Open recording mode
+      setRecordingMode('setup');
+    } catch (error) {
+      console.error('Failed to create plan for assessment:', error);
+      alert('計画書の作成に失敗しました。');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const handleDownloadExcel = async (plan: SupportPlan) => {
     try {
-      // If sessions are not in the plan object, fetch them
-      let sessionId = '';
-      if (plan.sessions && plan.sessions.length > 0) {
-        sessionId = plan.sessions[0].id;
-      } else {
-        const detail = await api.getSupportPlan(plan.id);
-        if (detail.sessions && detail.sessions.length > 0) {
-          sessionId = detail.sessions[0].id;
-        }
-      }
+      // Use plan_id directly (session not required)
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8052';
+      const apiToken = import.meta.env.VITE_API_TOKEN || 'watchme-b2b-poc-2025';
 
-      if (!sessionId) {
-        alert('ダウンロード可能なセッションが見つかりません。');
-        return;
-      }
-
-      const response = await fetch(`https://api.hey-watch.me/business/api/sessions/${sessionId}/download-excel`, {
+      const response = await fetch(`${apiBaseUrl}/api/support-plans/${plan.id}/download-excel`, {
         headers: {
-          'X-API-Token': 'watchme-b2b-poc-2025'
+          'X-API-Token': apiToken
         }
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Excel download failed:', errorText);
         throw new Error('Failed to download Excel');
       }
 
@@ -220,14 +439,44 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `個別支援計画_${plan.title}_${sessionId.slice(0, 8)}.xlsx`;
+      const safeTitle = plan.title ? plan.title.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/g, '_').slice(0, 30) : plan.id.slice(0, 8);
+      a.download = `個別支援計画_${safeTitle}.xlsx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download error:', error);
-      alert('ダウンロードに失敗しました。');
+      alert('Excelのダウンロードに失敗しました。');
+    }
+  };
+
+  const handleDeletePlan = async (plan: SupportPlan) => {
+    // Confirmation dialog
+    const sessionCount = plan.sessions?.length || 0;
+    const message = sessionCount > 0
+      ? `「${plan.title}」を削除しますか？\n\n関連する${sessionCount}件のセッションも削除されます。\nこの操作は取り消せません。`
+      : `「${plan.title}」を削除しますか？\n\nこの操作は取り消せません。`;
+
+    if (!confirm(message)) {
+      return;
+    }
+
+    try {
+      await api.deleteSupportPlan(plan.id);
+
+      // Close drawer if the deleted plan was selected
+      if (selectedPlan?.id === plan.id) {
+        setSelectedPlan(null);
+      }
+
+      // Refresh the list
+      await fetchSupportPlans();
+
+      alert('個別支援計画書を削除しました。');
+    } catch (error) {
+      console.error('Failed to delete plan:', error);
+      alert('削除に失敗しました。');
     }
   };
 
@@ -259,11 +508,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             <h1 className="page-title">個別支援計画管理</h1>
             <p className="page-subtitle">保護者ヒアリング録音から個別支援計画書を自動生成</p>
           </div>
-          <button className="primary-button" onClick={() => setShowCreateModal(true)}>
+          <button className="primary-button" onClick={handleCreatePlan} disabled={creating}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            新規計画作成
+            {creating ? '作成中...' : '新規計画作成'}
           </button>
         </div>
       )}
@@ -303,20 +552,45 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
               <div className="plan-title-area">
                 <h3 className="plan-title">{plan.title}</h3>
                 <div className="plan-badge-row">
-                  <span className={`status-label ${plan.status}`}>
-                    {getPlanStatusLabel(plan.status)}
-                  </span>
-                  {plan.plan_number && (
-                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                      計画番号: {plan.plan_number}
-                    </span>
-                  )}
+                  {(() => {
+                    const statusBadge = getPlanStatusBadge(plan);
+                    return (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: statusBadge.color,
+                        background: `${statusBadge.color}15`,
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: `1px solid ${statusBadge.color}30`
+                      }}>
+                        <span>{statusBadge.icon}</span>
+                        <span>{statusBadge.label}</span>
+                      </span>
+                    );
+                  })()}
                   <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                     作成日: {formatDate(plan.created_at)}
                   </span>
                 </div>
               </div>
               <div className="session-actions">
+                <button
+                  className="action-button"
+                  title="AI分析結果を反映"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSyncFromAssessment(plan.id);
+                  }}
+                  style={{ background: 'rgba(124, 77, 255, 0.1)', color: '#7c4dff', borderColor: 'rgba(124, 77, 255, 0.2)' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
+                  </svg>
+                </button>
                 <button
                   className="action-button"
                   title="Excelダウンロード"
@@ -328,6 +602,19 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 >
                   <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
                     <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <button
+                  className="action-button"
+                  title="削除"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeletePlan(plan);
+                  }}
+                  style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
               </div>
@@ -343,12 +630,23 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">事業所名</div>
-                      <div className="doc-cell value">ヨリドコロ横浜白楽</div>
+                      <div className="doc-cell value">
+                        <EditableField
+                          planId={plan.id}
+                          field="facility_name"
+                          value={plan.facility_name ?? null}
+                          aiValue={null}
+                          type="text"
+                          label="事業所名"
+                          placeholder="ヨリドコロ横浜白楽"
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half">
                       <div className="doc-cell label">生年月日</div>
                       <div className="doc-cell value">
-                        {plan.subjects?.birth_date ? formatDateOnly(plan.subjects.birth_date) : '---'} 
+                        {plan.subjects?.birth_date ? formatDateOnly(plan.subjects.birth_date) : '---'}
                         ({calculateAge(plan.subjects?.birth_date) ?? '---'}歳)
                       </div>
                     </div>
@@ -358,7 +656,18 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">計画作成者</div>
-                      <div className="doc-cell value">児童発達支援管理責任者 山田太郎</div>
+                      <div className="doc-cell value">
+                        <EditableField
+                          planId={plan.id}
+                          field="manager_name"
+                          value={plan.manager_name ?? null}
+                          aiValue={null}
+                          type="text"
+                          label="計画作成者"
+                          placeholder="児童発達支援管理責任者 山田太郎"
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half">
                       <div className="doc-cell label">計画作成日</div>
@@ -374,21 +683,27 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </div>
                     <div className="doc-half">
                       <div className="doc-cell label">モニタリング期間</div>
-                      <div className="doc-cell value">
-                        <EditableCell
-                          value={plan.monitoring_start ? formatDateOnly(plan.monitoring_start) : ''}
+                      <div className="doc-cell value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <EditableField
+                          planId={plan.id}
                           field="monitoring_start"
-                          onChange={() => {}}
-                          isEditing={false}
+                          value={plan.monitoring_start ?? null}
+                          aiValue={null}
+                          type="date"
+                          label="開始日"
                           placeholder="開始日"
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
                         />
-                        {' 〜 '}
-                        <EditableCell
-                          value={plan.monitoring_end ? formatDateOnly(plan.monitoring_end) : ''}
+                        <span>〜</span>
+                        <EditableField
+                          planId={plan.id}
                           field="monitoring_end"
-                          onChange={() => {}}
-                          isEditing={false}
+                          value={plan.monitoring_end ?? null}
+                          aiValue={null}
+                          type="date"
+                          label="終了日"
                           placeholder="終了日"
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
                         />
                       </div>
                     </div>
@@ -400,11 +715,33 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     <div className="nested-info-table">
                       <div className="nested-info-row">
                         <div className="nested-label">ご本人</div>
-                        <div className="nested-value">自立性を高め、集団での活動に楽しく参加できるようになりたい。</div>
+                        <div className="nested-value">
+                          <EditableField
+                            planId={plan.id}
+                            field="child_intention_user_edited"
+                            value={plan.child_intention_user_edited ?? null}
+                            aiValue={plan.child_intention_ai_generated ?? null}
+                            type="textarea"
+                            label="ご本人の意向"
+                            placeholder="情報が取得できませんでした"
+                            onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                          />
+                        </div>
                       </div>
                       <div className="nested-info-row">
                         <div className="nested-label">ご家族</div>
-                        <div className="nested-value">お友達とのコミュニケーションが円滑になり、自分の気持ちを言葉で伝えられるようになってほしい。</div>
+                        <div className="nested-value">
+                          <EditableField
+                            planId={plan.id}
+                            field="family_intention_user_edited"
+                            value={plan.family_intention_user_edited ?? null}
+                            aiValue={plan.family_intention_ai_generated ?? null}
+                            type="textarea"
+                            label="ご家族の意向"
+                            placeholder="情報が取得できませんでした"
+                            onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -416,12 +753,16 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <div className="doc-row">
                   <div className="doc-cell label large">支援の標準的な提供時間等(曜日・頻度・時間)</div>
                   <div className="doc-cell value">
-                    <ul className="doc-list">
-                      <li>週一回(火曜日)</li>
-                      <li>サービス提供時間は原則。13時55分から17時の計3時間5分とする。</li>
-                      <li>欠席の振り替え、保護者の希望等があれば、契約用日以外に利用することがある</li>
-                      <li>上記以外の曜日にて利用する場合においても、サービス提供時間は原則13時55分から17時の計3時間5分とする。</li>
-                    </ul>
+                    <EditableField
+                      planId={plan.id}
+                      field="service_schedule"
+                      value={plan.service_schedule ?? null}
+                      aiValue={null}
+                      type="textarea"
+                      label="支援提供時間"
+                      placeholder="週一回(火曜日)、サービス提供時間は原則13時55分から17時..."
+                      onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                    />
                   </div>
                 </div>
               </div>
@@ -431,11 +772,16 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <div className="doc-row">
                   <div className="doc-cell label large">留意点・備考</div>
                   <div className="doc-cell value">
-                    <ul className="doc-list">
-                      <li>安全確保のために、感情が高ぶった時や、危険行動とは判断したとき、気持ちを落ち着かせるために抱き、抱える等一時的な行動の制限や場所の移動することがあります。</li>
-                      <li>学びやすさのために手を添えて課題を行う等、身体的な支援を行うことがあります。</li>
-                      <li>アレルギー:なし</li>
-                    </ul>
+                    <EditableField
+                      planId={plan.id}
+                      field="notes"
+                      value={plan.notes ?? null}
+                      aiValue={null}
+                      type="textarea"
+                      label="留意点・備考"
+                      placeholder="安全確保のための対応、アレルギー情報など..."
+                      onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                    />
                   </div>
                 </div>
               </div>
@@ -445,7 +791,16 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <div className="doc-row">
                   <div className="doc-cell label large">総合的な支援の方針</div>
                   <div className="doc-cell value" style={{ fontWeight: 500, lineHeight: 1.8 }}>
-                    明るく楽しいことや人との関わりを楽しめ、物事をすぐに理解できる。前向きな正弦さん。絵本やロールプレイなどを通して、登場人物の気持ちや状況を一緒に考えながら、感情語を学び、気持ちを言葉で表現できるよう支援します。小集団での活動では、職員が意思表現のモデルを示し、発言ややりとりの機会を逃さず、声をかけることで自分の考えを伝える経験を積み重ねられるようにします。また安心できる人との関わりを基盤に相手との適切な距離感を保ちながら、関係を広げていけるよう支援します。
+                    <EditableField
+                      planId={plan.id}
+                      field="general_policy_user_edited"
+                      value={plan.general_policy_user_edited ?? null}
+                      aiValue={plan.general_policy_ai_generated ?? null}
+                      type="textarea"
+                      label="総合的な支援の方針"
+                      placeholder="子どもの理解と支援方針を入力..."
+                      onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                    />
                   </div>
                 </div>
               </div>
@@ -456,11 +811,33 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">長期目標</div>
-                      <div className="doc-cell value">小学校での基本的生活習慣や集団参加の力を身に付けながら安心して学校生活を過ごす</div>
+                      <div className="doc-cell value">
+                        <EditableField
+                          planId={plan.id}
+                          field="long_term_goal_user_edited"
+                          value={plan.long_term_goal_user_edited ?? null}
+                          aiValue={plan.long_term_goal_ai_generated ?? null}
+                          type="textarea"
+                          label="長期目標"
+                          placeholder="長期目標を入力..."
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half" style={{ flex: '0 0 250px' }}>
                       <div className="doc-cell label" style={{ width: '80px' }}>期間</div>
-                      <div className="doc-cell value">1年</div>
+                      <div className="doc-cell value">
+                        <EditableField
+                          planId={plan.id}
+                          field="long_term_period_user_edited"
+                          value={plan.long_term_period_user_edited ?? null}
+                          aiValue={plan.long_term_period_ai_generated ?? '1年'}
+                          type="text"
+                          label="長期目標期間"
+                          placeholder="1年"
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -468,11 +845,33 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">短期目標</div>
-                      <div className="doc-cell value">友達と適切な距離や言葉遣いを意識して関わりながら見通しを持って集中して活動に取り組む。</div>
+                      <div className="doc-cell value">
+                        <EditableField
+                          planId={plan.id}
+                          field="short_term_goal"
+                          value={plan.short_term_goal ?? null}
+                          aiValue={plan.short_term_goals_ai_generated?.[0]?.goal ?? null}
+                          type="textarea"
+                          label="短期目標"
+                          placeholder="短期目標を入力..."
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half" style={{ flex: '0 0 250px' }}>
                       <div className="doc-cell label" style={{ width: '80px' }}>期間</div>
-                      <div className="doc-cell value">6ヶ月</div>
+                      <div className="doc-cell value">
+                        <EditableField
+                          planId={plan.id}
+                          field="short_term_period"
+                          value={plan.short_term_period ?? null}
+                          aiValue={plan.short_term_goals_ai_generated?.[0]?.timeline ?? '6ヶ月'}
+                          type="text"
+                          label="短期目標期間"
+                          placeholder="6ヶ月"
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -515,62 +914,39 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                       <th>担当者<br />提供期間</th>
                       <th>留意事項</th>
                       <th>優先順位</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
+                    {(plan.support_items_user_edited ?? plan.support_items_ai_generated ?? []).map((item, index) => (
+                      <EditableTableRow
+                        key={index}
+                        planId={plan.id}
+                        index={index}
+                        item={item}
+                        aiItem={plan.support_items_ai_generated?.[index]}
+                        onSave={(idx, updatedItem) => handleSupportItemSave(plan.id, idx, updatedItem)}
+                        onDelete={(idx) => handleSupportItemDelete(plan.id, idx)}
+                      />
+                    ))}
+                    {/* Add new row button */}
                     <tr>
-                      <td className="center">本人支援</td>
-                      <td>友達との関わりの中で、適切な距離、適切なコミュニケーションを意識しながらやりとりを楽しむ</td>
-                      <td>小集団での遊びや活動を行う際、必要に応じて事前に人との距離はどれぐらいがいいかなどと具体的に伝える。</td>
-                      <td className="center">6ヶ月</td>
-                      <td>よりどころ、横浜白楽全職員</td>
-                      <td>専門的支援実地加算については別紙参照</td>
-                      <td className="center">1</td>
-                    </tr>
-                    <tr>
-                      <td className="center">本人支援</td>
-                      <td>状況や気持ちに応じて、チクチク言葉、ふわふわ言葉、ドキドキ、言葉を理解していく</td>
-                      <td>必要に応じて、職員が会話のモデルを示して、それはどんな言葉だったかなふわふわ言葉で言うと何かななどと一緒に確認をする。言語・コミュニケーション</td>
-                      <td className="center">6ヶ月</td>
-                      <td>よりどころ、横浜白楽全職員</td>
-                      <td>専門的支援実施加算については別紙参照</td>
-                      <td className="center">2</td>
-                    </tr>
-                    <tr>
-                      <td className="center"></td>
-                      <td></td>
-                      <td></td>
-                      <td className="center"></td>
-                      <td></td>
-                      <td></td>
-                      <td className="center"></td>
-                    </tr>
-                    <tr>
-                      <td className="center"></td>
-                      <td></td>
-                      <td></td>
-                      <td className="center"></td>
-                      <td></td>
-                      <td></td>
-                      <td className="center"></td>
-                    </tr>
-                    <tr>
-                      <td className="center"></td>
-                      <td></td>
-                      <td></td>
-                      <td className="center"></td>
-                      <td></td>
-                      <td></td>
-                      <td className="center"></td>
-                    </tr>
-                    <tr>
-                      <td className="center"></td>
-                      <td></td>
-                      <td></td>
-                      <td className="center"></td>
-                      <td></td>
-                      <td></td>
-                      <td className="center"></td>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '12px' }}>
+                        <button
+                          onClick={() => handleAddSupportItem(plan.id)}
+                          style={{
+                            background: 'rgba(124, 77, 255, 0.1)',
+                            color: 'var(--accent-primary)',
+                            border: '1px dashed var(--accent-primary)',
+                            borderRadius: '6px',
+                            padding: '8px 16px',
+                            cursor: 'pointer',
+                            fontSize: '13px'
+                          }}
+                        >
+                          + 支援項目を追加
+                        </button>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -585,23 +961,45 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
               <div className="doc-info-table">
                 <div className="doc-row">
                   <div className="doc-cell label" style={{ width: '140px' }}>説明者</div>
-                  <div className="doc-cell value">児童発達支援管理責任者　山田太郎</div>
+                  <div className="doc-cell value">
+                    <EditableField
+                      planId={plan.id}
+                      field="explainer_name"
+                      value={plan.explainer_name ?? null}
+                      aiValue={null}
+                      type="text"
+                      label="説明者"
+                      placeholder="児童発達支援管理責任者　山田太郎"
+                      onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                    />
+                  </div>
                 </div>
                 <div className="doc-row">
                   <div className="doc-row-split">
                     <div className="doc-half">
                       <div className="doc-cell label">説明・同意日</div>
-                      <div className="doc-cell value">2025年11月18日</div>
+                      <div className="doc-cell value">
+                        <EditableField
+                          planId={plan.id}
+                          field="consent_date"
+                          value={plan.consent_date ?? null}
+                          aiValue={null}
+                          type="date"
+                          label="説明・同意日"
+                          placeholder="日付を選択"
+                          onSave={(field, value) => handleFieldSave(plan.id, field, value)}
+                        />
+                      </div>
                     </div>
                     <div className="doc-half">
                       <div className="doc-cell label">保護者氏名</div>
                       <div className="doc-cell value" style={{ position: 'relative', minHeight: '50px' }}>
-                        <span style={{ 
-                          position: 'absolute', 
-                          bottom: '8px', 
-                          right: '12px', 
-                          fontSize: '11px', 
-                          color: '#999' 
+                        <span style={{
+                          position: 'absolute',
+                          bottom: '8px',
+                          right: '12px',
+                          fontSize: '11px',
+                          color: '#999'
                         }}>(自署または捺印)</span>
                       </div>
                     </div>
@@ -727,22 +1125,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         {/* New Plan Button at the Bottom */}
         <button
           className="new-plan-island-btn"
-          onClick={() => setShowCreateModal(true)}
+          onClick={handleCreatePlan}
+          disabled={creating}
         >
           <div className="icon-circle">+</div>
-          新しい個別支援計画を作成する
+          {creating ? '作成中...' : '新しい個別支援計画を作成する'}
         </button>
       </div >
-
-      {showCreateModal && (
-        <SupportPlanModal
-          subjectId={initialSubjectId || ''}
-          onClose={() => setShowCreateModal(false)}
-          onCreated={() => {
-            fetchSupportPlans();
-          }}
-        />
-      )}
 
       {/* Drawer Overlay */}
       {
@@ -835,15 +1224,41 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </svg>
                     <span style={{ color: 'var(--text-secondary)' }}>作成日: {formatDate(selectedPlan.created_at)}</span>
                   </div>
-                  <div>
-                    <span className={`status-label ${selectedPlan.status}`}>
-                      {getPlanStatusLabel(selectedPlan.status)}
-                    </span>
-                  </div>
                 </div>
               </div>
 
               <div style={{ padding: '0 24px 24px 24px' }}>
+                {/* Processing Banner (lightweight notification) */}
+                {isProcessing(planSessions) && (
+                  <div style={{
+                    background: 'rgba(59, 130, 246, 0.1)',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    marginBottom: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      border: '3px solid rgba(59, 130, 246, 0.3)',
+                      borderTop: '3px solid #3B82F6',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B82F6', marginBottom: '2px' }}>
+                        処理中
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        {getProcessingMessage(planSessions)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Support Plan Detail Content (Intermediate/Output information will go here) */}
 
                 {/* Related Data Section */}
@@ -999,6 +1414,182 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           </>
         )
       }
+
+      {/* Create Plan Modal */}
+      {showCreateModal && (
+        <>
+          <div
+            className="drawer-overlay"
+            onClick={() => setShowCreateModal(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 2000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              animation: 'fadeIn 0.2s ease-out'
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'white',
+                borderRadius: '12px',
+                maxWidth: '500px',
+                width: '90%',
+                padding: '32px',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                animation: 'slideUp 0.3s ease-out'
+              }}
+            >
+              <h2 style={{
+                fontSize: '20px',
+                fontWeight: '700',
+                marginBottom: '16px',
+                color: 'var(--text-primary)'
+              }}>
+                個別支援計画の作成方法を選択
+              </h2>
+              <p style={{
+                fontSize: '14px',
+                color: 'var(--text-secondary)',
+                marginBottom: '32px',
+                lineHeight: '1.6'
+              }}>
+                保護者とのヒアリングを録音して自動生成するか、フォーマットに手動入力するかを選択してください。
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Assessment Option */}
+                <button
+                  onClick={handleAssessmentCreate}
+                  style={{
+                    padding: '20px',
+                    border: '2px solid var(--border-color)',
+                    borderRadius: '8px',
+                    background: 'white',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                    e.currentTarget.style.background = 'rgba(37, 99, 235, 0.02)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border-color)';
+                    e.currentTarget.style.background = 'white';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '20px'
+                    }}>
+                      🎤
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                        アセスメントを行う
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                        保護者との会議を録音し、個別支援計画を自動生成します
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Manual Option */}
+                <button
+                  onClick={handleManualCreate}
+                  style={{
+                    padding: '20px',
+                    border: '2px solid var(--border-color)',
+                    borderRadius: '8px',
+                    background: 'white',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                    e.currentTarget.style.background = 'rgba(37, 99, 235, 0.02)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border-color)';
+                    e.currentTarget.style.background = 'white';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '20px'
+                    }}>
+                      ✏️
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                        個別支援計画書に手動入力する
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                        個別支援計画書のフォーマットに手動入力します
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowCreateModal(false)}
+                style={{
+                  marginTop: '24px',
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  background: 'white',
+                  color: 'var(--text-secondary)',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--bg-secondary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'white';
+                }}
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div >
   );
 };

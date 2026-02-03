@@ -9,9 +9,6 @@ interface LayoutProps {
   children: React.ReactNode;
   selectedMenuId?: string;
   onMenuSelect?: (menuId: string) => void;
-  onSettingsClick?: () => void;
-  onOrganizationClick?: () => void;
-  onFacilityClick?: () => void;
   selectedSubjectId?: string;
   onSubjectSelect?: (subject: Subject) => void;
 }
@@ -20,9 +17,6 @@ const Layout: React.FC<LayoutProps> = ({
   children,
   selectedMenuId,
   onMenuSelect,
-  onSettingsClick,
-  onOrganizationClick,
-  onFacilityClick,
   selectedSubjectId,
   onSubjectSelect
 }) => {
@@ -34,10 +28,7 @@ const Layout: React.FC<LayoutProps> = ({
         companyName={profile?.organization_name || '未設定'}
         facilityName={profile?.facility_name || '未設定'}
         userName={profile?.name || 'ゲスト'}
-        avatarUrl={profile?.avatar_url || undefined}
-        onSettingsClick={onSettingsClick}
-        onOrganizationClick={onOrganizationClick}
-        onFacilityClick={onFacilityClick}
+        userRole={profile?.role === 'admin' ? '管理者' : 'スタッフ'}
       />
       <div className="layout-body">
         <Sidebar

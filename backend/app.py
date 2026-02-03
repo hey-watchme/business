@@ -1429,6 +1429,90 @@ async def download_support_plan_excel(
         print(f"Error generating Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate Excel: {str(e)}")
 
+
+@app.get("/api/support-plans/{plan_id}/download-excel")
+async def download_support_plan_excel_by_plan(
+    plan_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Download Individual Support Plan as Excel file by plan_id only (session not required)
+
+    Args:
+        plan_id: Support plan ID
+        x_api_token: API token
+
+    Returns:
+        Excel file (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
+
+    Note:
+        This endpoint generates Excel from business_support_plans data directly,
+        without requiring a session. Use this for manually created plans.
+    """
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Get plan data
+        plan_result = supabase.table('business_support_plans')\
+            .select('*')\
+            .eq('id', plan_id)\
+            .single()\
+            .execute()
+
+        if not plan_result.data:
+            raise HTTPException(status_code=404, detail="Plan not found")
+
+        plan_data = plan_result.data
+
+        # Get subject (child) information if available
+        subject_data = None
+        subject_id = plan_data.get('subject_id')
+        if subject_id:
+            try:
+                subject_result = supabase.table('subjects')\
+                    .select('subject_id, name, age, gender, birth_date')\
+                    .eq('subject_id', subject_id)\
+                    .single()\
+                    .execute()
+
+                if subject_result.data:
+                    subject_data = subject_result.data
+            except Exception as e:
+                print(f"Failed to fetch subject info: {str(e)}")
+                # Continue without subject info
+
+        # Generate Excel from plan_data only
+        from services.excel_generator import generate_support_plan_excel_from_plan
+
+        excel_bytes = generate_support_plan_excel_from_plan(
+            plan_data=plan_data,
+            subject_data=subject_data
+        )
+
+        # Build filename (ASCII only for compatibility)
+        filename = f"support_plan_{plan_id[:8]}.xlsx"
+
+        # Return Excel file
+        return Response(
+            content=excel_bytes.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating Excel from plan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate Excel: {str(e)}")
+
+
 # ==================== USERS API ====================
 
 @app.get("/api/users")
