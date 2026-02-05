@@ -103,24 +103,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          // 非同期でプロフィール取得（loadingは先にfalseにする）
-          setProfile({
-            user_id: session.user.id,
-            name: session.user.email || 'ユーザー',
-            email: session.user.email || null,
-            role: null,
-            facility_id: 'temp',  // 仮設定
-            facility_name: null,
-            organization_name: null,
-            avatar_url: null,
-          });
-          setLoading(false);
-
           // バックグラウンドでプロフィール取得を試みる
-          fetchProfile(session.user.id).then((userProfile) => {
+          fetchProfile(session.user.id).then(async (userProfile) => {
             if (userProfile) {
               console.log('Profile loaded:', userProfile);
               setProfile(userProfile);
+              setLoading(false);
+            } else {
+              // プロフィールが存在しない場合、新規ユーザーとして作成（Googleログイン等の初回対応）
+              console.log('Profile not found, creating one from session info...');
+              const { user: u } = session;
+              const newProfile = {
+                user_id: u.id,
+                email: u.email,
+                name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0],
+                avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || null,
+                auth_provider: u.app_metadata?.provider || 'social',
+                role: 'staff'
+              };
+
+              const { error: insertError } = await supabase.from('users').upsert(newProfile);
+
+              if (!insertError) {
+                const refreshedProfile = await fetchProfile(u.id);
+                setProfile(refreshedProfile || (newProfile as any));
+              } else {
+                console.error('Failed to auto-create profile:', insertError);
+              }
+              setLoading(false);
             }
           });
         } else {
