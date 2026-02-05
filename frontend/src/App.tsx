@@ -92,7 +92,7 @@ const StatCards = () => (
 );
 
 function App() {
-  const { user, profile, loading, isBusinessUser, signOut } = useAuth();
+  const { user, profile, loading, isBusinessUser, signOut, authError } = useAuth();
   const [selectedMenu, setSelectedMenu] = useState('dashboard');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
 
@@ -101,14 +101,46 @@ function App() {
     return (
       <div style={{
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
         background: 'var(--bg-primary)',
         color: 'var(--text-primary)',
-        fontSize: '16px'
+        gap: '16px'
       }}>
-        読み込み中...
+        <div className="spinning">
+          <svg width="32" height="32" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="var(--text-muted)" strokeWidth="1.5" opacity="0.3" />
+            <path d="M8 2C4.69 2 2 4.69 2 8" stroke="var(--accent-primary)" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div style={{ fontSize: '16px' }}>読み込み中...</div>
+        {/* authErrorを表示できるように追加 */}
+        {authError && (
+          <div style={{
+            marginTop: '20px',
+            padding: '12px 20px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            color: '#ff4d4d',
+            borderRadius: '8px',
+            fontSize: '14px',
+            maxWidth: '80%',
+            textAlign: 'center',
+            border: '1px solid rgba(239, 68, 68, 0.2)'
+          }}>
+            <strong>認証エラー:</strong><br />
+            {authError}
+            <div style={{ marginTop: '12px' }}>
+              <button
+                onClick={() => window.location.reload()}
+                style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                再読み込み
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
