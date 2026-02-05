@@ -1,40 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 環境変数を取得し、あらゆる「ゴミ」を強制排除する
-const sanitize = (val: string | undefined) => {
-    if (!val) return '';
-    // 前後の空白を消し、前後にある引用符(" や ')を剥ぎ取る
-    let s = val.trim().replace(/^["']|["']$/g, '');
-    // さらに、JWTとして使えない文字（改行や不可視文字）を正規表現で排除する
-    // JWTは [A-Za-z0-9-_.] のみで構成される
-    return s.replace(/[^A-Za-z0-9-_.]/g, '');
-};
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const supabaseUrl = sanitize(import.meta.env.VITE_SUPABASE_URL);
-const supabaseAnonKey = sanitize(import.meta.env.VITE_SUPABASE_ANON_KEY);
-
-if (typeof window !== 'undefined' && supabaseUrl && supabaseAnonKey) {
-    console.log('Supabase Initializing...');
-    console.log('Cleaned Key length:', supabaseAnonKey.length);
-
-    // 3文字の差があった場合のための診断用ログ
-    if (supabaseAnonKey.length !== 205) {
-        console.warn('Warning: Key length is not 205. Check for corruption.');
-    }
-
-    fetch(`${supabaseUrl}/auth/v1/user`, {
-        headers: { 'apikey': supabaseAnonKey }
-    }).then(async r => {
-        if (r.status === 401) {
-            const detail = await r.json();
-            console.error('【401ログ】:', detail);
-            const div = document.createElement('div');
-            div.id = 'auth-debug-bar';
-            div.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ff4d4d;color:white;z-index:9999;padding:8px 15px;font-size:11px;font-family:monospace;white-space:pre-wrap;';
-            div.innerText = `[Supabase ERROR] 鍵が拒否されました: ${JSON.stringify(detail)}\n使用中のKey(末尾): ...${supabaseAnonKey.slice(-10)} (Length: ${supabaseAnonKey.length})`;
-            document.body.appendChild(div);
-        }
-    }).catch(() => { });
+// 画面の最上部に、今アプリが使っている設定を一瞬だけ表示する（確認用）
+if (typeof window !== 'undefined') {
+    const check = () => {
+        const banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;bottom:0;right:0;background:black;color:green;padding:5px;font-size:10px;z-index:9999;opacity:0.7;';
+        banner.innerText = `Connected to: ...${supabaseUrl?.slice(-10)} | Key: ...${supabaseAnonKey?.slice(-5)}`;
+        document.body.appendChild(banner);
+    };
+    if (document.body) check(); else window.addEventListener('DOMContentLoaded', check);
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
