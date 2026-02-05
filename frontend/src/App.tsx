@@ -257,12 +257,7 @@ function App() {
                     <span style={{ color: 'var(--text-muted)' }}>所属:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.school_name} ({selectedSubject.school_type || '学校'})</span>
                   </div>
                 )}
-                {/* お住まい */}
-                {selectedSubject.location && (
-                  <div style={{ fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>お住まい:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.location}</span>
-                  </div>
-                )}
+                {/* お住まい - Removed as property doesn't exist */}
               </div>
               {selectedSubject.notes && (
                 <p style={{
@@ -302,22 +297,65 @@ function App() {
         return <ChildrenList />;
       case 'staff':
         return <StaffList />;
-      case 'facilities':
-        return (
-          <div style={{ padding: '24px' }}>
-            <h1>施設管理</h1>
-            <p style={{ color: 'var(--text-secondary)' }}>
-              施設の基本設定や利用状況を確認します。
-            </p>
-          </div>
-        );
       case 'settings':
         return (
           <div style={{ padding: '24px' }}>
-            <h1>設定</h1>
-            <p style={{ color: 'var(--text-secondary)' }}>
-              システム全般の設定を管理します。
-            </p>
+            <h1 className="page-title">システム設定</h1>
+            <p className="page-subtitle">システム全般の設定を管理します。</p>
+            <div style={{ marginTop: '32px', background: 'var(--bg-tertiary)', padding: '24px', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+              <h3>一般設定</h3>
+              <p style={{ color: 'var(--text-secondary)' }}>通知設定、表示言語、タイムゾーンなどの管理。</p>
+            </div>
+          </div>
+        );
+      case 'organization':
+        return (
+          <div style={{ padding: '24px' }}>
+            <h1 className="page-title">法人情報</h1>
+            <p className="page-subtitle">法人（組織）の基本情報を確認・編集します。</p>
+            <div style={{ marginTop: '32px', background: 'var(--bg-tertiary)', padding: '32px', borderRadius: '16px', border: '1px solid var(--border-color)', maxWidth: '800px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '24px' }}>
+                <div style={{ color: 'var(--text-muted)' }}>法人名</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: '600' }}>{profile?.organization_name || '株式会社ウォッチミー'}</div>
+
+                <div style={{ color: 'var(--text-muted)' }}>代表者</div>
+                <div style={{ color: 'var(--text-primary)' }}>山田 一郎</div>
+
+                <div style={{ color: 'var(--text-muted)' }}>設立</div>
+                <div style={{ color: 'var(--text-primary)' }}>2020年4月1日</div>
+
+                <div style={{ color: 'var(--text-muted)' }}>所在地</div>
+                <div style={{ color: 'var(--text-primary)' }}>東京都港区六本木 1-2-3</div>
+
+                <div style={{ color: 'var(--text-muted)' }}>事業内容</div>
+                <div style={{ color: 'var(--text-primary)' }}>福祉支援DXソリューションの開発・提供</div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'facilities':
+        return (
+          <div style={{ padding: '24px' }}>
+            <h1 className="page-title">施設管理</h1>
+            <p className="page-subtitle">現在の事業所の詳細情報を管理します。</p>
+            <div style={{ marginTop: '32px', background: 'var(--bg-tertiary)', padding: '32px', borderRadius: '16px', border: '1px solid var(--border-color)', maxWidth: '800px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '24px' }}>
+                <div style={{ color: 'var(--text-muted)' }}>事業所名</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: '600' }}>{profile?.facility_name || '未設定'}</div>
+
+                <div style={{ color: 'var(--text-muted)' }}>施設形態</div>
+                <div style={{ color: 'var(--text-primary)' }}>児童発達支援・放課後等デイサービス</div>
+
+                <div style={{ color: 'var(--text-muted)' }}>住所</div>
+                <div style={{ color: 'var(--text-primary)' }}>東京都世田谷区北沢 2-10-15</div>
+
+                <div style={{ color: 'var(--text-muted)' }}>電話番号</div>
+                <div style={{ color: 'var(--text-primary)' }}>03-1234-5678</div>
+
+                <div style={{ color: 'var(--text-muted)' }}>定員</div>
+                <div style={{ color: 'var(--text-primary)' }}>10名 / 日</div>
+              </div>
+            </div>
           </div>
         );
       default:
@@ -338,6 +376,9 @@ function App() {
       onMenuSelect={handleMenuSelect}
       selectedSubjectId={selectedSubject?.id}
       onSubjectSelect={handleSubjectSelect}
+      onOrganizationClick={() => setSelectedMenu('organization')}
+      onFacilityClick={() => setSelectedMenu('facilities')}
+      onSettingsClick={() => setSelectedMenu('settings')}
     >
       {renderContent()}
     </Layout>

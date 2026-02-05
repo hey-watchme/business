@@ -11,6 +11,9 @@ interface LayoutProps {
   onMenuSelect?: (menuId: string) => void;
   selectedSubjectId?: string;
   onSubjectSelect?: (subject: Subject) => void;
+  onOrganizationClick?: () => void;
+  onFacilityClick?: () => void;
+  onSettingsClick?: () => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({
@@ -18,7 +21,10 @@ const Layout: React.FC<LayoutProps> = ({
   selectedMenuId,
   onMenuSelect,
   selectedSubjectId,
-  onSubjectSelect
+  onSubjectSelect,
+  onOrganizationClick,
+  onFacilityClick,
+  onSettingsClick
 }) => {
   const { profile } = useAuth();
 
@@ -28,7 +34,10 @@ const Layout: React.FC<LayoutProps> = ({
         companyName={profile?.organization_name || '未設定'}
         facilityName={profile?.facility_name || '未設定'}
         userName={profile?.name || 'ゲスト'}
-        userRole={profile?.role === 'admin' ? '管理者' : 'スタッフ'}
+        avatarUrl={profile?.avatar_url || undefined}
+        onOrganizationClick={onOrganizationClick}
+        onFacilityClick={onFacilityClick}
+        onSettingsClick={onSettingsClick}
       />
       <div className="layout-body">
         <Sidebar

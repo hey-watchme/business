@@ -112,7 +112,7 @@ const Phase1Display: React.FC<Props> = ({ data }) => {
   };
 
   const sections = [
-    { title: '基本情報', key: 'basic_info', type: 'basic' as const },
+    { title: '支援対象者 基本情報', key: 'basic_info', type: 'basic' as const },
     { title: '現在の状態', key: 'current_state', type: 'list' as const },
     { title: '強み・得意なこと', key: 'strengths', type: 'list' as const },
     { title: '課題・苦手なこと', key: 'challenges', type: 'list' as const },

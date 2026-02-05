@@ -738,3 +738,221 @@
   margin: 0 -40px;
   padding: 0 40px;
 }
+
+/* ===== Tab Navigation ===== */
+.plan-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 16px 40px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  margin: 0 -40px;
+}
+
+.plan-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.plan-tab:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.plan-tab.active {
+  background: white;
+  color: var(--accent-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.plan-tab svg {
+  opacity: 0.7;
+}
+
+.plan-tab.active svg {
+  opacity: 1;
+}
+
+/* ===== Tab Content ===== */
+.tab-content-assessment,
+.tab-content-phase1,
+.tab-content-phase2 {
+  padding: 24px 0;
+}
+
+.phase-section {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.phase-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+}
+
+.phase-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+/* ===== Creation Modal Styles ===== */
+.creation-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.creation-modal-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  max-width: 520px;
+  width: 95%;
+  padding: 40px;
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.6);
+  animation: modalIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.creation-modal-container::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+}
+
+.creation-modal-title {
+  font-size: 26px;
+  font-weight: 800;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.creation-modal-description {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+.creation-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.creation-option-btn {
+  padding: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.creation-option-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.3);
+}
+
+.creation-option-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+  color: white;
+}
+
+.creation-option-btn:hover .creation-option-icon-wrapper {
+  transform: scale(1.1) rotate(3deg);
+}
+
+.creation-option-icon-wrapper.ai {
+  background: linear-gradient(135deg, #7c4dff 0%, #6200ea 100%);
+  box-shadow: 0 4px 12px rgba(124, 77, 255, 0.3);
+}
+
+.creation-option-icon-wrapper.manual {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  box-shadow: 0 4px 12px rgba(245, 87, 108, 0.3);
+}
+
+.creation-option-content {
+  flex: 1;
+}
+
+.creation-option-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.creation-option-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.creation-modal-actions {
+  margin-top: 32px;
+}
+
+.creation-cancel-btn {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.creation-cancel-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--text-muted);
+}

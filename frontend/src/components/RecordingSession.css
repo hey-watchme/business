@@ -145,6 +145,18 @@
   color: white;
   font-weight: 600;
   font-size: 18px;
+  overflow: hidden;
+}
+
+.participant-avatar.img {
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.participant-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .participant-info {
@@ -159,24 +171,20 @@
   margin-bottom: 8px;
 }
 
-.audio-wave {
+.audio-bars {
   display: flex;
   align-items: center;
-  gap: 2px;
-  height: 30px;
+  justify-content: flex-start;
+  gap: 3px;
+  height: 48px;
 }
 
-.wave-bar {
-  width: 3px;
-  height: 100%;
+.audio-bar {
+  width: 4px;
   background: linear-gradient(to top, var(--accent-success), rgba(76, 175, 80, 0.2));
   border-radius: 2px;
-  animation: wave 1s ease-in-out infinite;
-}
-
-@keyframes wave {
-  0%, 100% { height: 30%; }
-  50% { height: 100%; }
+  transition: height 0.05s ease;
+  min-height: 4px;
 }
 
 .recording-indicator-large {
@@ -269,6 +277,7 @@
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -344,10 +353,14 @@
 }
 
 @keyframes typing {
-  0%, 60%, 100% {
+
+  0%,
+  60%,
+  100% {
     transform: translateY(0);
     opacity: 0.3;
   }
+
   30% {
     transform: translateY(-10px);
     opacity: 1;
@@ -393,6 +406,14 @@
   background: var(--accent-success);
   border-color: var(--accent-success);
   box-shadow: 0 4px 20px rgba(76, 175, 80, 0.4);
+}
+
+.control-btn.camera.disabled {
+  background: rgba(244, 67, 54, 0.1);
+  border-color: rgba(244, 67, 54, 0.2);
+  color: var(--accent-danger);
+  opacity: 0.8;
+  cursor: not-allowed;
 }
 
 /* Scrollbar Styles */

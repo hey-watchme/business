@@ -1,24 +1,45 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './RecordingSetup.css';
 
 interface RecordingSetupProps {
   onStart: (childName: string) => void;
   onCancel: () => void;
+  subjectName?: string;
+  subjectAvatar?: string;
 }
 
-const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) => {
+const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subjectName, subjectAvatar }) => {
+  const { profile } = useAuth();
   const [micPermission, setMicPermission] = useState<'checking' | 'granted' | 'denied'>('checking');
-  const [selectedChild, setSelectedChild] = useState('田中太郎');
+  const [selectedChild, setSelectedChild] = useState(subjectName || '未選択');
   const [audioLevel, setAudioLevel] = useState(0);
 
   useEffect(() => {
-    // Check microphone permission
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(stream => {
+    if (subjectName) {
+      setSelectedChild(subjectName);
+    }
+  }, [subjectName]);
+
+  useEffect(() => {
+    let audioContext: AudioContext | null = null;
+    let animationFrame: number | null = null;
+    let isUnmounted = false;
+    let activeStream: MediaStream | null = null;
+
+    const startMic = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        if (isUnmounted) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        activeStream = stream;
         setMicPermission('granted');
 
-        // Audio level visualization
-        const audioContext = new AudioContext();
+        audioContext = new AudioContext();
         const analyser = audioContext.createAnalyser();
         const microphone = audioContext.createMediaStreamSource(stream);
         microphone.connect(analyser);
@@ -27,31 +48,38 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
         const checkAudioLevel = () => {
+          if (isUnmounted || !analyser) return;
           analyser.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
           setAudioLevel(average);
-          requestAnimationFrame(checkAudioLevel);
+          animationFrame = requestAnimationFrame(checkAudioLevel);
         };
         checkAudioLevel();
+      } catch (err) {
+        if (!isUnmounted) {
+          console.error('Mic access error:', err);
+          setMicPermission('denied');
+        }
+      }
+    };
 
-        // Cleanup
-        return () => {
-          stream.getTracks().forEach(track => track.stop());
-          audioContext.close();
-        };
-      })
-      .catch(() => {
-        setMicPermission('denied');
-      });
+    startMic();
+
+    return () => {
+      isUnmounted = true;
+      if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
+      }
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close();
+      }
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
   }, []);
 
-  const children = [
-    '田中太郎',
-    '佐藤花子',
-    '鈴木一郎',
-    '山田美咲',
-    '高橋健太'
-  ];
+  // Children selection removed as per user request
 
   return (
     <div className="recording-setup-overlay">
@@ -66,14 +94,18 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
           <div className="setup-left">
             <div className="preview-area">
               <div className="user-preview">
-                <div className="user-avatar-large">
-                  <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                    <circle cx="30" cy="20" r="10" fill="currentColor" opacity="0.5" />
-                    <path d="M10 50C10 40 19 32 30 32C41 32 50 40 50 50" fill="currentColor" opacity="0.5" />
-                  </svg>
-                </div>
-                <h2 className="setup-user-name">山田太郎</h2>
-                <p className="user-role">職員</p>
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt={profile.name || ''} className="user-avatar-large" />
+                ) : (
+                  <div className="user-avatar-large">
+                    <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                      <circle cx="30" cy="20" r="10" fill="currentColor" opacity="0.5" />
+                      <path d="M10 50C10 40 19 32 30 32C41 32 50 40 50 50" fill="currentColor" opacity="0.5" />
+                    </svg>
+                  </div>
+                )}
+                <h2 className="setup-user-name">{profile?.name || 'ゲストユーザー'}</h2>
+                <p className="user-role">{profile?.role === 'staff' ? '児童発達支援管理責任者' : 'スタッフ'}</p>
               </div>
 
               <div className="audio-indicator">
@@ -89,21 +121,31 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
                     />
                   ))}
                 </div>
-                <span className="audio-label">マイク: オン</span>
+                <span className="audio-label" style={{
+                  color: micPermission === 'granted' ? 'var(--accent-success)' :
+                    micPermission === 'denied' ? 'var(--accent-danger)' :
+                      'var(--text-muted)'
+                }}>
+                  {micPermission === 'checking' && 'マイク: 確認中'}
+                  {micPermission === 'granted' && 'マイク: 正常'}
+                  {micPermission === 'denied' && 'マイク: エラー'}
+                </span>
               </div>
 
               <div className="controls-preview">
-                <button className="control-button mic-button active">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="2" />
-                    <path d="M5 11C5 11 5 18 12 18C19 18 19 11 19 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <path d="M12 18V22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <button className="control-button mic-button active" title="マイク: オン">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
                   </svg>
                 </button>
-                <button className="control-button settings-button">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
-                    <path d="M12 1V5M12 19V23M23 12H19M5 12H1M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <button className="control-button camera-button disabled" title="カメラ: オフ">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 16.29V7a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2z"></path>
+                    <path d="M24 8l-8 5 8 5V8z"></path>
+                    <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2"></line>
                   </svg>
                 </button>
               </div>
@@ -111,59 +153,29 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel }) =>
           </div>
 
           <div className="setup-right">
-            <h1 className="setup-title">ヒアリングの準備</h1>
+            <h1 className="setup-title">アセスメントの準備</h1>
             <p className="setup-subtitle">録音を開始する前に、以下の設定を確認してください</p>
 
             <div className="setup-section">
-              <h3 className="section-title">児童を選択</h3>
-              <div className="child-selector">
-                {children.map(child => (
-                  <button
-                    key={child}
-                    className={`child-option ${selectedChild === child ? 'selected' : ''}`}
-                    onClick={() => setSelectedChild(child)}
-                  >
-                    <div className="child-avatar">
-                      {child.charAt(0)}
-                    </div>
-                    <span>{child}</span>
-                  </button>
-                ))}
+              <h3 className="setup-section-title">支援対象者</h3>
+              <div className="child-display-card">
+                {subjectAvatar ? (
+                  <img src={subjectAvatar} alt={selectedChild} className="child-avatar-display" />
+                ) : (
+                  <div className="child-avatar-display">
+                    {selectedChild.charAt(0)}
+                  </div>
+                )}
+                <div className="child-info-display">
+                  <span className="child-name-display">{selectedChild}</span>
+                  <span className="child-label-display">この対象児の計画を作成します</span>
+                </div>
               </div>
             </div>
 
-            <div className="setup-section">
-              <h3 className="section-title">マイクの状態</h3>
-              <div className={`mic-status ${micPermission}`}>
-                {micPermission === 'checking' && (
-                  <>
-                    <div className="spinner"></div>
-                    <span>マイクを確認中...</span>
-                  </>
-                )}
-                {micPermission === 'granted' && (
-                  <>
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="M6 10L8.5 12.5L14 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span>マイクは正常に動作しています</span>
-                  </>
-                )}
-                {micPermission === 'denied' && (
-                  <>
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="M12 8L8 12M8 8L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
-                    <span>マイクへのアクセスが拒否されました</span>
-                  </>
-                )}
-              </div>
-            </div>
 
             <div className="setup-section">
-              <h3 className="section-title">録音時の注意事項</h3>
+              <h3 className="setup-section-title">録音時の注意事項</h3>
               <ul className="tips-list">
                 <li>静かな環境で録音してください</li>
                 <li>マイクから適切な距離を保ってください</li>

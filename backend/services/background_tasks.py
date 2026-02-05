@@ -170,26 +170,39 @@ def analyze_background(
                         except (ValueError, TypeError, KeyError) as e:
                             print(f"[Warning] Failed to calculate age: {e}")
                             age_text = "不明"
+        # Get staff info
+        staff_name = "山田太郎"  # Default fallback
+        staff_id = session.get('staff_id')
+        if staff_id:
+            try:
+                staff_result = supabase.table('users')\
+                    .select('name')\
+                    .eq('user_id', staff_id)\
+                    .execute()
+                if staff_result and staff_result.data and len(staff_result.data) > 0:
+                    staff_name = f"{staff_result.data[0].get('name', 'スタッフ')}（児童発達支援管理責任者）"
             except Exception as e:
-                print(f"[Warning] Failed to fetch subject: {e}")
-                # Continue with default values
+                print(f"[Warning] Failed to fetch staff: {e}")
 
         # Generate extraction_v1 prompt with pre-filled information
         prompt = f"""あなたは児童発達支援のヒアリング記録を整理するアシスタントです。
 
 【事前情報】
-■ 支援対象児
+■ 支援対象者（Subject）
 - 氏名: {subject.get('name', '不明') if subject else '不明'}
+- 生年月日: {subject.get('birth_date', '不明') if subject else '不明'}
 - 年齢: {age_text}
 - 性別: {subject.get('gender', '不明') if subject else '不明'}
 - 診断: {', '.join(subject.get('diagnosis', [])) if subject and subject.get('diagnosis') else '不明'}
-- 通園先: {subject.get('school_name', '不明') if subject and subject.get('school_name') else '不明'}
+- 通園・通学先: {subject.get('school_name', '不明') if subject and subject.get('school_name') else '不明'}
+- 学校種別: {subject.get('school_type', '不明') if subject else '不明'}
+- 特性・認知タイプ: {subject.get('cognitive_type', '不明') if subject else '不明'}
 
 ■ 参加者
 - 保護者: {("父" if attendees.get('father') else "") + ("・母" if attendees.get('mother') else "") or "不明"}
 
 ■ インタビュアー
-- 氏名: 山田太郎（児発管）
+- 氏名: {staff_name}
 
 ■ 実施情報
 - 日時: {session.get('recorded_at', '不明')}
@@ -379,6 +392,9 @@ def assess_background(
     - Professional judgment and interpretation
     - Support policy, goals, and support items
 
+    After Phase 3 completion, automatically syncs assessment_v1 to
+    business_support_plans xxx_ai_generated columns.
+
     Args:
         session_id: Session ID
         supabase: Supabase client
@@ -395,3 +411,165 @@ def assess_background(
         output_column="assessment_result_v1",
         prompt_column="assessment_prompt_v1"
     )
+
+    # Auto-sync assessment_v1 to business_support_plans after Phase 3 completion
+    sync_assessment_to_support_plan(session_id, supabase)
+
+
+def sync_assessment_to_support_plan(session_id: str, supabase: Client):
+    """
+    Sync assessment_v1 data to business_support_plans xxx_ai_generated columns
+
+    This function transfers AI-generated data from the session's assessment_result_v1
+    to the support plan's xxx_ai_generated columns for Human-in-the-Loop editing.
+
+    Args:
+        session_id: Session ID
+        supabase: Supabase client
+    """
+    try:
+        print(f"[Background] Starting auto-sync for session: {session_id}")
+
+        # 1. Get session with support_plan_id and assessment_result_v1
+        session_result = supabase.table('business_interview_sessions')\
+            .select('support_plan_id, assessment_result_v1')\
+            .eq('id', session_id)\
+            .single()\
+            .execute()
+
+        if not session_result.data:
+            print(f"[Background] Session not found for sync: {session_id}")
+            return
+
+        support_plan_id = session_result.data.get('support_plan_id')
+        assessment_result = session_result.data.get('assessment_result_v1')
+
+        if not support_plan_id:
+            print(f"[Background] No support_plan_id linked to session: {session_id}")
+            return
+
+        if not assessment_result:
+            print(f"[Background] No assessment_result_v1 in session: {session_id}")
+            return
+
+        # 2. Extract assessment_v1 from various formats
+        assessment_v1 = extract_assessment_v1_data(assessment_result)
+
+        if not assessment_v1:
+            print(f"[Background] Failed to extract assessment_v1 from session: {session_id}")
+            return
+
+        # 3. Build update data according to mapping
+        update_data = {}
+        synced_fields = []
+
+        # family_child_intentions -> child_intention, family_intention
+        if assessment_v1.get('family_child_intentions'):
+            intentions = assessment_v1['family_child_intentions']
+            if intentions.get('child'):
+                update_data['child_intention_ai_generated'] = intentions['child']
+                synced_fields.append('child_intention')
+            if intentions.get('parents'):
+                update_data['family_intention_ai_generated'] = intentions['parents']
+                synced_fields.append('family_intention')
+
+        # support_policy -> general_policy, key_approaches, collaboration_notes
+        if assessment_v1.get('support_policy'):
+            policy = assessment_v1['support_policy']
+            if policy.get('child_understanding'):
+                update_data['general_policy_ai_generated'] = policy['child_understanding']
+                synced_fields.append('general_policy')
+            if policy.get('key_approaches'):
+                update_data['key_approaches_ai_generated'] = policy['key_approaches']
+                synced_fields.append('key_approaches')
+            if policy.get('collaboration_notes'):
+                update_data['collaboration_notes_ai_generated'] = policy['collaboration_notes']
+                synced_fields.append('collaboration_notes')
+
+        # long_term_goal
+        if assessment_v1.get('long_term_goal'):
+            ltg = assessment_v1['long_term_goal']
+            if ltg.get('goal'):
+                update_data['long_term_goal_ai_generated'] = ltg['goal']
+                synced_fields.append('long_term_goal')
+            if ltg.get('timeline'):
+                update_data['long_term_period_ai_generated'] = ltg['timeline']
+                synced_fields.append('long_term_period')
+            if ltg.get('rationale'):
+                update_data['long_term_rationale_ai_generated'] = ltg['rationale']
+                synced_fields.append('long_term_rationale')
+
+        # short_term_goals (JSONB array)
+        if assessment_v1.get('short_term_goals'):
+            update_data['short_term_goals_ai_generated'] = assessment_v1['short_term_goals']
+            synced_fields.append('short_term_goals')
+
+        # support_items (JSONB array)
+        if assessment_v1.get('support_items'):
+            update_data['support_items_ai_generated'] = assessment_v1['support_items']
+            synced_fields.append('support_items')
+
+        # family_support (JSONB)
+        if assessment_v1.get('family_support'):
+            update_data['family_support_ai_generated'] = assessment_v1['family_support']
+            synced_fields.append('family_support')
+
+        # transition_support (JSONB)
+        if assessment_v1.get('transition_support'):
+            update_data['transition_support_ai_generated'] = assessment_v1['transition_support']
+            synced_fields.append('transition_support')
+
+        if not update_data:
+            print(f"[Background] No data to sync from assessment_v1 for session: {session_id}")
+            return
+
+        # 4. Update business_support_plans
+        update_data['updated_at'] = datetime.now().isoformat()
+        supabase.table('business_support_plans')\
+            .update(update_data)\
+            .eq('id', support_plan_id)\
+            .execute()
+
+        print(f"[Background] Auto-sync completed for session {session_id}: {len(synced_fields)} fields synced ({', '.join(synced_fields)})")
+
+    except Exception as e:
+        # Log error but don't fail the entire assessment
+        print(f"[Background] WARNING: Auto-sync failed for session {session_id}: {str(e)}")
+
+
+def extract_assessment_v1_data(assessment_result: dict) -> dict:
+    """
+    Extract assessment_v1 from various data formats
+
+    Handles:
+    - Direct: {"assessment_v1": {...}}
+    - Wrapped: {"summary": "```json\n{...}\n```"}
+
+    Args:
+        assessment_result: Raw assessment result from DB
+
+    Returns:
+        Extracted assessment_v1 dict or empty dict
+    """
+    import re
+
+    if not assessment_result:
+        return {}
+
+    # Case 1: Direct structure
+    if 'assessment_v1' in assessment_result:
+        return assessment_result['assessment_v1']
+
+    # Case 2: Wrapped in summary
+    if 'summary' in assessment_result:
+        summary_text = assessment_result['summary']
+        # Extract JSON from markdown code block
+        json_match = re.search(r'```json\s*\n([\s\S]*?)\n```', summary_text)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(1))
+                return parsed.get('assessment_v1', {})
+            except json.JSONDecodeError:
+                pass
+
+    return {}

@@ -634,6 +634,51 @@ async def get_session(
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Session not found: {str(e)}")
 
+class SessionUpdate(BaseModel):
+    support_plan_id: Optional[str] = None
+    status: Optional[str] = None
+    subject_id: Optional[str] = None
+
+@app.put("/api/sessions/{session_id}")
+async def update_session(
+    session_id: str,
+    update: SessionUpdate,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        update_data = {}
+        if update.support_plan_id is not None:
+            update_data['support_plan_id'] = update.support_plan_id
+        if update.status is not None:
+            update_data['status'] = update.status
+        if update.subject_id is not None:
+            update_data['subject_id'] = update.subject_id
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        update_data['updated_at'] = datetime.now().isoformat()
+
+        result = supabase.table('business_interview_sessions')\
+            .update(update_data)\
+            .eq('id', session_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        return result.data[0]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update session: {str(e)}")
+
 # Support Plans endpoints
 @app.post("/api/support-plans", response_model=SupportPlanResponse)
 async def create_support_plan(

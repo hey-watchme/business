@@ -4,8 +4,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface RecordingSessionProps {
   childName: string;
+  childAvatar?: string;
+  subjectId: string;
   supportPlanId?: string;
-  onStop: () => void;
+  onStop: (sessionId?: string) => void;
 }
 
 interface TranscriptMessage {
@@ -16,12 +18,15 @@ interface TranscriptMessage {
   timestamp: string;
 }
 
-const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportPlanId, onStop }) => {
+const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAvatar, subjectId, supportPlanId, onStop }) => {
   const { profile } = useAuth();
   const [recordingTime, setRecordingTime] = useState(0);
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const animationFrameRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -51,6 +56,26 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
         chunksRef.current = [];
+
+        // Audio level visualization
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = audioContext;
+        const analyser = audioContext.createAnalyser();
+        analyserRef.current = analyser;
+        const microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+        analyser.fftSize = 256;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const checkAudioLevel = () => {
+          if (!analyserRef.current) return;
+          analyserRef.current.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+          setAudioLevel(average);
+          animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
+        };
+        checkAudioLevel();
 
         mediaRecorder.ondataavailable = (event) => {
           if (event.data.size > 0) {
@@ -107,6 +132,12 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
   }, []);
 
@@ -118,8 +149,8 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
   const uploadAudio = async (blob: Blob) => {
     const formData = new FormData();
     formData.append('audio', blob, 'recording.webm');
-    formData.append('facility_id', '00000000-0000-0000-0000-000000000001');
-    formData.append('subject_id', '00000000-0000-0000-0000-000000000002');
+    formData.append('facility_id', profile?.facility_id || '00000000-0000-0000-0000-000000000001');
+    formData.append('subject_id', subjectId);
     if (supportPlanId) {
       formData.append('support_plan_id', supportPlanId);
     }
@@ -145,7 +176,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
       const data = await response.json();
       console.log('Upload successful:', data);
       alert(`録音が保存されました！\nセッションID: ${data.session_id}`);
-      onStop();
+      onStop(data.session_id);
     } catch (error) {
       console.error('Upload error:', error);
       alert('アップロードに失敗しました');
@@ -162,17 +193,6 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
     }
   };
 
-  const handlePauseResume = () => {
-    if (mediaRecorderRef.current) {
-      if (isPaused) {
-        mediaRecorderRef.current.resume();
-        setIsPaused(false);
-      } else {
-        mediaRecorderRef.current.pause();
-        setIsPaused(true);
-      }
-    }
-  };
 
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -199,7 +219,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
         {/* Header */}
         <div className="session-header">
           <div className="session-info">
-            <h2 className="session-title">保護者ヒアリング録音中</h2>
+            <h2 className="session-title">アセスメント - 録音中</h2>
             <div className="session-meta">
               <span className="child-name">{childName}</span>
               <span className="separator">•</span>
@@ -208,7 +228,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
           </div>
           <button className="end-button" onClick={handleStopRecording}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <rect x="4" y="4" width="12" height="12" rx="2" fill="currentColor"/>
+              <rect x="4" y="4" width="12" height="12" rx="2" fill="currentColor" />
             </svg>
             録音を終了
           </button>
@@ -222,18 +242,21 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
               <div className="participant-card main">
                 <div className="participant-avatar">
                   <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                    <circle cx="30" cy="20" r="10" fill="currentColor" opacity="0.5"/>
-                    <path d="M10 50C10 40 19 32 30 32C41 32 50 40 50 50" fill="currentColor" opacity="0.5"/>
+                    <circle cx="30" cy="20" r="10" fill="currentColor" opacity="0.5" />
+                    <path d="M10 50C10 40 19 32 30 32C41 32 50 40 50 50" fill="currentColor" opacity="0.5" />
                   </svg>
                 </div>
                 <div className="participant-info">
-                  <span className="participant-name">田中母（保護者）</span>
-                  <div className="audio-wave">
+                  <span className="participant-name">保護者</span>
+                  <div className="audio-bars">
                     {[...Array(20)].map((_, i) => (
                       <div
                         key={i}
-                        className="wave-bar"
-                        style={{ animationDelay: `${i * 0.05}s` }}
+                        className="audio-bar"
+                        style={{
+                          height: `${Math.min(100, audioLevel * 2 + Math.random() * 20)}%`,
+                          animationDelay: `${i * 0.05}s`
+                        }}
                       />
                     ))}
                   </div>
@@ -241,17 +264,25 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
               </div>
 
               <div className="participant-card">
-                <div className="participant-avatar small">
-                  {childName.charAt(0)}
-                </div>
+                {childAvatar ? (
+                  <img src={childAvatar} alt={childName} className="participant-avatar small img" />
+                ) : (
+                  <div className="participant-avatar small">
+                    {childName.charAt(0)}
+                  </div>
+                )}
                 <span className="participant-name">{childName}</span>
               </div>
 
               <div className="participant-card">
-                <div className="participant-avatar small">
-                  山
-                </div>
-                <span className="participant-name">山田太郎</span>
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt={profile.name || ''} className="participant-avatar small img" />
+                ) : (
+                  <div className="participant-avatar small">
+                    {profile?.name?.charAt(0) || '職'}
+                  </div>
+                )}
+                <span className="participant-name">{profile?.name || '職員'}</span>
               </div>
             </div>
 
@@ -299,29 +330,20 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, supportP
 
         {/* Bottom Controls */}
         <div className="session-controls">
-          <button className="control-btn mic active">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="2"/>
-              <path d="M5 11C5 11 5 18 12 18C19 18 19 11 19 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              <path d="M12 18V22" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          <button className="control-btn mic active" title="マイク: オン">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+              <line x1="8" y1="23" x2="16" y2="23"></line>
             </svg>
           </button>
-          <button className="control-btn pause" onClick={handlePauseResume}>
-            {isPaused ? (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M8 5L19 12L8 19V5Z" fill="currentColor"/>
-              </svg>
-            ) : (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-                <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-              </svg>
-            )}
-          </button>
-          <button className="control-btn settings">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-              <path d="M12 1V5M12 19V23M23 12H19M5 12H1M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+
+          <button className="control-btn camera disabled" title="カメラ: オフ">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 16.29V7a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2z"></path>
+              <path d="M24 8l-8 5 8 5V8z"></path>
+              <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2"></line>
             </svg>
           </button>
         </div>

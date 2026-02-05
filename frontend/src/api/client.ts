@@ -309,6 +309,12 @@ export const api = {
   getSession: (sessionId: string) =>
     apiRequest<InterviewSession>(`/api/sessions/${sessionId}`),
 
+  updateSession: (sessionId: string, data: { support_plan_id?: string; status?: string; subject_id?: string }) =>
+    apiRequest<InterviewSession>(`/api/sessions/${sessionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   // Support Plans API
   getSupportPlans: () =>
     apiRequest<{ plans: SupportPlan[]; count: number }>(`/api/support-plans`).then(data => data.plans),
