@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Profile fetch error:', error);
+        console.error('fetchProfile: Database query failed (potential 401)', error);
         return null;
       }
 
@@ -139,9 +139,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 auth_provider: u.app_metadata?.provider || 'social',
                 role: 'staff'
               };
-              await supabase.from('users').upsert(newProfile);
-              const refreshed = await fetchProfile(u.id);
-              if (isMounted) setProfile(refreshed || (newProfile as any));
+              console.log('Profile missing. Attempting upsert:', newProfile);
+              const { error: insertError } = await supabase.from('users').upsert(newProfile);
+
+              if (insertError) {
+                console.error('fetchProfile: Profile upsert failed (critical 401/403 check)', insertError);
+              } else {
+                const refreshed = await fetchProfile(u.id);
+                if (isMounted) setProfile(refreshed || (newProfile as any));
+              }
             }
 
             // Clean URL
