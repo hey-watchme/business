@@ -1,15 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// 環境変数を取得し、前後の空白や引用符 (", ') を確実に除去する
+const sanitize = (val: string | undefined) =>
+    val?.trim().replace(/^["'](.+)["']$/, '$1') || '';
+
+const supabaseUrl = sanitize(import.meta.env.VITE_SUPABASE_URL);
+const supabaseAnonKey = sanitize(import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Missing Supabase environment variables. Check your .env or Vercel settings.');
+    console.error('Missing Supabase environment variables.');
 } else {
-    // 開発/デバッグ用ログ。機密情報は伏せる。
     console.log('Supabase Initializing...');
-    console.log('Project ID check:', supabaseUrl.includes('qvtlwotzuzbavrzqhyvt') ? 'OK (Match)' : 'MISMATCH or Custom');
-    console.log('Key length:', supabaseAnonKey.length);
+    console.log('Project ID check:', supabaseUrl.includes('qvtlwotzuzbavrzqhyvt') ? 'OK (Match)' : 'MISMATCH');
+    console.log('Sanitized Key length:', supabaseAnonKey.length);
 }
 
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
