@@ -19,6 +19,8 @@ export default function Login() {
     setLoading(true);
     try {
       const redirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin;
+      console.log('Initiating OAuth login with redirectUrl:', redirectUrl);
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
