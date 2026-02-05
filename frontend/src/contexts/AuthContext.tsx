@@ -22,7 +22,6 @@ interface AuthContextType {
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isBusinessUser: boolean;
-  authError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,7 +31,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   // ユーザープロフィールを取得（事業所名・組織名も取得）
   const fetchProfile = async (userId: string) => {
@@ -44,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) {
-        console.error('fetchProfile: Database query failed (potential 401)', error);
+        console.error('Profile fetch error:', error);
         return null;
       }
 
@@ -105,7 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.error('Auth init error:', err);
-        if (isMounted) setAuthError(err instanceof Error ? err.message : '初期化エラー');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -139,11 +136,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 auth_provider: u.app_metadata?.provider || 'social',
                 role: 'staff'
               };
-              console.log('Profile missing. Attempting upsert:', newProfile);
               const { error: insertError } = await supabase.from('users').upsert(newProfile);
 
               if (insertError) {
-                console.error('fetchProfile: Profile upsert failed (critical 401/403 check)', insertError);
+                console.error('Profile upsert failed:', insertError);
               } else {
                 const refreshed = await fetchProfile(u.id);
                 if (isMounted) setProfile(refreshed || (newProfile as any));
@@ -211,7 +207,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signUp,
     signOut,
     isBusinessUser,
-    authError,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
