@@ -92,47 +92,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    console.log('AuthContext: setting up onAuthStateChange');
+    console.log('AuthContext: initializing...');
+    let isMounted = true;
 
-    // onAuthStateChangeは初期状態も含めてイベントを発火する
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('onAuthStateChange:', event, !!session);
+    // Force initial session check
+    const initAuth = async () => {
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
 
-        setSession(session);
-        setUser(session?.user ?? null);
+        if (!isMounted) return;
 
-        if (session?.user) {
-          // バックグラウンドでプロフィール取得を試みる
-          fetchProfile(session.user.id).then(async (userProfile) => {
-            if (userProfile) {
-              console.log('Profile loaded:', userProfile);
-              setProfile(userProfile);
-              setLoading(false);
-            } else {
-              // プロフィールが存在しない場合、新規ユーザーとして作成（Googleログイン等の初回対応）
-              console.log('Profile not found, creating one from session info...');
-              const { user: u } = session;
-              const newProfile = {
-                user_id: u.id,
-                email: u.email,
-                name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0],
-                avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || null,
-                auth_provider: u.app_metadata?.provider || 'social',
-                role: 'staff'
-              };
-
-              const { error: insertError } = await supabase.from('users').upsert(newProfile);
-
-              if (!insertError) {
-                const refreshedProfile = await fetchProfile(u.id);
-                setProfile(refreshedProfile || (newProfile as any));
-              } else {
-                console.error('Failed to auto-create profile:', insertError);
-              }
+        if (initialSession) {
+          setSession(initialSession);
+          setUser(initialSession.user);
+          const userProfile = await fetchProfile(initialSession.user.id);
+          if (isMounted) {
+            setProfile(userProfile);
+            setLoading(false);
+          }
+        } else {
+          // Fallback timeout to prevent infinite loading
+          setTimeout(() => {
+            if (isMounted && loading) {
               setLoading(false);
             }
-          });
+          }, 3000);
+        }
+      } catch (err) {
+        console.error('Auth check error:', err);
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        console.log('onAuthStateChange:', event, !!currentSession);
+
+        if (!isMounted) return;
+
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+
+        if (currentSession?.user) {
+          const userProfile = await fetchProfile(currentSession.user.id);
+
+          if (!isMounted) return;
+
+          if (userProfile) {
+            setProfile(userProfile);
+          } else {
+            console.log('Creating profile for social login...');
+            const { user: u } = currentSession;
+            const newProfile = {
+              user_id: u.id,
+              email: u.email,
+              name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0],
+              avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || null,
+              auth_provider: u.app_metadata?.provider || 'social',
+              role: 'staff'
+            };
+
+            await supabase.from('users').upsert(newProfile);
+            const refreshed = await fetchProfile(u.id);
+            if (isMounted) setProfile(refreshed || (newProfile as any));
+          }
+          setLoading(false);
+
+          // Cleanup URL fragment after successful login
+          if (window.location.hash && window.location.hash.includes('access_token')) {
+            window.history.replaceState(null, '', window.location.pathname);
+          }
         } else {
           setProfile(null);
           setLoading(false);
@@ -140,7 +171,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
