@@ -3,7 +3,6 @@ import RecordingSetup from '../components/RecordingSetup';
 import RecordingSession from '../components/RecordingSession';
 import Phase1Display from '../components/Phase1Display';
 import Phase2Display from '../components/Phase2Display';
-import Phase3Display from '../components/Phase3Display';
 import EditableField from '../components/EditableField';
 import EditableTableRow, { type SupportItem } from '../components/EditableTableRow';
 import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate } from '../api/client';
@@ -23,7 +22,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [selectedChild, setSelectedChild] = useState('田中太郎'); // Will be updated by Subject data in real usage
   const [supportPlans, setSupportPlans] = useState<SupportPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<SupportPlan | null>(null);
-  const [planSessions, setPlanSessions] = useState<InterviewSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -77,17 +75,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const fetchPlanDetails = async (planId: string) => {
     try {
       const plan = await api.getSupportPlan(planId);
-      setSelectedPlan(plan); // Update selectedPlan with full details including subjects
-      if (plan.sessions) {
-        setPlanSessions(plan.sessions);
-      } else {
-        // If no sessions in plan detail, fetch them separately
-        const response = await api.getSessions(50, planId);
-        setPlanSessions(response.sessions);
-      }
+      setSelectedPlan(plan);
     } catch (err) {
       console.error('Failed to fetch plan details:', err);
-      setPlanSessions([]);
     }
   };
 
@@ -279,35 +269,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     return `${mins}分`;
   };
 
-  // Check if any session is still processing (not yet completed)
-  const isProcessing = (sessions: InterviewSession[]): boolean => {
-    if (!sessions || sessions.length === 0) return false;
-    return sessions.some(session =>
-      session.status !== 'completed' && session.status !== 'error'
-    );
-  };
-
-  // Get processing status message (detailed version for drawer)
-  const getProcessingMessage = (sessions: InterviewSession[]): string => {
-    if (!sessions || sessions.length === 0) return '';
-    const processingSession = sessions.find(s =>
-      s.status !== 'completed' && s.status !== 'error'
-    );
-    if (!processingSession) return '';
-
-    switch (processingSession.status) {
-      case 'uploaded':
-        return '音声ファイルをアップロード済み。文字起こし処理待ち...';
-      case 'transcribing':
-        return '文字起こし処理中...（数分かかります）';
-      case 'transcribed':
-        return 'Phase 1: 事実抽出中...';
-      case 'analyzing':
-        return 'Phase 2-3: AI分析中...（まもなく完了します）';
-      default:
-        return '処理中...';
-    }
-  };
 
   // Get plan status badge (for plan card)
   const getPlanStatusBadge = (plan: SupportPlan): { label: string; icon: string; color: string } => {
