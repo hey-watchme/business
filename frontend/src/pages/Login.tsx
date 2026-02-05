@@ -23,12 +23,17 @@ export default function Login() {
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
       if (error) {
         setError(error.message);
       }
     } catch (err) {
+      console.error('Google login error:', err);
       setError('Googleログインに失敗しました');
     } finally {
       setLoading(false);
