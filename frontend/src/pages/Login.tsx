@@ -61,6 +61,9 @@ export default function Login() {
     }
   };
 
+  // DEBUG: Check environment variables (internal)
+  const isEnvLoaded = !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+
   const renderForm = () => {
     if (signUpSuccess) {
       return (
@@ -114,6 +117,23 @@ export default function Login() {
         <div className="divider">
           <span>または</span>
         </div>
+
+        {/* Temporary Debug Info */}
+        {!isEnvLoaded && (
+          <div style={{
+            padding: '10px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            color: '#ff4d4d',
+            borderRadius: '6px',
+            fontSize: '11px',
+            marginBottom: '20px',
+            textAlign: 'center',
+            border: '1px solid rgba(239, 68, 68, 0.2)'
+          }}>
+            ⚠️ 設定エラー: 環境変数が読み込めていません。<br />
+            VercelのSettingsで VITE_... が設定されているか確認してください。
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="login-form">
           {isSignUp && (
