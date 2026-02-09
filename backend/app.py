@@ -729,6 +729,62 @@ async def update_transcription(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update transcription: {str(e)}")
 
+class ManualSessionCreate(BaseModel):
+    facility_id: str
+    subject_id: str
+    support_plan_id: Optional[str] = None
+    transcription: Optional[str] = None
+
+@app.post("/api/sessions/manual")
+async def create_manual_session(
+    request: ManualSessionCreate,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Create a session without audio upload for manual transcription input.
+    Allows starting the analysis pipeline (Phase 1-2-3) from manually entered text.
+    """
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        session_id = str(uuid.uuid4())
+        transcription = request.transcription.strip() if request.transcription else None
+        status = 'transcribed' if transcription else 'uploaded'
+
+        session_data = {
+            'id': session_id,
+            'facility_id': request.facility_id,
+            'subject_id': request.subject_id,
+            'status': status,
+            'recorded_at': datetime.now().isoformat(),
+        }
+        if request.support_plan_id:
+            session_data['support_plan_id'] = request.support_plan_id
+        if transcription:
+            session_data['transcription'] = transcription
+
+        result = supabase.table('business_interview_sessions')\
+            .insert(session_data)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create session")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message": "Manual session created successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create manual session: {str(e)}")
+
 # Support Plans endpoints
 @app.post("/api/support-plans", response_model=SupportPlanResponse)
 async def create_support_plan(

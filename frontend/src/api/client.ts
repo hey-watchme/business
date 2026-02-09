@@ -379,6 +379,18 @@ export const api = {
     return apiRequest<UsersResponse>(url);
   },
 
+  // Manual session creation (without audio upload)
+  createManualSession: (data: {
+    facility_id: string;
+    subject_id: string;
+    support_plan_id?: string;
+    transcription?: string;
+  }) =>
+    apiRequest<{ success: boolean; session_id: string; message: string }>(`/api/sessions/manual`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   // Transcription editing and re-analysis API
   updateTranscription: (sessionId: string, transcription: string) =>
     apiRequest<{ success: boolean; session_id: string; message: string }>(`/api/sessions/${sessionId}/transcription`, {

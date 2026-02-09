@@ -40,6 +40,12 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [reanalyzing, setReanalyzing] = useState<Record<string, boolean>>({});
   const [reanalysisPhase, setReanalysisPhase] = useState<Record<string, string>>({});
 
+  // Manual session creation state (key: planId)
+  const [creatingManualSession, setCreatingManualSession] = useState<Record<string, boolean>>({});
+
+  // Save feedback state (key: sessionId, value: 'success' | 'error')
+  const [saveFeedback, setSaveFeedback] = useState<Record<string, 'success' | 'error' | null>>({});
+
   // Get active tab for a plan (default to 'home')
   const getActiveTab = (planId: string): PlanTab => activeTabByPlan[planId] || 'home';
 
@@ -84,6 +90,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     try {
       const plan = await api.getSupportPlan(planId);
       setSelectedPlan(plan);
+      setSupportPlans(prev => prev.map(p => p.id === planId ? plan : p));
     } catch (err) {
       console.error('Failed to fetch plan details:', err);
     }
@@ -217,14 +224,15 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     setSavingTranscription(prev => ({ ...prev, [sessionId]: true }));
     try {
       await api.updateTranscription(sessionId, transcription);
-      // Refresh session data
       if (selectedPlan) {
         await fetchPlanDetails(selectedPlan.id);
       }
-      alert('トランスクリプションを保存しました');
+      setSaveFeedback(prev => ({ ...prev, [sessionId]: 'success' }));
+      setTimeout(() => setSaveFeedback(prev => ({ ...prev, [sessionId]: null })), 2000);
     } catch (err) {
       console.error('Failed to save transcription:', err);
-      alert('保存に失敗しました');
+      setSaveFeedback(prev => ({ ...prev, [sessionId]: 'error' }));
+      setTimeout(() => setSaveFeedback(prev => ({ ...prev, [sessionId]: null })), 3000);
     } finally {
       setSavingTranscription(prev => ({ ...prev, [sessionId]: false }));
     }
@@ -256,10 +264,34 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     throw new Error('Timeout waiting for analysis to complete');
   };
 
-  const handleReanalyze = async (sessionId: string, planId: string) => {
-    if (!confirm('トランスクリプションから再分析を実行しますか？\n\nPhase 1→2→3が順次実行されます。\n処理には約30秒かかります。')) {
-      return;
+  const pollSessionField = async (sessionId: string, field: string): Promise<boolean> => {
+    const maxAttempts = 60;
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      try {
+        const session = await api.getSession(sessionId);
+        if (session.status === 'error') {
+          throw new Error(session.error_message || 'Processing failed');
+        }
+        const value = (session as unknown as Record<string, unknown>)[field];
+        if (value !== null && value !== undefined) {
+          return true;
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('failed')) throw err;
+        console.error('Polling error:', err);
+      }
+
+      attempts++;
     }
+
+    throw new Error(`Timeout waiting for ${field}`);
+  };
+
+  const handleReanalyze = async (sessionId: string, planId: string) => {
 
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
 
@@ -272,24 +304,46 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       // Phase 2: Fact Structuring
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2 実行中...' }));
       await api.triggerPhase2(sessionId);
-      await new Promise(resolve => setTimeout(resolve, 8000)); // Wait ~8 seconds for Phase 2
+      await pollSessionField(sessionId, 'fact_structuring_result_v1');
 
       // Phase 3: Assessment
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3 実行中...' }));
       await api.triggerPhase3(sessionId);
-      await new Promise(resolve => setTimeout(resolve, 20000)); // Wait ~20 seconds for Phase 3
+      await pollSessionField(sessionId, 'assessment_result_v1');
 
       // Refresh plan data
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
       await fetchPlanDetails(planId);
-
-      alert('再分析が完了しました！\n\n個別支援計画書タブで更新された内容を確認できます。');
     } catch (err) {
       console.error('Re-analysis failed:', err);
-      alert(`再分析に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`);
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
+      await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
       setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '' }));
+    }
+  };
+
+  const handleCreateManualSession = async (plan: SupportPlan) => {
+    setCreatingManualSession(prev => ({ ...prev, [plan.id]: true }));
+
+    try {
+      const facilityId = "00000000-0000-0000-0000-000000000001";
+      const result = await api.createManualSession({
+        facility_id: facilityId,
+        subject_id: plan.subject_id || '',
+        support_plan_id: plan.id,
+      });
+
+      if (result.success) {
+        await fetchPlanDetails(plan.id);
+        await fetchSupportPlans();
+      }
+    } catch (err) {
+      console.error('Failed to create manual session:', err);
+      alert('セッション作成に失敗しました');
+    } finally {
+      setCreatingManualSession(prev => ({ ...prev, [plan.id]: false }));
     }
   };
 
@@ -1176,120 +1230,138 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
             {/* Assessment Tab Content */}
             {getActiveTab(plan.id) === 'assessment' && (
-              <div className="tab-content-assessment">
-                <div className="meeting-section">
-                  <div className="meeting-header">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    <h4 className="meeting-title">アセスメント情報</h4>
-                  </div>
+              <div className="tab-content-assessment" style={{ display: 'grid', gap: '16px' }}>
 
-                  {plan.sessions && plan.sessions.length > 0 ? (
-                    <div className="meeting-content">
-                      <div className="meeting-info-grid">
-                        <div className="meta-item" style={{ gridColumn: '1 / -1' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M3 7V5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V7M3 7L12 13L21 7M3 7V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                          <span style={{ fontFamily: 'monospace', fontSize: '11px' }}>セッションID: {plan.sessions[0].id}</span>
+                {plan.sessions && plan.sessions.length > 0 ? (
+                  <>
+                    {/* Session Info Section */}
+                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
+                      <h5 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ width: '4px', height: '16px', background: 'var(--accent-primary)', borderRadius: '2px' }}></span>
+                        セッション情報
+                      </h5>
+                      <div style={{ display: 'grid', gap: '8px', fontSize: '13px' }}>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>セッションID:</span>
+                          <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '12px' }}>{plan.sessions[0].id}</span>
                         </div>
-                        <div className="meta-item">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="16" y1="2" x2="16" y2="6"></line>
-                            <line x1="8" y1="2" x2="8" y2="6"></line>
-                            <line x1="3" y1="10" x2="21" y2="10"></line>
-                          </svg>
-                          実施日: {formatDate(plan.sessions[0].recorded_at)}
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>実施日:</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{formatDate(plan.sessions[0].recorded_at)}</span>
                         </div>
-                        <div className="meta-item">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                          </svg>
-                          時間: {formatDuration(plan.sessions[0].duration_seconds)}
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>時間:</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{formatDuration(plan.sessions[0].duration_seconds)}</span>
                         </div>
-                        <div className="meta-item">
-                          {getStatusIcon(plan.sessions[0].status)}
-                          ステータス: {getStatusLabel(plan.sessions[0].status)}
-                        </div>
-                        <div className="meta-item">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                          </svg>
-                          参加者: 未設定（保護者情報）、未設定（スタッフ）
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>ステータス:</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
+                            {getStatusIcon(plan.sessions[0].status)}
+                            {getStatusLabel(plan.sessions[0].status)}
+                          </span>
                         </div>
                       </div>
+                    </div>
 
-                      <div className="transcription-area">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                          <span className="section-label">面談記録書き起こし</span>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                              className="action-button"
-                              onClick={() => plan.sessions?.[0]?.id && handleSaveTranscription(plan.sessions[0].id)}
-                              disabled={savingTranscription[plan.sessions?.[0]?.id || ''] || !editingTranscription[plan.sessions?.[0]?.id || '']}
-                              style={{
-                                background: 'rgba(16, 185, 129, 0.1)',
-                                color: '#10b981',
-                                borderColor: 'rgba(16, 185, 129, 0.2)',
-                                opacity: (!editingTranscription[plan.sessions?.[0]?.id || ''] || savingTranscription[plan.sessions?.[0]?.id || '']) ? 0.5 : 1
-                              }}
-                            >
-                              {savingTranscription[plan.sessions?.[0]?.id || ''] ? '保存中...' : '保存'}
-                            </button>
-                            <button
-                              className="action-button"
-                              onClick={() => plan.sessions?.[0]?.id && handleReanalyze(plan.sessions[0].id, plan.id)}
-                              disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
-                              style={{
-                                background: 'rgba(124, 77, 255, 0.1)',
-                                color: '#7c4dff',
-                                borderColor: 'rgba(124, 77, 255, 0.2)',
-                                opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.5 : 1
-                              }}
-                            >
-                              {reanalyzing[plan.sessions[0].id]
-                                ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '再分析中...')
-                                : 'トランスクリプションから再分析'}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="transcription-box" style={{ maxHeight: '600px', overflowY: 'auto', padding: '0' }}>
-                          {plan.sessions[0].transcription ? (
-                            <textarea
-                              value={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription}
-                              onChange={(e) => plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value)}
-                              style={{
-                                width: '100%',
-                                minHeight: '500px',
-                                padding: '16px',
-                                fontFamily: 'inherit',
-                                fontSize: '14px',
-                                lineHeight: '1.6',
-                                border: 'none',
-                                background: 'transparent',
-                                resize: 'vertical',
-                                outline: 'none'
-                              }}
-                              placeholder="文字起こしデータがありません"
-                            />
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px', display: 'block' }}>文字起こしデータがありません</span>
+                    {/* Transcription Section */}
+                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <h5 style={{ fontSize: '14px', fontWeight: '600', margin: '0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ width: '4px', height: '16px', background: 'var(--accent-info, #2196f3)', borderRadius: '2px' }}></span>
+                          面談記録
+                        </h5>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {saveFeedback[plan.sessions?.[0]?.id || ''] === 'success' && (
+                            <span style={{ color: 'var(--accent-success)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              保存完了
+                            </span>
                           )}
+                          {saveFeedback[plan.sessions?.[0]?.id || ''] === 'error' && (
+                            <span style={{ color: 'var(--accent-danger)', fontSize: '13px' }}>保存失敗</span>
+                          )}
+                          <button
+                            onClick={() => plan.sessions?.[0]?.id && handleSaveTranscription(plan.sessions[0].id)}
+                            disabled={savingTranscription[plan.sessions?.[0]?.id || ''] || !editingTranscription[plan.sessions?.[0]?.id || '']}
+                            style={{
+                              padding: '8px 20px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(16, 185, 129, 0.4)',
+                              background: '#10b981',
+                              color: 'white',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              opacity: (!editingTranscription[plan.sessions?.[0]?.id || ''] || savingTranscription[plan.sessions?.[0]?.id || '']) ? 0.4 : 1,
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {savingTranscription[plan.sessions?.[0]?.id || ''] ? '保存中...' : '保存'}
+                          </button>
+                          <button
+                            onClick={() => plan.sessions?.[0]?.id && handleReanalyze(plan.sessions[0].id, plan.id)}
+                            disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                            style={{
+                              padding: '8px 20px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(124, 77, 255, 0.4)',
+                              background: 'var(--accent-primary)',
+                              color: 'white',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {reanalyzing[plan.sessions[0].id]
+                              ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '分析中...')
+                              : '分析開始'}
+                          </button>
                         </div>
                       </div>
+                      <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', borderLeft: '4px solid var(--accent-primary)', maxHeight: '600px', overflowY: 'auto' }}>
+                        <textarea
+                          value={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription ?? ''}
+                          onChange={(e) => plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value)}
+                          style={{
+                            width: '100%',
+                            minHeight: '400px',
+                            padding: '16px',
+                            fontFamily: 'inherit',
+                            fontSize: '13px',
+                            lineHeight: '1.7',
+                            border: 'none',
+                            background: 'transparent',
+                            resize: 'vertical',
+                            outline: 'none',
+                            color: 'var(--text-primary)',
+                          }}
+                          placeholder="面談記録のテキストを入力してください"
+                        />
+                      </div>
                     </div>
-                  ) : (
-                    <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                  </>
+                ) : (
+                  <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '32px', textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
                       アセスメントデータが紐付けられていません
-                    </div>
-                  )}
-                </div>
+                    </p>
+                    <button
+                      className="action-button"
+                      onClick={() => handleCreateManualSession(plan)}
+                      disabled={creatingManualSession[plan.id]}
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        color: '#10b981',
+                        borderColor: 'rgba(16, 185, 129, 0.2)',
+                        opacity: creatingManualSession[plan.id] ? 0.5 : 1,
+                      }}
+                    >
+                      {creatingManualSession[plan.id] ? 'セッション作成中...' : '面談記録を手動入力'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

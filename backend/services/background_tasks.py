@@ -170,6 +170,8 @@ def analyze_background(
                         except (ValueError, TypeError, KeyError) as e:
                             print(f"[Warning] Failed to calculate age: {e}")
                             age_text = "不明"
+            except Exception as e:
+                print(f"[Warning] Failed to fetch subject: {e}")
         # Get staff info
         staff_name = "山田太郎"  # Default fallback
         staff_id = session.get('staff_id')
