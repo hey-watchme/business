@@ -92,7 +92,7 @@ const StatCards = () => (
 );
 
 function App() {
-  const { user, profile, loading, isBusinessUser, signOut } = useAuth();
+  const { user, profile, loading, error: authError, isBusinessUser, signOut } = useAuth();
   const [selectedMenu, setSelectedMenu] = useState('dashboard');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
 
@@ -101,14 +101,49 @@ function App() {
     return (
       <div style={{
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
         background: 'var(--bg-primary)',
         color: 'var(--text-primary)',
-        fontSize: '16px'
+        gap: '20px'
       }}>
-        読み込み中...
+        <div className="spinner" />
+        <p>読み込み中...</p>
+      </div>
+    );
+  }
+
+  if (authError) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <h2 style={{ color: '#ff4d4f', marginBottom: '16px' }}>認証エラー</h2>
+        <p>{authError}</p>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            marginTop: '24px',
+            padding: '10px 24px',
+            backgroundColor: '#1890ff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          再読み込み
+        </button>
       </div>
     );
   }

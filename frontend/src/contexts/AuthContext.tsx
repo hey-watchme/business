@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import { api } from '../api/client';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface UserProfile {
@@ -8,9 +9,10 @@ interface UserProfile {
   email: string | null;
   role: string | null;
   facility_id: string | null;
+  status: string | null;
+  avatar_url: string | null;
   facility_name: string | null;
   organization_name: string | null;
-  avatar_url: string | null;
 }
 
 interface AuthContextType {
@@ -18,6 +20,7 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
+  error: string | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -31,56 +34,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // ユーザープロフィールを取得（事業所名・組織名も取得）
   const fetchProfile = async (userId: string) => {
+    console.log('🔓 fetchProfile: Fetching from BACKEND for', userId);
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('user_id, name, email, role, facility_id, avatar_url')
-        .eq('user_id', userId)
-        .single();
-
-      if (error) {
-        console.error('Profile fetch error:', error);
-        return null;
-      }
-
-      let facilityName: string | null = null;
-      let organizationName: string | null = null;
-
-      if (data.facility_id) {
-        const { data: facilityData } = await supabase
-          .from('business_facilities')
-          .select('name, organization_id')
-          .eq('id', data.facility_id)
-          .single();
-
-        if (facilityData) {
-          facilityName = facilityData.name;
-          if (facilityData.organization_id) {
-            const { data: orgData } = await supabase
-              .from('business_organizations')
-              .select('name')
-              .eq('id', facilityData.organization_id)
-              .single();
-            organizationName = orgData?.name ?? null;
-          }
-        }
-      }
-
-      return {
-        user_id: data.user_id,
-        name: data.name,
-        email: data.email,
-        role: data.role,
-        facility_id: data.facility_id,
-        facility_name: facilityName,
-        organization_name: organizationName,
-        avatar_url: data.avatar_url,
-      } as UserProfile;
-    } catch (err) {
-      console.error('Profile fetch exception:', err);
+      // Bypassing Supabase Frontend Client (RLS) entirely for profile
+      // Using our API client which talks to our FastAPI backend using Service Role
+      const data = await api.getMe(userId);
+      console.log('🔓 fetchProfile: Backend returned profile:', data);
+      return data as UserProfile;
+    } catch (err: any) {
+      console.error('🔓 fetchProfile: Backend error:', err.message);
+      // We don't block the whole app if profile fails, but we log the error
       return null;
     }
   };
@@ -89,20 +55,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const initAuth = async () => {
+      setLoading(true);
+      setError(null);
+      console.log('🔓 initAuth: Getting Supabase session...');
+
       try {
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
-        if (error) throw error;
+        const { data: { session: initialSession }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          setError(`セッションエラー: ${sessionError.message}`);
+          return;
+        }
 
         if (isMounted) {
           setSession(initialSession);
           setUser(initialSession?.user ?? null);
+
           if (initialSession?.user) {
+            console.log('🔓 initAuth: Found user, fetching profile from backend...');
             const p = await fetchProfile(initialSession.user.id);
             if (isMounted) setProfile(p);
           }
         }
-      } catch (err) {
-        console.error('Auth init error:', err);
+      } catch (err: any) {
+        setError(`初期化失敗: ${err.message}`);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -112,52 +88,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
-        try {
-          if (!isMounted) return;
-          console.log('onAuthStateChange:', event);
+        if (!isMounted) return;
+        console.log('🔓 onAuthStateChange:', event);
 
-          setSession(currentSession);
-          setUser(currentSession?.user ?? null);
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
 
-          if (currentSession?.user) {
-            const p = await fetchProfile(currentSession.user.id);
-            if (!isMounted) return;
-
-            if (p) {
-              setProfile(p);
-            } else {
-              // Create profile if missing (Social Login)
-              const { user: u } = currentSession;
-              const newProfile = {
-                user_id: u.id,
-                email: u.email,
-                name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0],
-                avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || null,
-                auth_provider: u.app_metadata?.provider || 'social',
-                role: 'staff'
-              };
-              const { error: insertError } = await supabase.from('users').upsert(newProfile);
-
-              if (insertError) {
-                console.error('Profile upsert failed:', insertError);
-              } else {
-                const refreshed = await fetchProfile(u.id);
-                if (isMounted) setProfile(refreshed || (newProfile as any));
-              }
-            }
-
-            // Clean URL
-            if (window.location.hash && window.location.hash.includes('access_token')) {
-              window.history.replaceState(null, '', window.location.pathname);
-            }
-          } else {
-            setProfile(null);
-          }
-        } catch (err) {
-          console.error('Auth change error:', err);
-        } finally {
-          if (isMounted) setLoading(false);
+        if (currentSession?.user) {
+          const p = await fetchProfile(currentSession.user.id);
+          if (isMounted) setProfile(p);
+        } else {
+          setProfile(null);
         }
+        setLoading(false);
       }
     );
 
@@ -168,18 +111,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    return await supabase.auth.signInWithPassword({ email, password });
   };
 
   const signUp = async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error: err } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name } },
     });
 
-    if (!error && data.user) {
+    if (!err && data.user) {
+      // Note: We still use direct supabase insert for signup if RLS allows, 
+      // but signups are rare. Profile fetching is the critical part.
       await supabase.from('users').insert({
         user_id: data.user.id,
         email: email,
@@ -188,12 +132,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: 'staff',
       });
     }
-    return { error };
+    return { error: err };
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setError(null);
   };
 
   const isBusinessUser = profile?.facility_id !== null && profile?.facility_id !== undefined;
@@ -203,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     profile,
     loading,
+    error,
     signIn,
     signUp,
     signOut,

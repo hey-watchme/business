@@ -378,4 +378,34 @@ export const api = {
     }
     return apiRequest<UsersResponse>(url);
   },
+
+  // Transcription editing and re-analysis API
+  updateTranscription: (sessionId: string, transcription: string) =>
+    apiRequest<{ success: boolean; session_id: string; message: string }>(`/api/sessions/${sessionId}/transcription`, {
+      method: 'PUT',
+      body: JSON.stringify({ transcription }),
+    }),
+
+  // Trigger analysis phases (returns 202 Accepted)
+  triggerPhase1: (sessionId: string) =>
+    apiRequest<{ status: string; message: string }>(`/api/analyze`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+
+  triggerPhase2: (sessionId: string) =>
+    apiRequest<{ status: string; message: string }>(`/api/structure-facts`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+
+  triggerPhase3: (sessionId: string) =>
+    apiRequest<{ status: string; message: string }>(`/api/assess`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+
+  // Auth/Profile API
+  getMe: (userId: string) =>
+    apiRequest<any>(`/api/me?user_id=${userId}`),
 };

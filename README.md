@@ -43,6 +43,7 @@ business/
 
 - **[個別支援計画生成システム 技術仕様書](./docs/INDIVIDUAL_SUPPORT_PLAN_SPEC.md)** - Phase 0-3 完全仕様（★最重要）
 - **[認証・アカウント設計](./docs/AUTHENTICATION_DESIGN.md)** - Organization/Facility設計・認証体系
+  - 💡 **重要**: 2026-02-06より、データ取得はバックエンド経由に統一されました（RLSトラブル回避のため）。
 - **[DB定義](./infrastructure/supabase/create_tables.sql)** - Supabaseテーブル定義
 
 ## 🚀 技術スタック

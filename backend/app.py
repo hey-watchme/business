@@ -639,6 +639,9 @@ class SessionUpdate(BaseModel):
     status: Optional[str] = None
     subject_id: Optional[str] = None
 
+class TranscriptionUpdate(BaseModel):
+    transcription: str
+
 @app.put("/api/sessions/{session_id}")
 async def update_session(
     session_id: str,
@@ -678,6 +681,53 @@ async def update_session(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update session: {str(e)}")
+
+@app.put("/api/sessions/{session_id}/transcription")
+async def update_transcription(
+    session_id: str,
+    update: TranscriptionUpdate,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Update transcription text for a session
+    
+    This allows manual editing of transcriptions (e.g., removing noise, casual conversations)
+    before re-running AI analysis phases.
+    """
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Validate transcription is not empty
+        if not update.transcription or not update.transcription.strip():
+            raise HTTPException(status_code=400, detail="Transcription cannot be empty")
+
+        # Update transcription in database
+        result = supabase.table('business_interview_sessions')\
+            .update({
+                'transcription': update.transcription.strip(),
+                'updated_at': datetime.now().isoformat()
+            })\
+            .eq('id', session_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message": "Transcription updated successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update transcription: {str(e)}")
 
 # Support Plans endpoints
 @app.post("/api/support-plans", response_model=SupportPlanResponse)
@@ -1139,6 +1189,50 @@ async def sync_from_assessment(
     except Exception as e:
         print(f"Error syncing from assessment: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to sync: {str(e)}")
+
+@app.get("/api/me")
+async def get_current_user_profile(
+    user_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Fetch user profile using service role (bypassing RLS)
+        res = supabase.table('users').select('*').eq('user_id', user_id).single().execute()
+        
+        if not res.data:
+            raise HTTPException(status_code=404, detail="User profile not found")
+        
+        user_data = res.data
+        
+        # Fetch facility/org info if exists
+        facility_name = None
+        organization_name = None
+        
+        if user_data.get('facility_id'):
+            f_res = supabase.table('business_facilities').select('name, organization_id').eq('id', user_data['facility_id']).single().execute()
+            if f_res.data:
+                facility_name = f_res.data['name']
+                if f_res.data.get('organization_id'):
+                    o_res = supabase.table('business_organizations').select('name').eq('id', f_res.data['organization_id']).single().execute()
+                    if o_res.data:
+                        organization_name = o_res.data['name']
+
+        return {
+            **user_data,
+            "facility_name": facility_name,
+            "organization_name": organization_name
+        }
+
+    except Exception as e:
+        print(f"Error fetching profile: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/subjects")
 async def get_subjects(

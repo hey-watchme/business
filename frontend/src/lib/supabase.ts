@@ -1,15 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const sanitize = (val: string | undefined) => {
-    if (!val) return '';
-    return val.trim().replace(/^["']|["']$/g, '');
-};
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-const supabaseUrl = sanitize(import.meta.env.VITE_SUPABASE_URL);
-const supabaseAnonKey = sanitize(import.meta.env.VITE_SUPABASE_ANON_KEY);
-
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Missing Supabase environment variables. Check your Vercel settings.');
-}
+console.error('Supabase check:', !!supabaseUrl, !!supabaseAnonKey);
+console.error('Supabase URL:', supabaseUrl || '(empty)');
+console.error('Supabase Key:', supabaseAnonKey ? supabaseAnonKey.substring(0, 10) + '...' : '(empty)');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

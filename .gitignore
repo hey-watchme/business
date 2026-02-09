@@ -35,3 +35,14 @@ Thumbs.db
 temp/lambda/audio-upload-handler/urllib3*
 lambda/audio-upload-handler/*.dist-info
 lambda/audio-upload-handler/*.zip
+
+# Data files
+*.csv
+
+# Screenshots
+docs/screenshot/
+
+# Debug scripts
+backend/check_db_permissions.py
+backend/debug_user.py
+backend/fix_user.py

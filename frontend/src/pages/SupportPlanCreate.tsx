@@ -32,6 +32,14 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   // Tab state per plan (key: planId, value: active tab)
   const [activeTabByPlan, setActiveTabByPlan] = useState<Record<string, PlanTab>>({});
 
+  // Transcription editing state (key: sessionId, value: edited transcription)
+  const [editingTranscription, setEditingTranscription] = useState<Record<string, string>>({});
+  const [savingTranscription, setSavingTranscription] = useState<Record<string, boolean>>({});
+
+  // Re-analysis state (key: sessionId)
+  const [reanalyzing, setReanalyzing] = useState<Record<string, boolean>>({});
+  const [reanalysisPhase, setReanalysisPhase] = useState<Record<string, string>>({});
+
   // Get active tab for a plan (default to 'home')
   const getActiveTab = (planId: string): PlanTab => activeTabByPlan[planId] || 'home';
 
@@ -196,6 +204,94 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       alert('AI分析結果の同期に失敗しました');
     }
   }, [selectedPlan?.id]);
+
+  // ===== Transcription editing handlers =====
+  const handleTranscriptionChange = (sessionId: string, value: string) => {
+    setEditingTranscription(prev => ({ ...prev, [sessionId]: value }));
+  };
+
+  const handleSaveTranscription = async (sessionId: string) => {
+    const transcription = editingTranscription[sessionId];
+    if (!transcription) return;
+
+    setSavingTranscription(prev => ({ ...prev, [sessionId]: true }));
+    try {
+      await api.updateTranscription(sessionId, transcription);
+      // Refresh session data
+      if (selectedPlan) {
+        await fetchPlanDetails(selectedPlan.id);
+      }
+      alert('トランスクリプションを保存しました');
+    } catch (err) {
+      console.error('Failed to save transcription:', err);
+      alert('保存に失敗しました');
+    } finally {
+      setSavingTranscription(prev => ({ ...prev, [sessionId]: false }));
+    }
+  };
+
+  // ===== Re-analysis handlers =====
+  const pollSessionStatus = async (sessionId: string, targetStatus: string): Promise<boolean> => {
+    const maxAttempts = 60; // Max 60 attempts (60 seconds)
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+
+      try {
+        const session = await api.getSession(sessionId);
+        if (session.status === 'completed' || session.status === targetStatus) {
+          return true;
+        }
+        if (session.status === 'error') {
+          throw new Error(session.error_message || 'Analysis failed');
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+
+      attempts++;
+    }
+
+    throw new Error('Timeout waiting for analysis to complete');
+  };
+
+  const handleReanalyze = async (sessionId: string, planId: string) => {
+    if (!confirm('トランスクリプションから再分析を実行しますか？\n\nPhase 1→2→3が順次実行されます。\n処理には約30秒かかります。')) {
+      return;
+    }
+
+    setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
+
+    try {
+      // Phase 1: Fact Extraction
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 1 実行中...' }));
+      await api.triggerPhase1(sessionId);
+      await pollSessionStatus(sessionId, 'analyzed');
+
+      // Phase 2: Fact Structuring
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2 実行中...' }));
+      await api.triggerPhase2(sessionId);
+      await new Promise(resolve => setTimeout(resolve, 8000)); // Wait ~8 seconds for Phase 2
+
+      // Phase 3: Assessment
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3 実行中...' }));
+      await api.triggerPhase3(sessionId);
+      await new Promise(resolve => setTimeout(resolve, 20000)); // Wait ~20 seconds for Phase 3
+
+      // Refresh plan data
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
+      await fetchPlanDetails(planId);
+
+      alert('再分析が完了しました！\n\n個別支援計画書タブで更新された内容を確認できます。');
+    } catch (err) {
+      console.error('Re-analysis failed:', err);
+      alert(`再分析に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`);
+    } finally {
+      setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '' }));
+    }
+  };
 
   const getStatusIcon = (status: InterviewSession['status']) => {
     switch (status) {
@@ -1130,14 +1226,60 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                       </div>
 
                       <div className="transcription-area">
-                        <span className="section-label">面談記録書き起こし</span>
-                        <div className="transcription-box" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <span className="section-label">面談記録書き起こし</span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              className="action-button"
+                              onClick={() => plan.sessions?.[0]?.id && handleSaveTranscription(plan.sessions[0].id)}
+                              disabled={savingTranscription[plan.sessions?.[0]?.id || ''] || !editingTranscription[plan.sessions?.[0]?.id || '']}
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.1)',
+                                color: '#10b981',
+                                borderColor: 'rgba(16, 185, 129, 0.2)',
+                                opacity: (!editingTranscription[plan.sessions?.[0]?.id || ''] || savingTranscription[plan.sessions?.[0]?.id || '']) ? 0.5 : 1
+                              }}
+                            >
+                              {savingTranscription[plan.sessions?.[0]?.id || ''] ? '保存中...' : '保存'}
+                            </button>
+                            <button
+                              className="action-button"
+                              onClick={() => plan.sessions?.[0]?.id && handleReanalyze(plan.sessions[0].id, plan.id)}
+                              disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                              style={{
+                                background: 'rgba(124, 77, 255, 0.1)',
+                                color: '#7c4dff',
+                                borderColor: 'rgba(124, 77, 255, 0.2)',
+                                opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.5 : 1
+                              }}
+                            >
+                              {reanalyzing[plan.sessions[0].id]
+                                ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '再分析中...')
+                                : 'トランスクリプションから再分析'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="transcription-box" style={{ maxHeight: '600px', overflowY: 'auto', padding: '0' }}>
                           {plan.sessions[0].transcription ? (
-                            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, fontFamily: 'inherit' }}>
-                              {plan.sessions[0].transcription}
-                            </pre>
+                            <textarea
+                              value={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription}
+                              onChange={(e) => plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                minHeight: '500px',
+                                padding: '16px',
+                                fontFamily: 'inherit',
+                                fontSize: '14px',
+                                lineHeight: '1.6',
+                                border: 'none',
+                                background: 'transparent',
+                                resize: 'vertical',
+                                outline: 'none'
+                              }}
+                              placeholder="文字起こしデータがありません"
+                            />
                           ) : (
-                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>文字起こしデータがありません</span>
+                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px', display: 'block' }}>文字起こしデータがありません</span>
                           )}
                         </div>
                       </div>
