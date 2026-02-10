@@ -25,14 +25,15 @@ def execute_llm_phase(
     input_selector: str,
     output_column: str,
     prompt_column: str,
-    additional_data: Optional[Dict[str, Any]] = None
+    additional_data: Optional[Dict[str, Any]] = None,
+    use_stored_prompt: bool = False
 ) -> None:
     """
     Execute a single LLM analysis phase (Phase 1, 2, or 3)
 
     Unified processing pattern:
     1. DB.select() - Load previous phase result
-    2. Build prompt
+    2. Build prompt (or use stored prompt if use_stored_prompt=True)
     3. Save prompt to DB
     4. Call LLM
     5. Parse JSON (flexible)
@@ -48,6 +49,7 @@ def execute_llm_phase(
         output_column: DB column for result (e.g., "fact_extraction_result_v1")
         prompt_column: DB column for prompt (e.g., "fact_extraction_prompt_v1")
         additional_data: Additional data to pass to prompt_builder (optional)
+        use_stored_prompt: If True, use the prompt already stored in DB instead of rebuilding
 
     Raises:
         Exception: If any step fails
@@ -71,16 +73,28 @@ def execute_llm_phase(
             'error_message': None
         }).eq('id', session_id).execute()
 
-        # 2. Build prompt
-        if additional_data:
-            prompt = prompt_builder(result.data, **additional_data)
+        # 2. Build prompt (or use stored prompt)
+        if use_stored_prompt:
+            # Use the prompt already saved in DB (edited by user)
+            prompt_result = supabase.table('business_interview_sessions')\
+                .select(prompt_column)\
+                .eq('id', session_id)\
+                .single()\
+                .execute()
+            prompt = prompt_result.data.get(prompt_column) if prompt_result.data else None
+            if not prompt:
+                raise ValueError(f"No stored prompt found in {prompt_column}")
+            print(f"[Background] Using stored prompt for {phase_name}")
         else:
-            prompt = prompt_builder(result.data)
+            if additional_data:
+                prompt = prompt_builder(result.data, **additional_data)
+            else:
+                prompt = prompt_builder(result.data)
 
-        # 3. Save prompt to DB
-        supabase.table('business_interview_sessions').update({
-            prompt_column: prompt
-        }).eq('id', session_id).execute()
+            # 3. Save prompt to DB
+            supabase.table('business_interview_sessions').update({
+                prompt_column: prompt
+            }).eq('id', session_id).execute()
 
         # 4. Call LLM
         print(f"[Background] Calling LLM for {phase_name}...")

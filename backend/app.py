@@ -98,6 +98,13 @@ class TranscribeResponse(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     session_id: str
+    use_custom_prompt: bool = False
+
+
+class PromptUpdate(BaseModel):
+    phase: str  # "phase1" | "phase2" | "phase3"
+    prompt: str
+
 
 class AnalyzeResponse(BaseModel):
     success: bool
@@ -385,7 +392,8 @@ async def analyze_interview(
                 request.session_id,
                 supabase,
                 llm_service,
-                SQS_ANALYSIS_QUEUE_URL
+                SQS_ANALYSIS_QUEUE_URL,
+                request.use_custom_prompt
             )
         )
         thread.daemon = True
@@ -480,7 +488,8 @@ async def structure_facts(
             args=(
                 request.session_id,
                 supabase,
-                llm_service
+                llm_service,
+                request.use_custom_prompt
             )
         )
         thread.daemon = True
@@ -564,7 +573,8 @@ async def assess(
             args=(
                 request.session_id,
                 supabase,
-                llm_service
+                llm_service,
+                request.use_custom_prompt
             )
         )
         thread.daemon = True
@@ -728,6 +738,70 @@ async def update_transcription(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update transcription: {str(e)}")
+
+
+@app.put("/api/sessions/{session_id}/prompt")
+async def update_prompt(
+    session_id: str,
+    update: PromptUpdate,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Update LLM prompt for a specific phase
+
+    Allows manual editing of prompts before re-running analysis phases.
+
+    Args:
+        session_id: Session ID
+        update: PromptUpdate with phase ("phase1"|"phase2"|"phase3") and prompt text
+    """
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    # Map phase to DB column
+    phase_column_map = {
+        "phase1": "fact_extraction_prompt_v1",
+        "phase2": "fact_structuring_prompt_v1",
+        "phase3": "assessment_prompt_v1",
+    }
+
+    column = phase_column_map.get(update.phase)
+    if not column:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid phase: {update.phase}. Must be phase1, phase2, or phase3"
+        )
+
+    if not update.prompt or not update.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+
+    try:
+        result = supabase.table('business_interview_sessions')\
+            .update({
+                column: update.prompt.strip(),
+                'updated_at': datetime.now().isoformat()
+            })\
+            .eq('id', session_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "phase": update.phase,
+            "message": f"Prompt for {update.phase} updated successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update prompt: {str(e)}")
+
 
 class ManualSessionCreate(BaseModel):
     facility_id: str

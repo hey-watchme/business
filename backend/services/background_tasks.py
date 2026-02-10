@@ -107,7 +107,8 @@ def analyze_background(
     session_id: str,
     supabase: Client,
     llm_service,
-    sqs_queue_url: str = None
+    sqs_queue_url: str = None,
+    use_custom_prompt: bool = False
 ):
     """
     Background task for interview analysis
@@ -117,6 +118,7 @@ def analyze_background(
         supabase: Supabase client
         llm_service: LLM service instance
         sqs_queue_url: SQS queue URL for completion notification (optional)
+        use_custom_prompt: If True, use the prompt already stored in DB
     """
     try:
         print(f"[Background] Starting analysis for session: {session_id}")
@@ -186,15 +188,21 @@ def analyze_background(
             except Exception as e:
                 print(f"[Warning] Failed to fetch staff: {e}")
 
-        # Generate extraction_v1 prompt using prompts.py
-        prompt = build_fact_extraction_prompt(
-            transcription=transcription,
-            subject=subject,
-            age_text=age_text,
-            attendees=attendees,
-            staff_name=staff_name,
-            recorded_at=session.get('recorded_at', '不明')
-        )
+        # Generate extraction_v1 prompt using prompts.py (or use stored prompt)
+        if use_custom_prompt:
+            prompt = session.get('fact_extraction_prompt_v1')
+            if not prompt:
+                raise Exception("No stored prompt found for Phase 1")
+            print(f"[Background] Using stored custom prompt for Phase 1")
+        else:
+            prompt = build_fact_extraction_prompt(
+                transcription=transcription,
+                subject=subject,
+                age_text=age_text,
+                attendees=attendees,
+                staff_name=staff_name,
+                recorded_at=session.get('recorded_at', '不明')
+            )
 
         # Call LLM with error handling
         try:
@@ -254,7 +262,8 @@ def analyze_background(
 def structure_facts_background(
     session_id: str,
     supabase: Client,
-    llm_service
+    llm_service,
+    use_custom_prompt: bool = False
 ):
     """
     Phase 2: Fact Structuring (Background Task)
@@ -267,6 +276,7 @@ def structure_facts_background(
         session_id: Session ID
         supabase: Supabase client
         llm_service: LLM service instance
+        use_custom_prompt: If True, use the prompt already stored in DB
     """
     # Use unified LLM pipeline
     execute_llm_phase(
@@ -277,14 +287,16 @@ def structure_facts_background(
         prompt_builder=build_fact_structuring_prompt,
         input_selector="fact_extraction_result_v1",
         output_column="fact_structuring_result_v1",
-        prompt_column="fact_structuring_prompt_v1"
+        prompt_column="fact_structuring_prompt_v1",
+        use_stored_prompt=use_custom_prompt
     )
 
 
 def assess_background(
     session_id: str,
     supabase: Client,
-    llm_service
+    llm_service,
+    use_custom_prompt: bool = False
 ):
     """
     Phase 3: Assessment (Background Task)
@@ -300,6 +312,7 @@ def assess_background(
         session_id: Session ID
         supabase: Supabase client
         llm_service: LLM service instance
+        use_custom_prompt: If True, use the prompt already stored in DB
     """
     # Use unified LLM pipeline
     execute_llm_phase(
@@ -310,7 +323,8 @@ def assess_background(
         prompt_builder=build_assessment_prompt,
         input_selector="fact_structuring_result_v1",
         output_column="assessment_result_v1",
-        prompt_column="assessment_prompt_v1"
+        prompt_column="assessment_prompt_v1",
+        use_stored_prompt=use_custom_prompt
     )
 
     # Auto-sync assessment_v1 to business_support_plans after Phase 3 completion

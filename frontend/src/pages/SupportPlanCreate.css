@@ -956,3 +956,118 @@
   color: var(--text-secondary);
   border-color: var(--text-muted);
 }
+
+/* Prompt Viewer (collapsible) */
+.prompt-viewer {
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.prompt-viewer summary {
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.prompt-viewer summary:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.prompt-viewer .prompt-content {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg-primary);
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Prompt Editor (editable textarea) */
+.prompt-viewer .prompt-editor {
+  display: block;
+  width: 100%;
+  min-height: 300px;
+  max-height: 500px;
+  padding: 16px;
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.prompt-viewer .prompt-editor:focus {
+  outline: none;
+  background: var(--bg-secondary);
+}
+
+/* Prompt Action Buttons */
+.prompt-viewer .prompt-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.prompt-save-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.prompt-save-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.prompt-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prompt-rerun-btn {
+  padding: 6px 14px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.prompt-rerun-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.prompt-rerun-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

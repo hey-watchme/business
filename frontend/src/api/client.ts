@@ -15,6 +15,10 @@ export interface InterviewSession {
   updated_at: string;
   fact_extraction_prompt_v1?: string | null;
   fact_extraction_result_v1?: { summary: string } | string | null;
+  fact_structuring_prompt_v1?: string | null;
+  fact_structuring_result_v1?: object | string | null;
+  assessment_prompt_v1?: string | null;
+  assessment_result_v1?: object | string | null;
   error_message?: string | null;
   transcription_metadata?: string | null;
 }
@@ -398,23 +402,30 @@ export const api = {
       body: JSON.stringify({ transcription }),
     }),
 
+  // Prompt editing API
+  updatePrompt: (sessionId: string, phase: string, prompt: string) =>
+    apiRequest<{ success: boolean; session_id: string; phase: string; message: string }>(`/api/sessions/${sessionId}/prompt`, {
+      method: 'PUT',
+      body: JSON.stringify({ phase, prompt }),
+    }),
+
   // Trigger analysis phases (returns 202 Accepted)
-  triggerPhase1: (sessionId: string) =>
+  triggerPhase1: (sessionId: string, useCustomPrompt: boolean = false) =>
     apiRequest<{ status: string; message: string }>(`/api/analyze`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt }),
     }),
 
-  triggerPhase2: (sessionId: string) =>
+  triggerPhase2: (sessionId: string, useCustomPrompt: boolean = false) =>
     apiRequest<{ status: string; message: string }>(`/api/structure-facts`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt }),
     }),
 
-  triggerPhase3: (sessionId: string) =>
+  triggerPhase3: (sessionId: string, useCustomPrompt: boolean = false) =>
     apiRequest<{ status: string; message: string }>(`/api/assess`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt }),
     }),
 
   // Auth/Profile API
