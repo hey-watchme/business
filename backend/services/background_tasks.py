@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 import boto3
 from supabase import Client
-from services.prompts import build_fact_structuring_prompt, build_assessment_prompt
+from services.prompts import build_fact_extraction_prompt, build_fact_structuring_prompt, build_assessment_prompt
 from services.llm_pipeline import execute_llm_phase
 
 
@@ -186,116 +186,15 @@ def analyze_background(
             except Exception as e:
                 print(f"[Warning] Failed to fetch staff: {e}")
 
-        # Generate extraction_v1 prompt with pre-filled information
-        prompt = f"""あなたは児童発達支援のヒアリング記録を整理するアシスタントです。
-
-【事前情報】
-■ 支援対象者（Subject）
-- 氏名: {subject.get('name', '不明') if subject else '不明'}
-- 生年月日: {subject.get('birth_date', '不明') if subject else '不明'}
-- 年齢: {age_text}
-- 性別: {subject.get('gender', '不明') if subject else '不明'}
-- 診断: {', '.join(subject.get('diagnosis', [])) if subject and subject.get('diagnosis') else '不明'}
-- 通園・通学先: {subject.get('school_name', '不明') if subject and subject.get('school_name') else '不明'}
-- 学校種別: {subject.get('school_type', '不明') if subject else '不明'}
-- 特性・認知タイプ: {subject.get('cognitive_type', '不明') if subject else '不明'}
-
-■ 参加者
-- 保護者: {("父" if attendees.get('father') else "") + ("・母" if attendees.get('mother') else "") or "不明"}
-
-■ インタビュアー
-- 氏名: {staff_name}
-
-■ 実施情報
-- 日時: {session.get('recorded_at', '不明')}
-
-【重要なルール】
-- 判断・評価・目標設定・支援計画の作成は絶対にしないでください
-- 事実・発言・観察内容のみを抽出してください
-- 原文の引用は不要です（要約のみ）
-- 推測や補完は禁止です
-- 曖昧な場合は confidence を "low" にしてください
-
-【出力形式】
-以下のJSON形式で出力してください。
-原文引用（source）は含めないでください。
-
-{{
-  "extraction_v1": {{
-    "basic_info": [
-      {{
-        "field": "項目名",
-        "value": "値",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "current_state": [
-      {{
-        "summary": "現在の状況の要約",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "strengths": [
-      {{
-        "summary": "強みの要約",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "challenges": [
-      {{
-        "summary": "課題の要約",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "physical_sensory": [
-      {{
-        "summary": "身体・感覚の要約",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "medical_development": [
-      {{
-        "summary": "医療・発達の要約",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "family_environment": [
-      {{
-        "summary": "家族・環境の要約",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "parent_intentions": [
-      {{
-        "summary": "保護者の希望",
-        "priority": 1,
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "staff_notes": [
-      {{
-        "summary": "スタッフの観察・メモ",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "administrative_notes": [
-      {{
-        "summary": "事務的な内容",
-        "confidence": "high/medium/low"
-      }}
-    ],
-    "unresolved_items": [
-      {{
-        "summary": "未解決・保留事項",
-        "reason": "理由"
-      }}
-    ]
-  }}
-}}
-
-【ヒアリングのトランスクリプション】
-{transcription}
-"""
+        # Generate extraction_v1 prompt using prompts.py
+        prompt = build_fact_extraction_prompt(
+            transcription=transcription,
+            subject=subject,
+            age_text=age_text,
+            attendees=attendees,
+            staff_name=staff_name,
+            recorded_at=session.get('recorded_at', '不明')
+        )
 
         # Call LLM with error handling
         try:

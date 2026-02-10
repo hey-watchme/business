@@ -1,6 +1,6 @@
 # 個別支援計画 自動生成システム 技術仕様書
 
-**最終更新**: 2026-02-10 JST
+**最終更新**: 2026-02-11 JST
 **対象プロジェクト**: WatchMe Business API
 **システム状態**: Phase 0-3パイプライン完全稼働 ✅、自動sync実装完了 ✅、手動入力対応 ✅
 **実装完了度**: 98% (コアパイプライン完了、タブUI実装完了、手動入力機能追加)
@@ -53,8 +53,9 @@
 ### 設計思想
 
 **3段階パイプライン設計**:
-- **Phase 1-2**: 事実のみ（推論・解釈ゼロ）→ 自動化可能
-- **Phase 3**: 専門的判断（解釈・評価・創造）→ 現在は自動化、将来的にHuman in the Loop想定
+- **Phase 1**: 事実抽出（推論・解釈ゼロ）→ ノイズ除外 + 5領域の事実を抽出
+- **Phase 2**: 事実整理 + 専門的見立て（氷山モデル、強み分析、場面分離）→ Phase 3の"下ごしらえ"
+- **Phase 3**: 計画書生成（Phase 2の分析結果を計画書フォーマットに翻訳）→ 目標・支援内容の策定
 
 ---
 
@@ -262,7 +263,7 @@ Speaker 2: よろしくお願いします。
 
 ### 概要
 
-- **実装日**: 2026-01-17
+- **実装日**: 2026-01-17（プロンプト改善: 2026-02-10）
 - **状態**: ✅ 稼働中
 - **エンドポイント**: `POST /api/analyze`
 - **使用モデル**: OpenAI gpt-4o
@@ -270,12 +271,14 @@ Speaker 2: よろしくお願いします。
 
 ### 責務
 
-トランスクリプションから**事実のみ**を11カテゴリに分類して抽出。
+トランスクリプションから**支援の根拠となる事実**を11カテゴリに分類して抽出。
 
-**厳守ルール**:
-- 推論・解釈・評価は一切行わない
-- 発言された内容と観察可能な事実のみ
-- 曖昧な場合は`confidence: low`
+**プロンプト構造** (`build_fact_extraction_prompt()`):
+- **Role**: 児童発達支援の専門アセスメント担当者
+- **IGNORE（除外）**: 契約・事務・送迎・アプリ設定等のノイズを完全除外
+- **MUST KEEP（抽出対象）**: 5領域（本人の特性・行動、対人関係・社会性、健康・生活習慣、本人の意向、保護者の意向・課題）
+- **DO/DON'T**: 事実のみ抽出、推論・解釈禁止、場面情報（いつ・どこで）をセットで保持
+- **迷ったら残す原則**: 判断に迷う発言は削除せず confidence: low で保持
 
 ### 出力構造
 
@@ -302,15 +305,16 @@ Speaker 2: よろしくお願いします。
 
 - `backend/app.py`: エンドポイント定義
 - `backend/services/background_tasks.py`: `analyze_background()`
+- `backend/services/prompts.py`: `build_fact_extraction_prompt()`
 - `backend/services/llm_pipeline.py`: 共通処理
 
 ---
 
-## Phase 2: 事実整理
+## Phase 2: 事実整理 + 専門的見立て
 
 ### 概要
 
-- **実装日**: 2026-01-18
+- **実装日**: 2026-01-18（プロンプト改善: 2026-02-10）
 - **状態**: ✅ 稼働中
 - **エンドポイント**: `POST /api/structure-facts`
 - **使用モデル**: OpenAI gpt-4o
@@ -318,11 +322,15 @@ Speaker 2: よろしくお願いします。
 
 ### 責務
 
-extraction_v1から**事実を再分類**し、支援計画用の構造（fact_clusters_v1）に整理。
+extraction_v1から事実を5領域に再分類し、**専門的な見立て（背景分析・強みの活用可能性）**を付加。Phase 3の"下ごしらえ"を完成させる。
 
-**厳守ルール**:
-- 事実の再分類のみ（推論・解釈禁止）
-- 中立的なクラスタに分類
+**プロンプト構造** (`build_fact_structuring_prompt()`):
+- **Role**: 児童発達支援の専門アセスメント担当者
+- **場面（setting）の明記**: 各事実に「家庭」「園」「療育」「全般」を付加
+- **氷山モデル**: 行動の背景にある特性・機能を推測（background フィールド）
+- **強みの活用**: 強みが支援でどう活かせるかのヒント（strength_use フィールド）
+- **優先度タグ**: 保護者ニーズ直結の課題に priority: high を付与
+- **DON'T**: 事実の捏造禁止、目標・支援方法の記述禁止（Phase 3の責務）
 
 ### 出力構造
 
@@ -330,13 +338,18 @@ extraction_v1から**事実を再分類**し、支援計画用の構造（fact_c
 ```json
 {
   "fact_clusters_v1": {
-    "developmental_facts": [...],
-    "behavioral_facts": [...],
-    "social_facts": [...],
-    "sensory_facts": [...],
+    "child_profile": {...},
+    "strengths_facts": [{"fact": "...", "setting": "...", "strength_use": "..."}],
+    "challenges_facts": [{"fact": "...", "setting": "...", "background": "...", "priority": "high|normal"}],
+    "cognitive_facts": [{"fact": "...", "setting": "...", "background": "..."}],
+    "behavior_facts": [{"fact": "...", "setting": "...", "background": "..."}],
+    "social_communication_facts": [{"fact": "...", "setting": "...", "background": "..."}],
+    "physical_sensory_facts": [{"fact": "...", "setting": "...", "background": "..."}],
+    "daily_living_facts": [{"fact": "...", "setting": "...", "background": "..."}],
+    "medical_facts": [...],
     "family_context": [...],
-    "support_history": [...],
-    "environmental_factors": [...]
+    "parent_child_intentions": [{"speaker": "...", "intention": "...", "priority": "..."}],
+    "service_administrative_facts": [...]
   }
 }
 ```
@@ -353,7 +366,7 @@ extraction_v1から**事実を再分類**し、支援計画用の構造（fact_c
 
 ### 概要
 
-- **実装日**: 2026-01-18
+- **実装日**: 2026-01-18（プロンプト改善: 2026-02-10）
 - **状態**: ✅ 稼働中（自動sync対応）
 - **エンドポイント**: `POST /api/assess`
 - **使用モデル**: OpenAI gpt-4o
@@ -362,12 +375,15 @@ extraction_v1から**事実を再分類**し、支援計画用の構造（fact_c
 
 ### 責務
 
-fact_clusters_v1から**個別支援計画書**を生成する。
+Phase 2で整理・分析された事実と見立て（background, strength_use, priority）を、**個別支援計画書のフォーマットに翻訳**する。
 
-**Phase 3で初めて許可されること**:
-- 解釈・評価（「〜と見立てています」「〜が必要である」）
-- 因果関係の推論
-- 専門家視点での判断
+**プロンプト構造** (`build_assessment_prompt()`):
+- **Role**: 児童発達支援管理責任者
+- **Phase 2連携**: background → 支援の根拠、strength_use → 支援の手法、priority: high → 計画の中心
+- **論理構造**: 意向の反映 → 根拠に基づく目標 → 強み活用の支援案 → 5領域の網羅 → 優先度の反映
+- **氷山モデルに基づく支援設計**: 問題行動の制止ではなく背景ニーズへのアプローチ
+- **執筆スタイル**: 到達目標（「〜ができる」）と支援者アクション（「〜を行う」）を分離
+- **DON'T**: Phase 2にない分析の捏造禁止、テンプレート的目標禁止、一般論補完禁止
 
 ### 出力構造
 
