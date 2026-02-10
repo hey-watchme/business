@@ -395,6 +395,37 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
   };
 
+  const handleGeneratePhase1Prompt = async (sessionId: string, planId: string) => {
+    setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
+    setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 1プロンプト生成中...' }));
+
+    try {
+      const result = await api.generatePhase1Prompt(sessionId);
+
+      if (result.success && result.prompt) {
+        // Store generated prompt in editing state
+        const key = `${sessionId}_phase1`;
+        setEditingPrompt(prev => ({ ...prev, [key]: result.prompt }));
+
+        // Refresh plan data
+        await fetchPlanDetails(planId);
+
+        // Switch to Phase 1 tab
+        setActiveTab(planId, 'phase1');
+
+        setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (err) {
+      console.error('Failed to generate Phase 1 prompt:', err);
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    } finally {
+      setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '' }));
+    }
+  };
+
   const handleCreateManualSession = async (plan: SupportPlan) => {
     setCreatingManualSession(prev => ({ ...prev, [plan.id]: true }));
 
@@ -1380,6 +1411,30 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                             }}
                           >
                             {savingTranscription[plan.sessions?.[0]?.id || ''] ? '保存中...' : '保存'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (plan.sessions?.[0]?.id) {
+                                handleGeneratePhase1Prompt(plan.sessions[0].id, plan.id);
+                              }
+                            }}
+                            disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                            style={{
+                              padding: '8px 20px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(59, 130, 246, 0.4)',
+                              background: '#3b82f6',
+                              color: 'white',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {reanalyzing[plan.sessions[0].id]
+                              ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 1プロンプト生成中...')
+                              : 'Phase 1プロンプト生成'}
                           </button>
                           <button
                             onClick={() => {

@@ -823,6 +823,101 @@ async def update_prompt(
         raise HTTPException(status_code=500, detail=f"Failed to update prompt: {str(e)}")
 
 
+@app.get("/api/sessions/{session_id}/generate-prompt/phase1")
+async def generate_phase1_prompt(
+    session_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Generate Phase 1 prompt from transcription without executing analysis
+
+    Returns the generated prompt for user review/editing before execution.
+    Does NOT save to database or trigger analysis.
+
+    Args:
+        session_id: Session ID
+
+    Returns:
+        { "prompt": "...", "session_id": "..." }
+    """
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Fetch session data
+        result = supabase.table('business_interview_sessions')\
+            .select('*, business_subjects(*)')\
+            .eq('id', session_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = result.data[0]
+        transcription = session.get('transcription')
+
+        if not transcription or not transcription.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="No transcription found. Please save transcription first."
+            )
+
+        # Get subject info
+        subject = session.get('business_subjects')
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
+
+        # Calculate age
+        age_text = "不明"
+        if subject.get('birth_date'):
+            from datetime import datetime
+            birth_date = datetime.fromisoformat(subject['birth_date'].replace('Z', '+00:00'))
+            today = datetime.now()
+            age_years = today.year - birth_date.year
+            if today.month < birth_date.month or (today.month == birth_date.month and today.day < birth_date.day):
+                age_years -= 1
+            age_text = f"{age_years}歳"
+
+        # Get attendees
+        attendees = {
+            'father': session.get('attendee_father', False),
+            'mother': session.get('attendee_mother', False)
+        }
+
+        # Get staff name and recorded_at
+        staff_name = session.get('staff_name', '不明')
+        recorded_at = session.get('recorded_at', '不明')
+        if recorded_at != '不明':
+            recorded_at_dt = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
+            recorded_at = recorded_at_dt.strftime('%Y年%m月%d日')
+
+        # Generate prompt
+        from services.prompts import build_fact_extraction_prompt
+        prompt = build_fact_extraction_prompt(
+            transcription=transcription,
+            subject=subject,
+            age_text=age_text,
+            attendees=attendees,
+            staff_name=staff_name,
+            recorded_at=recorded_at
+        )
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "prompt": prompt
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating Phase 1 prompt: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate prompt: {str(e)}")
+
+
 class ManualSessionCreate(BaseModel):
     facility_id: str
     subject_id: str

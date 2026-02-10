@@ -412,6 +412,12 @@ export const api = {
       body: JSON.stringify({ phase, prompt }),
     }),
 
+  // Generate Phase 1 prompt without executing analysis
+  generatePhase1Prompt: (sessionId: string) =>
+    apiRequest<{ success: boolean; session_id: string; prompt: string }>(`/api/sessions/${sessionId}/generate-prompt/phase1`, {
+      method: 'GET',
+    }),
+
   // Trigger analysis phases (returns 202 Accepted)
   triggerPhase1: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string) =>
     apiRequest<{ status: string; message: string }>(`/api/analyze`, {
