@@ -847,9 +847,9 @@ async def generate_phase1_prompt(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        # Fetch session data
+        # Fetch session data (no JOIN - same pattern as background_tasks.py)
         result = supabase.table('business_interview_sessions')\
-            .select('*, business_subjects(*)')\
+            .select('*')\
             .eq('id', session_id)\
             .execute()
 
@@ -865,34 +865,41 @@ async def generate_phase1_prompt(
                 detail="No transcription found. Please save transcription first."
             )
 
-        # Get subject info
-        subject = session.get('business_subjects')
-        if not subject:
-            raise HTTPException(status_code=404, detail="Subject not found")
-
-        # Calculate age
+        # Get subject info via separate query (same as background_tasks.py)
+        subject = None
+        attendees = session.get('attendees') or {}
         age_text = "不明"
-        if subject.get('birth_date'):
-            from datetime import datetime
-            birth_date = datetime.fromisoformat(subject['birth_date'].replace('Z', '+00:00'))
-            today = datetime.now()
-            age_years = today.year - birth_date.year
-            if today.month < birth_date.month or (today.month == birth_date.month and today.day < birth_date.day):
-                age_years -= 1
-            age_text = f"{age_years}歳"
 
-        # Get attendees
-        attendees = {
-            'father': session.get('attendee_father', False),
-            'mother': session.get('attendee_mother', False)
-        }
+        subject_id = session.get('subject_id')
+        if subject_id:
+            subject_result = supabase.table('subjects')\
+                .select('*')\
+                .eq('subject_id', subject_id)\
+                .execute()
+            if subject_result and subject_result.data and len(subject_result.data) > 0:
+                subject = subject_result.data[0]
 
-        # Get staff name and recorded_at
-        staff_name = session.get('staff_name', '不明')
-        recorded_at = session.get('recorded_at', '不明')
-        if recorded_at != '不明':
-            recorded_at_dt = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
-            recorded_at = recorded_at_dt.strftime('%Y年%m月%d日')
+                if subject.get('birth_date'):
+                    try:
+                        birth_date = datetime.fromisoformat(subject['birth_date'].replace('Z', '+00:00'))
+                        age = (datetime.now() - birth_date).days // 365
+                        age_text = f"{age}歳"
+                    except (ValueError, TypeError, KeyError):
+                        age_text = "不明"
+
+        # Get staff name via separate query (same as background_tasks.py)
+        staff_name = "不明"
+        staff_id = session.get('staff_id')
+        if staff_id:
+            try:
+                staff_result = supabase.table('users')\
+                    .select('name')\
+                    .eq('user_id', staff_id)\
+                    .execute()
+                if staff_result and staff_result.data and len(staff_result.data) > 0:
+                    staff_name = staff_result.data[0].get('name', '不明')
+            except Exception:
+                pass
 
         # Generate prompt
         from services.prompts import build_fact_extraction_prompt
@@ -902,7 +909,7 @@ async def generate_phase1_prompt(
             age_text=age_text,
             attendees=attendees,
             staff_name=staff_name,
-            recorded_at=recorded_at
+            recorded_at=session.get('recorded_at', '不明')
         )
 
         return {
