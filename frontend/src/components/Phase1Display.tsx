@@ -129,7 +129,6 @@ const Phase1Display: React.FC<Props> = ({ data }) => {
     <div style={{ display: 'grid', gap: '16px' }}>
       {sections.map(section => {
         const items = extraction[section.key as keyof typeof extraction];
-        if (!items || (Array.isArray(items) && items.length === 0)) return null;
 
         return (
           <div key={section.key} style={{
@@ -153,7 +152,7 @@ const Phase1Display: React.FC<Props> = ({ data }) => {
                 background: 'var(--accent-primary)',
                 borderRadius: '2px'
               }}></span>
-              {section.title}
+              {section.title} <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '12px' }}>({section.key})</span>
             </h5>
             {renderItems(items as any, section.type)}
           </div>

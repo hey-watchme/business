@@ -120,119 +120,117 @@ const Phase2Display: React.FC<Props> = ({ data }) => {
     );
   };
 
+  const renderChildProfile = (profile: any) => {
+    if (!profile || Object.keys(profile).length === 0) {
+      return <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>データなし</p>;
+    }
+
+    return (
+      <div style={{ display: 'grid', gap: '8px', fontSize: '13px' }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>氏名:</span>
+          <span style={{ color: 'var(--text-primary)' }}>{profile.name || 'データなし'}</span>
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>年齢:</span>
+          <span style={{ color: 'var(--text-primary)' }}>{profile.age ? `${profile.age}歳` : 'データなし'}</span>
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>診断:</span>
+          <span style={{ color: 'var(--text-primary)' }}>
+            {profile.diagnosis && profile.diagnosis.length > 0 ? profile.diagnosis.join(', ') : 'データなし'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>所属:</span>
+          <span style={{ color: 'var(--text-primary)' }}>{profile.school_name || 'データなし'}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
       {/* Child Profile */}
-      {clusters.child_profile && (
-        <div style={{
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '8px',
-          padding: '16px'
+      <div style={{
+        background: 'var(--bg-primary)',
+        border: '1px solid var(--border-primary)',
+        borderRadius: '8px',
+        padding: '16px'
+      }}>
+        <h5 style={{
+          fontSize: '14px',
+          fontWeight: '600',
+          margin: '0 0 12px 0',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}>
-          <h5 style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            margin: '0 0 12px 0',
-            color: 'var(--text-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span style={{
-              width: '4px',
-              height: '16px',
-              background: 'var(--accent-primary)',
-              borderRadius: '2px'
-            }}></span>
-            児童プロフィール
-          </h5>
-          <div style={{ display: 'grid', gap: '8px', fontSize: '13px' }}>
-            {clusters.child_profile.name && (
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>氏名:</span>
-                <span style={{ color: 'var(--text-primary)' }}>{clusters.child_profile.name}</span>
-              </div>
-            )}
-            {clusters.child_profile.age && (
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>年齢:</span>
-                <span style={{ color: 'var(--text-primary)' }}>{clusters.child_profile.age}歳</span>
-              </div>
-            )}
-            {clusters.child_profile.diagnosis && clusters.child_profile.diagnosis.length > 0 && (
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>診断:</span>
-                <span style={{ color: 'var(--text-primary)' }}>{clusters.child_profile.diagnosis.join(', ')}</span>
-              </div>
-            )}
-            {clusters.child_profile.school_name && (
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>所属:</span>
-                <span style={{ color: 'var(--text-primary)' }}>{clusters.child_profile.school_name}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          <span style={{
+            width: '4px',
+            height: '16px',
+            background: 'var(--accent-primary)',
+            borderRadius: '2px'
+          }}></span>
+          児童プロフィール <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '12px' }}>(child_profile)</span>
+        </h5>
+        {renderChildProfile(clusters.child_profile)}
+      </div>
 
       {/* Strengths Facts */}
-      {clusters.strengths_facts && clusters.strengths_facts.length > 0 && (
-        <div style={{
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '8px',
-          padding: '16px'
+      <div style={{
+        background: 'var(--bg-primary)',
+        border: '1px solid var(--border-primary)',
+        borderRadius: '8px',
+        padding: '16px'
+      }}>
+        <h5 style={{
+          fontSize: '14px',
+          fontWeight: '600',
+          margin: '0 0 12px 0',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}>
-          <h5 style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            margin: '0 0 12px 0',
-            color: 'var(--text-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span style={{
-              width: '4px',
-              height: '16px',
-              background: 'var(--accent-success)',
-              borderRadius: '2px'
-            }}></span>
-            強み
-          </h5>
-          {renderStringArray(clusters.strengths_facts)}
-        </div>
-      )}
+          <span style={{
+            width: '4px',
+            height: '16px',
+            background: 'var(--accent-success)',
+            borderRadius: '2px'
+          }}></span>
+          強み <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '12px' }}>(strengths_facts)</span>
+        </h5>
+        {renderStringArray(clusters.strengths_facts)}
+      </div>
 
       {/* Challenges Facts */}
-      {clusters.challenges_facts && clusters.challenges_facts.length > 0 && (
-        <div style={{
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '8px',
-          padding: '16px'
+      <div style={{
+        background: 'var(--bg-primary)',
+        border: '1px solid var(--border-primary)',
+        borderRadius: '8px',
+        padding: '16px'
+      }}>
+        <h5 style={{
+          fontSize: '14px',
+          fontWeight: '600',
+          margin: '0 0 12px 0',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}>
-          <h5 style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            margin: '0 0 12px 0',
-            color: 'var(--text-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span style={{
-              width: '4px',
-              height: '16px',
-              background: 'var(--accent-warning)',
-              borderRadius: '2px'
-            }}></span>
-            課題
-          </h5>
-          {renderStringArray(clusters.challenges_facts)}
-        </div>
-      )}
+          <span style={{
+            width: '4px',
+            height: '16px',
+            background: 'var(--accent-warning)',
+            borderRadius: '2px'
+          }}></span>
+          課題 <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '12px' }}>(challenges_facts)</span>
+        </h5>
+        {renderStringArray(clusters.challenges_facts)}
+      </div>
 
       {/* Other fact categories */}
       {[
@@ -246,7 +244,6 @@ const Phase2Display: React.FC<Props> = ({ data }) => {
         { title: '事務・行政', key: 'service_administrative_facts' as const },
       ].map(section => {
         const items = clusters[section.key];
-        if (!items || items.length === 0) return null;
 
         return (
           <div key={section.key} style={{
@@ -270,7 +267,7 @@ const Phase2Display: React.FC<Props> = ({ data }) => {
                 background: 'var(--accent-primary)',
                 borderRadius: '2px'
               }}></span>
-              {section.title}
+              {section.title} <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '12px' }}>({section.key})</span>
             </h5>
             {renderStringArray(items)}
           </div>
@@ -278,33 +275,31 @@ const Phase2Display: React.FC<Props> = ({ data }) => {
       })}
 
       {/* Parent/Child Intentions */}
-      {clusters.parent_child_intentions && clusters.parent_child_intentions.length > 0 && (
-        <div style={{
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '8px',
-          padding: '16px'
+      <div style={{
+        background: 'var(--bg-primary)',
+        border: '1px solid var(--border-primary)',
+        borderRadius: '8px',
+        padding: '16px'
+      }}>
+        <h5 style={{
+          fontSize: '14px',
+          fontWeight: '600',
+          margin: '0 0 12px 0',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}>
-          <h5 style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            margin: '0 0 12px 0',
-            color: 'var(--text-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span style={{
-              width: '4px',
-              height: '16px',
-              background: 'var(--accent-primary)',
-              borderRadius: '2px'
-            }}></span>
-            本人・保護者の意向
-          </h5>
-          {renderIntentions(clusters.parent_child_intentions)}
-        </div>
-      )}
+          <span style={{
+            width: '4px',
+            height: '16px',
+            background: 'var(--accent-primary)',
+            borderRadius: '2px'
+          }}></span>
+          本人・保護者の意向 <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '12px' }}>(parent_child_intentions)</span>
+        </h5>
+        {renderIntentions(clusters.parent_child_intentions)}
+      </div>
     </div>
   );
 };

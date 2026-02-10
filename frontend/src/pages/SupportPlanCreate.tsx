@@ -3,6 +3,7 @@ import RecordingSetup from '../components/RecordingSetup';
 import RecordingSession from '../components/RecordingSession';
 import Phase1Display from '../components/Phase1Display';
 import Phase2Display from '../components/Phase2Display';
+import Phase3Display from '../components/Phase3Display';
 import EditableField from '../components/EditableField';
 import EditableTableRow, { type SupportItem } from '../components/EditableTableRow';
 import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate } from '../api/client';
@@ -10,7 +11,7 @@ import { calculateAge } from '../utils/date';
 import './SupportPlanCreate.css';
 
 type RecordingMode = 'none' | 'setup' | 'recording';
-type PlanTab = 'home' | 'assessment' | 'phase1' | 'phase2';
+type PlanTab = 'home' | 'assessment' | 'phase1' | 'phase2' | 'phase3';
 
 interface SupportPlanCreateProps {
   initialSubjectId?: string;
@@ -45,6 +46,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   // Save feedback state (key: sessionId, value: 'success' | 'error')
   const [saveFeedback, setSaveFeedback] = useState<Record<string, 'success' | 'error' | null>>({});
+
+  // Prompt editing state (key: `${sessionId}_${phase}`)
+  const [editingPrompt, setEditingPrompt] = useState<Record<string, string>>({});
+  const [savingPrompt, setSavingPrompt] = useState<Record<string, boolean>>({});
+  const [promptFeedback, setPromptFeedback] = useState<Record<string, 'success' | 'error' | null>>({});
 
   // Get active tab for a plan (default to 'home')
   const getActiveTab = (planId: string): PlanTab => activeTabByPlan[planId] || 'home';
@@ -312,6 +318,67 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       await pollSessionField(sessionId, 'assessment_result_v1');
 
       // Refresh plan data
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
+      await fetchPlanDetails(planId);
+    } catch (err) {
+      console.error('Re-analysis failed:', err);
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    } finally {
+      setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '' }));
+    }
+  };
+
+  // ===== Prompt editing handlers =====
+  const handlePromptChange = (sessionId: string, phase: string, value: string) => {
+    setEditingPrompt(prev => ({ ...prev, [`${sessionId}_${phase}`]: value }));
+  };
+
+  const getPromptKey = (sessionId: string, phase: string) => `${sessionId}_${phase}`;
+
+  const handleSavePrompt = async (sessionId: string, phase: string) => {
+    const key = getPromptKey(sessionId, phase);
+    const prompt = editingPrompt[key];
+    if (!prompt) return;
+
+    setSavingPrompt(prev => ({ ...prev, [key]: true }));
+    try {
+      await api.updatePrompt(sessionId, phase, prompt);
+      if (selectedPlan) {
+        await fetchPlanDetails(selectedPlan.id);
+      }
+      setPromptFeedback(prev => ({ ...prev, [key]: 'success' }));
+      setTimeout(() => setPromptFeedback(prev => ({ ...prev, [key]: null })), 2000);
+    } catch (err) {
+      console.error('Failed to save prompt:', err);
+      setPromptFeedback(prev => ({ ...prev, [key]: 'error' }));
+      setTimeout(() => setPromptFeedback(prev => ({ ...prev, [key]: null })), 3000);
+    } finally {
+      setSavingPrompt(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleReanalyzeFromPhase = async (sessionId: string, planId: string, startPhase: 1 | 2 | 3) => {
+    setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
+
+    try {
+      if (startPhase <= 1) {
+        setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 1 実行中...' }));
+        await api.triggerPhase1(sessionId, startPhase === 1);
+        await pollSessionStatus(sessionId, 'analyzed');
+      }
+      if (startPhase <= 2) {
+        setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2 実行中...' }));
+        await api.triggerPhase2(sessionId, startPhase === 2);
+        await pollSessionField(sessionId, 'fact_structuring_result_v1');
+      }
+      if (startPhase <= 3) {
+        setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3 実行中...' }));
+        await api.triggerPhase3(sessionId, startPhase === 3);
+        await pollSessionField(sessionId, 'assessment_result_v1');
+      }
+
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
       await fetchPlanDetails(planId);
     } catch (err) {
@@ -814,6 +881,18 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                 </svg>
                 Phase 2
+              </button>
+              <button
+                className={`plan-tab ${getActiveTab(plan.id) === 'phase3' ? 'active' : ''}`}
+                onClick={() => setActiveTab(plan.id, 'phase3')}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
+                Phase 3
               </button>
             </div>
 
@@ -1373,8 +1452,46 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <p className="phase-description">
                     ヒアリング内容から事実のみを抽出した結果です。推論や解釈は含まれていません。
                   </p>
+                  {plan.sessions?.[0] && (() => {
+                    const session = plan.sessions![0];
+                    const promptKey = getPromptKey(session.id, 'phase1');
+                    const currentPrompt = editingPrompt[promptKey] ?? session.fact_extraction_prompt_v1 ?? '';
+                    const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.fact_extraction_prompt_v1;
+                    return currentPrompt ? (
+                      <details className="prompt-viewer">
+                        <summary>LLM プロンプトを表示 / 編集</summary>
+                        <textarea
+                          className="prompt-editor"
+                          value={currentPrompt}
+                          onChange={(e) => handlePromptChange(session.id, 'phase1', e.target.value)}
+                        />
+                        <div className="prompt-actions">
+                          <button
+                            className="prompt-save-btn"
+                            onClick={() => handleSavePrompt(session.id, 'phase1')}
+                            disabled={savingPrompt[promptKey] || !hasEdit}
+                          >
+                            {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
+                          </button>
+                          <button
+                            className="prompt-rerun-btn"
+                            onClick={() => handleReanalyzeFromPhase(session.id, plan.id, 1)}
+                            disabled={reanalyzing[session.id]}
+                          >
+                            {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 1 から再実行'}
+                          </button>
+                        </div>
+                      </details>
+                    ) : null;
+                  })()}
                   {plan.sessions && plan.sessions.length > 0 && plan.sessions[0].fact_extraction_result_v1 ? (
-                    <Phase1Display data={plan.sessions[0].fact_extraction_result_v1 as any} />
+                    <>
+                      <details className="prompt-viewer">
+                        <summary>LLM 出力 (生JSON)</summary>
+                        <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_extraction_result_v1, null, 2)}</pre>
+                      </details>
+                      <Phase1Display data={plan.sessions[0].fact_extraction_result_v1 as any} />
+                    </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
                       Phase 1 の処理結果がありません
@@ -1392,11 +1509,106 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <p className="phase-description">
                     抽出した事実を支援計画用に再分類した結果です。
                   </p>
-                  {plan.sessions && plan.sessions.length > 0 && (plan.sessions[0] as any).fact_structuring_result_v1 ? (
-                    <Phase2Display data={(plan.sessions[0] as any).fact_structuring_result_v1} />
+                  {plan.sessions?.[0] && (() => {
+                    const session = plan.sessions![0];
+                    const promptKey = getPromptKey(session.id, 'phase2');
+                    const currentPrompt = editingPrompt[promptKey] ?? session.fact_structuring_prompt_v1 ?? '';
+                    const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.fact_structuring_prompt_v1;
+                    return currentPrompt ? (
+                      <details className="prompt-viewer">
+                        <summary>LLM プロンプトを表示 / 編集</summary>
+                        <textarea
+                          className="prompt-editor"
+                          value={currentPrompt}
+                          onChange={(e) => handlePromptChange(session.id, 'phase2', e.target.value)}
+                        />
+                        <div className="prompt-actions">
+                          <button
+                            className="prompt-save-btn"
+                            onClick={() => handleSavePrompt(session.id, 'phase2')}
+                            disabled={savingPrompt[promptKey] || !hasEdit}
+                          >
+                            {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
+                          </button>
+                          <button
+                            className="prompt-rerun-btn"
+                            onClick={() => handleReanalyzeFromPhase(session.id, plan.id, 2)}
+                            disabled={reanalyzing[session.id]}
+                          >
+                            {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 2 から再実行'}
+                          </button>
+                        </div>
+                      </details>
+                    ) : null;
+                  })()}
+                  {plan.sessions && plan.sessions.length > 0 && plan.sessions[0].fact_structuring_result_v1 ? (
+                    <>
+                      <details className="prompt-viewer">
+                        <summary>LLM 出力 (生JSON)</summary>
+                        <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_structuring_result_v1, null, 2)}</pre>
+                      </details>
+                      <Phase2Display data={plan.sessions[0].fact_structuring_result_v1 as any} />
+                    </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
                       Phase 2 の処理結果がありません
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Phase 3 Tab Content */}
+            {getActiveTab(plan.id) === 'phase3' && (
+              <div className="tab-content-phase3">
+                <div className="phase-section">
+                  <h4 className="phase-title">Phase 3: 個別支援計画生成結果</h4>
+                  <p className="phase-description">
+                    事実整理結果から個別支援計画書を生成した結果です。
+                  </p>
+                  {plan.sessions?.[0] && (() => {
+                    const session = plan.sessions![0];
+                    const promptKey = getPromptKey(session.id, 'phase3');
+                    const currentPrompt = editingPrompt[promptKey] ?? session.assessment_prompt_v1 ?? '';
+                    const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.assessment_prompt_v1;
+                    return currentPrompt ? (
+                      <details className="prompt-viewer">
+                        <summary>LLM プロンプトを表示 / 編集</summary>
+                        <textarea
+                          className="prompt-editor"
+                          value={currentPrompt}
+                          onChange={(e) => handlePromptChange(session.id, 'phase3', e.target.value)}
+                        />
+                        <div className="prompt-actions">
+                          <button
+                            className="prompt-save-btn"
+                            onClick={() => handleSavePrompt(session.id, 'phase3')}
+                            disabled={savingPrompt[promptKey] || !hasEdit}
+                          >
+                            {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
+                          </button>
+                          <button
+                            className="prompt-rerun-btn"
+                            onClick={() => handleReanalyzeFromPhase(session.id, plan.id, 3)}
+                            disabled={reanalyzing[session.id]}
+                          >
+                            {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 3 のみ再実行'}
+                          </button>
+                        </div>
+                      </details>
+                    ) : null;
+                  })()}
+                  {plan.sessions && plan.sessions.length > 0 && plan.sessions[0].assessment_result_v1 ? (
+                    <>
+                      <details className="prompt-viewer">
+                        <summary>LLM 出力 (生JSON)</summary>
+                        <pre className="prompt-content">{JSON.stringify(plan.sessions[0].assessment_result_v1, null, 2)}</pre>
+                      </details>
+                      <Phase3Display data={plan.sessions[0].assessment_result_v1 as any} />
+                    </>
+                  ) : (
+                    <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                      Phase 3 の処理結果がありません
                     </div>
                   )}
                 </div>
