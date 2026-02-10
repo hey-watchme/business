@@ -31,7 +31,7 @@ def get_asr_provider():
     else:
         raise ValueError(f"Unknown ASR provider: {provider_name}. Supported: deepgram, speechmatics")
 
-from services.llm_providers import get_current_llm, CURRENT_PROVIDER, CURRENT_MODEL
+from services.llm_providers import get_current_llm, LLMFactory, CURRENT_PROVIDER, CURRENT_MODEL
 
 # Load environment variables
 load_dotenv()
@@ -99,6 +99,8 @@ class TranscribeResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     session_id: str
     use_custom_prompt: bool = False
+    provider: Optional[str] = None   # LLM provider ("openai", "gemini")
+    model: Optional[str] = None      # Model name (e.g., "gpt-4o", "gpt-5.2-2025-12-11")
 
 
 class PromptUpdate(BaseModel):
@@ -382,9 +384,15 @@ async def analyze_interview(
 
         # Start background task
         from services.background_tasks import analyze_background
-        from services.llm_providers import get_current_llm
 
-        llm_service = get_current_llm()
+        # Use specified provider/model or default
+        if request.provider or request.model:
+            provider = request.provider or CURRENT_PROVIDER
+            model = request.model or CURRENT_MODEL
+            llm_service = LLMFactory.create(provider, model)
+            print(f"Using custom LLM: {llm_service.model_name}")
+        else:
+            llm_service = get_current_llm()
 
         thread = threading.Thread(
             target=analyze_background,
@@ -479,9 +487,15 @@ async def structure_facts(
 
         # Start background task
         from services.background_tasks import structure_facts_background
-        from services.llm_providers import get_current_llm
 
-        llm_service = get_current_llm()
+        # Use specified provider/model or default
+        if request.provider or request.model:
+            provider = request.provider or CURRENT_PROVIDER
+            model = request.model or CURRENT_MODEL
+            llm_service = LLMFactory.create(provider, model)
+            print(f"Using custom LLM: {llm_service.model_name}")
+        else:
+            llm_service = get_current_llm()
 
         thread = threading.Thread(
             target=structure_facts_background,
@@ -564,9 +578,15 @@ async def assess(
 
         # Start background task
         from services.background_tasks import assess_background
-        from services.llm_providers import get_current_llm
 
-        llm_service = get_current_llm()
+        # Use specified provider/model or default
+        if request.provider or request.model:
+            provider = request.provider or CURRENT_PROVIDER
+            model = request.model or CURRENT_MODEL
+            llm_service = LLMFactory.create(provider, model)
+            print(f"Using custom LLM: {llm_service.model_name}")
+        else:
+            llm_service = get_current_llm()
 
         thread = threading.Thread(
             target=assess_background,

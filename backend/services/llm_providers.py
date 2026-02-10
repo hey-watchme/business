@@ -1,7 +1,8 @@
 """
 LLM provider abstraction layer for Business API
 
-Simplified version based on Profiler API pattern
+Supports multiple providers: OpenAI, Google Gemini
+Provider selection via environment variables or API parameters
 """
 
 from abc import ABC, abstractmethod
@@ -10,10 +11,10 @@ import os
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # ==========================================
-# Current LLM Provider Configuration
+# Default LLM Provider Configuration
 # ==========================================
-CURRENT_PROVIDER = "openai"
-CURRENT_MODEL = "gpt-4o"
+CURRENT_PROVIDER = os.getenv("LLM_DEFAULT_PROVIDER", "openai")
+CURRENT_MODEL = os.getenv("LLM_DEFAULT_MODEL", "gpt-4o")
 # ==========================================
 
 
@@ -80,6 +81,46 @@ class OpenAIProvider(LLMProvider):
         return f"openai/{self._model}"
 
 
+class GeminiProvider(LLMProvider):
+    """Google Gemini API provider"""
+
+    def __init__(self, model: str = "gemini-3-pro-preview"):
+        """
+        Args:
+            model: Gemini model name (e.g., "gemini-3-pro-preview", "gemini-2.0-flash-exp")
+        """
+        from google import genai
+
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable not set")
+
+        self.client = genai.Client(api_key=api_key)
+        self._model = model
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(Exception)
+    )
+    def generate(self, prompt: str) -> str:
+        """Call Gemini API with retry"""
+        try:
+            response = self.client.models.generate_content(
+                model=self._model,
+                contents=prompt
+            )
+            return response.text
+
+        except Exception as e:
+            print(f"Gemini API call error: {e}")
+            raise
+
+    @property
+    def model_name(self) -> str:
+        return f"gemini/{self._model}"
+
+
 class LLMFactory:
     """LLM provider factory"""
 
@@ -89,8 +130,8 @@ class LLMFactory:
         Create LLM provider instance
 
         Args:
-            provider: Provider name ("openai")
-            model: Model name (optional)
+            provider: Provider name ("openai", "gemini")
+            model: Model name (optional, uses default for each provider)
 
         Returns:
             LLMProvider instance
@@ -98,10 +139,11 @@ class LLMFactory:
         provider = provider.lower()
 
         if provider == "openai":
-            default_model = "gpt-4o"
-            return OpenAIProvider(model or default_model)
+            return OpenAIProvider(model or "gpt-4o")
+        elif provider == "gemini":
+            return GeminiProvider(model or "gemini-3-pro-preview")
         else:
-            raise ValueError(f"Unknown provider: {provider}")
+            raise ValueError(f"Unknown provider: {provider}. Supported: openai, gemini")
 
     @staticmethod
     def get_current() -> LLMProvider:

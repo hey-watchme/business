@@ -224,12 +224,16 @@ def analyze_background(
             analysis_data = {'summary': llm_response}
 
         # Update DB with result
-        supabase.table('business_interview_sessions').update({
+        update_data = {
             'fact_extraction_prompt_v1': prompt,
             'fact_extraction_result_v1': analysis_data,
             'status': 'completed',
             'updated_at': datetime.now().isoformat()
-        }).eq('id', session_id).execute()
+        }
+        # Record which model was used
+        if hasattr(llm_service, 'model_name'):
+            update_data['model_used_phase1'] = llm_service.model_name
+        supabase.table('business_interview_sessions').update(update_data).eq('id', session_id).execute()
 
         processing_time = time.time() - start_time
         print(f"[Background] Analysis completed in {processing_time:.2f}s for session: {session_id}")
@@ -288,6 +292,7 @@ def structure_facts_background(
         input_selector="fact_extraction_result_v1",
         output_column="fact_structuring_result_v1",
         prompt_column="fact_structuring_prompt_v1",
+        model_used_column="model_used_phase2",
         use_stored_prompt=use_custom_prompt
     )
 
@@ -324,6 +329,7 @@ def assess_background(
         input_selector="fact_structuring_result_v1",
         output_column="assessment_result_v1",
         prompt_column="assessment_prompt_v1",
+        model_used_column="model_used_phase3",
         use_stored_prompt=use_custom_prompt
     )
 

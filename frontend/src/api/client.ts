@@ -21,6 +21,9 @@ export interface InterviewSession {
   assessment_result_v1?: object | string | null;
   error_message?: string | null;
   transcription_metadata?: string | null;
+  model_used_phase1?: string | null;
+  model_used_phase2?: string | null;
+  model_used_phase3?: string | null;
 }
 
 export interface SessionsResponse {
@@ -410,22 +413,22 @@ export const api = {
     }),
 
   // Trigger analysis phases (returns 202 Accepted)
-  triggerPhase1: (sessionId: string, useCustomPrompt: boolean = false) =>
+  triggerPhase1: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string) =>
     apiRequest<{ status: string; message: string }>(`/api/analyze`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, provider, model }),
     }),
 
-  triggerPhase2: (sessionId: string, useCustomPrompt: boolean = false) =>
+  triggerPhase2: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string) =>
     apiRequest<{ status: string; message: string }>(`/api/structure-facts`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, provider, model }),
     }),
 
-  triggerPhase3: (sessionId: string, useCustomPrompt: boolean = false) =>
+  triggerPhase3: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string) =>
     apiRequest<{ status: string; message: string }>(`/api/assess`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, provider, model }),
     }),
 
   // Auth/Profile API

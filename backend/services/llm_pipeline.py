@@ -25,6 +25,7 @@ def execute_llm_phase(
     input_selector: str,
     output_column: str,
     prompt_column: str,
+    model_used_column: Optional[str] = None,
     additional_data: Optional[Dict[str, Any]] = None,
     use_stored_prompt: bool = False
 ) -> None:
@@ -48,6 +49,7 @@ def execute_llm_phase(
         input_selector: SQL select clause for input data (e.g., "transcription, support_plan:support_plan_id(*)")
         output_column: DB column for result (e.g., "fact_extraction_result_v1")
         prompt_column: DB column for prompt (e.g., "fact_extraction_prompt_v1")
+        model_used_column: DB column to record model used (e.g., "model_used_phase2")
         additional_data: Additional data to pass to prompt_builder (optional)
         use_stored_prompt: If True, use the prompt already stored in DB instead of rebuilding
 
@@ -117,10 +119,14 @@ def execute_llm_phase(
             result_data = {'summary': llm_output}
 
         # 6. Save result to DB
-        supabase.table('business_interview_sessions').update({
+        update_data = {
             output_column: result_data,
             'updated_at': datetime.now().isoformat()
-        }).eq('id', session_id).execute()
+        }
+        # Record which model was used (if column specified)
+        if model_used_column and hasattr(llm_service, 'model_name'):
+            update_data[model_used_column] = llm_service.model_name
+        supabase.table('business_interview_sessions').update(update_data).eq('id', session_id).execute()
 
         processing_time = time.time() - start_time
         print(f"[Background] {phase_name} completed in {processing_time:.2f}s for session: {session_id}")

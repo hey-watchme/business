@@ -1,9 +1,9 @@
 # 個別支援計画 自動生成システム 技術仕様書
 
-**最終更新**: 2026-02-11 JST
+**最終更新**: 2026-02-10 JST
 **対象プロジェクト**: WatchMe Business API
-**システム状態**: Phase 0-3パイプライン完全稼働 ✅、自動sync実装完了 ✅、手動入力対応 ✅
-**実装完了度**: 98% (コアパイプライン完了、タブUI実装完了、手動入力機能追加)
+**システム状態**: Phase 0-3パイプライン完全稼働 ✅、自動sync実装完了 ✅、手動入力対応 ✅、複数LLMモデル選択対応 ✅
+**実装完了度**: 99% (コアパイプライン完了、タブUI実装完了、手動入力機能追加、マルチモデル対応)
 
 ---
 
@@ -151,6 +151,11 @@ fact_structuring_result_v1   JSONB
 assessment_prompt_v1         TEXT
 assessment_result_v1         JSONB
 
+-- 使用LLMモデル記録（2026-02-10追加）
+model_used_phase1            TEXT  -- "provider/model" (e.g., "openai/gpt-4o")
+model_used_phase2            TEXT
+model_used_phase3            TEXT
+
 -- ステータス管理
 status                       TEXT DEFAULT 'recording'
 error_message                TEXT
@@ -263,10 +268,10 @@ Speaker 2: よろしくお願いします。
 
 ### 概要
 
-- **実装日**: 2026-01-17（プロンプト改善: 2026-02-10）
+- **実装日**: 2026-01-17（プロンプト改善: 2026-02-10、マルチモデル対応: 2026-02-10）
 - **状態**: ✅ 稼働中
 - **エンドポイント**: `POST /api/analyze`
-- **使用モデル**: OpenAI gpt-4o
+- **使用モデル**: OpenAI gpt-4o（デフォルト）、GPT-5.2 / Gemini 3 Pro 選択可能
 - **処理時間**: 5-7秒
 
 ### 責務
@@ -314,10 +319,10 @@ Speaker 2: よろしくお願いします。
 
 ### 概要
 
-- **実装日**: 2026-01-18（プロンプト改善: 2026-02-10）
+- **実装日**: 2026-01-18（プロンプト改善: 2026-02-10、マルチモデル対応: 2026-02-10）
 - **状態**: ✅ 稼働中
 - **エンドポイント**: `POST /api/structure-facts`
-- **使用モデル**: OpenAI gpt-4o
+- **使用モデル**: OpenAI gpt-4o（デフォルト）、GPT-5.2 / Gemini 3 Pro 選択可能
 - **処理時間**: 6-7秒
 
 ### 責務
@@ -366,10 +371,10 @@ extraction_v1から事実を5領域に再分類し、**専門的な見立て（�
 
 ### 概要
 
-- **実装日**: 2026-01-18（プロンプト改善: 2026-02-10）
+- **実装日**: 2026-01-18（プロンプト改善: 2026-02-10、マルチモデル対応: 2026-02-10）
 - **状態**: ✅ 稼働中（自動sync対応）
 - **エンドポイント**: `POST /api/assess`
-- **使用モデル**: OpenAI gpt-4o
+- **使用モデル**: OpenAI gpt-4o（デフォルト）、GPT-5.2 / Gemini 3 Pro 選択可能
 - **処理時間**: 17秒
 - **自動sync**: ✅ Phase 3完了後、自動的に `business_support_plans` に同期
 
@@ -434,9 +439,9 @@ Phase 2で整理・分析された事実と見立て（background, strength_use,
 
 ### 概要
 
-- **実装日**: 2026-02-04（タブUI完成）、2026-02-10（手動入力機能追加）
+- **実装日**: 2026-02-04（タブUI完成）、2026-02-10（手動入力機能追加、マルチモデル選択UI追加）
 - **状態**: ✅ 稼働中
-- **進捗**: 98%完了（タブ構造実装完了、手動入力機能実装完了）
+- **進捗**: 99%完了（タブ構造実装完了、手動入力機能実装完了、マルチモデル選択UI実装完了）
 
 ### UI構成
 
@@ -499,6 +504,56 @@ Phase 3完了後、`assessment_result_v1` の内容が自動的に `business_sup
 - **関数**: `sync_assessment_to_support_plan()` in `background_tasks.py`
 - **呼び出し**: `assess_background()` 完了後に自動実行
 - **エラーハンドリング**: 失敗してもPhase 3全体は失敗しない（警告ログのみ）
+
+---
+
+## マルチモデル対応（2026-02-10追加）
+
+### 概要
+
+Phase 1-3 の LLM 分析で、複数のモデルを選択可能。自動実行（Lambda経由）はデフォルトモデルを使用し、UI からの手動実行時にモデルを切り替え可能。
+
+### 対応モデル
+
+| プロバイダー | モデル | 用途 |
+|------------|--------|------|
+| **OpenAI** | `gpt-4o`（デフォルト） | 標準分析 |
+| **OpenAI** | `gpt-5.2-2025-12-11` | 高品質検証 |
+| **OpenAI** | `gpt-4o-mini` | 低コストテスト |
+| **Google** | `gemini-3-pro-preview` | 比較検証 |
+| **Google** | `gemini-2.0-flash-exp` | 高速テスト |
+
+### 実行パターン
+
+| 実行方法 | モデル選択 | 動作 |
+|---------|----------|------|
+| **全Phase一括実行** | モーダルで選択 | Phase 1→2→3 を同一モデルで順次実行 |
+| **Phase Xのみ再実行** | タブ内ドロップダウン | 該当Phaseのみ実行 |
+| **Lambda自動実行** | デフォルト（`gpt-4o`） | 環境変数 `LLM_DEFAULT_MODEL` で設定 |
+
+### APIパラメータ
+
+```json
+POST /api/analyze
+{
+  "session_id": "uuid",
+  "use_custom_prompt": false,
+  "provider": "openai",
+  "model": "gpt-5.2-2025-12-11"
+}
+```
+
+`provider` / `model` を省略するとデフォルト（`LLM_DEFAULT_PROVIDER` / `LLM_DEFAULT_MODEL`）が使用される。
+
+### モデル記録
+
+使用モデルは `business_interview_sessions` テーブルの `model_used_phase1/2/3` カラムに `"provider/model"` 形式で記録。
+
+### 実装ファイル
+
+- `backend/services/llm_providers.py`: `LLMFactory.create()`, `OpenAIProvider`, `GeminiProvider`
+- `backend/app.py`: `AnalyzeRequest.provider/model`, 各エンドポイントでモデル生成
+- `frontend/src/pages/SupportPlanCreate.tsx`: モデル選択モーダル、Phase タブ内ドロップダウン
 
 ---
 

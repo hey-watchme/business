@@ -52,6 +52,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [savingPrompt, setSavingPrompt] = useState<Record<string, boolean>>({});
   const [promptFeedback, setPromptFeedback] = useState<Record<string, 'success' | 'error' | null>>({});
 
+  // Model selection state
+  const [showModelModal, setShowModelModal] = useState(false);
+  const [modelModalPlanId, setModelModalPlanId] = useState<string | null>(null);
+  const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null);
+  const [selectedModelForBatch, setSelectedModelForBatch] = useState({ provider: 'openai', model: 'gpt-4o' });
+  const [selectedModelByPhase, setSelectedModelByPhase] = useState<Record<string, { provider: string; model: string }>>({});
+
   // Get active tab for a plan (default to 'home')
   const getActiveTab = (planId: string): PlanTab => activeTabByPlan[planId] || 'home';
 
@@ -297,31 +304,30 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     throw new Error(`Timeout waiting for ${field}`);
   };
 
-  const handleReanalyze = async (sessionId: string, planId: string) => {
-
+  const handleBatchAnalyze = async (sessionId: string, planId: string, modelConfig: { provider: string; model: string }) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
 
     try {
       // Phase 1: Fact Extraction
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 1 実行中...' }));
-      await api.triggerPhase1(sessionId);
+      await api.triggerPhase1(sessionId, false, modelConfig.provider, modelConfig.model);
       await pollSessionStatus(sessionId, 'analyzed');
 
       // Phase 2: Fact Structuring
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2 実行中...' }));
-      await api.triggerPhase2(sessionId);
+      await api.triggerPhase2(sessionId, false, modelConfig.provider, modelConfig.model);
       await pollSessionField(sessionId, 'fact_structuring_result_v1');
 
       // Phase 3: Assessment
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3 実行中...' }));
-      await api.triggerPhase3(sessionId);
+      await api.triggerPhase3(sessionId, false, modelConfig.provider, modelConfig.model);
       await pollSessionField(sessionId, 'assessment_result_v1');
 
       // Refresh plan data
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
       await fetchPlanDetails(planId);
     } catch (err) {
-      console.error('Re-analysis failed:', err);
+      console.error('Batch analysis failed:', err);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
@@ -359,30 +365,28 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
   };
 
-  const handleReanalyzeFromPhase = async (sessionId: string, planId: string, startPhase: 1 | 2 | 3) => {
+  const handlePhaseOnlyReanalyze = async (sessionId: string, planId: string, phase: 1 | 2 | 3) => {
+    const modelConfig = selectedModelByPhase[sessionId] || { provider: 'openai', model: 'gpt-4o' };
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
 
     try {
-      if (startPhase <= 1) {
-        setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 1 実行中...' }));
-        await api.triggerPhase1(sessionId, startPhase === 1);
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase ${phase} 実行中...` }));
+
+      if (phase === 1) {
+        await api.triggerPhase1(sessionId, true, modelConfig.provider, modelConfig.model);
         await pollSessionStatus(sessionId, 'analyzed');
-      }
-      if (startPhase <= 2) {
-        setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2 実行中...' }));
-        await api.triggerPhase2(sessionId, startPhase === 2);
+      } else if (phase === 2) {
+        await api.triggerPhase2(sessionId, true, modelConfig.provider, modelConfig.model);
         await pollSessionField(sessionId, 'fact_structuring_result_v1');
-      }
-      if (startPhase <= 3) {
-        setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3 実行中...' }));
-        await api.triggerPhase3(sessionId, startPhase === 3);
+      } else if (phase === 3) {
+        await api.triggerPhase3(sessionId, true, modelConfig.provider, modelConfig.model);
         await pollSessionField(sessionId, 'assessment_result_v1');
       }
 
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
       await fetchPlanDetails(planId);
     } catch (err) {
-      console.error('Re-analysis failed:', err);
+      console.error(`Phase ${phase} analysis failed:`, err);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
@@ -1378,7 +1382,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                             {savingTranscription[plan.sessions?.[0]?.id || ''] ? '保存中...' : '保存'}
                           </button>
                           <button
-                            onClick={() => plan.sessions?.[0]?.id && handleReanalyze(plan.sessions[0].id, plan.id)}
+                            onClick={() => {
+                              if (plan.sessions?.[0]?.id) {
+                                setModelModalPlanId(plan.id);
+                                setModelModalSessionId(plan.sessions[0].id);
+                                setShowModelModal(true);
+                              }
+                            }}
                             disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
                             style={{
                               padding: '8px 20px',
@@ -1457,32 +1467,65 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     const promptKey = getPromptKey(session.id, 'phase1');
                     const currentPrompt = editingPrompt[promptKey] ?? session.fact_extraction_prompt_v1 ?? '';
                     const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.fact_extraction_prompt_v1;
-                    return currentPrompt ? (
-                      <details className="prompt-viewer">
-                        <summary>LLM プロンプトを表示 / 編集</summary>
-                        <textarea
-                          className="prompt-editor"
-                          value={currentPrompt}
-                          onChange={(e) => handlePromptChange(session.id, 'phase1', e.target.value)}
-                        />
-                        <div className="prompt-actions">
-                          <button
-                            className="prompt-save-btn"
-                            onClick={() => handleSavePrompt(session.id, 'phase1')}
-                            disabled={savingPrompt[promptKey] || !hasEdit}
+                    const phaseModel = selectedModelByPhase[session.id] || { provider: 'openai', model: 'gpt-4o' };
+                    return (
+                      <>
+                        <div className="model-selector">
+                          <label>使用モデル:</label>
+                          <select
+                            value={phaseModel.provider}
+                            onChange={(e) => setSelectedModelByPhase(prev => ({
+                              ...prev,
+                              [session.id]: { provider: e.target.value, model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview' }
+                            }))}
                           >
-                            {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
-                          </button>
-                          <button
-                            className="prompt-rerun-btn"
-                            onClick={() => handleReanalyzeFromPhase(session.id, plan.id, 1)}
-                            disabled={reanalyzing[session.id]}
-                          >
-                            {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 1 から再実行'}
-                          </button>
+                            <option value="openai">OpenAI</option>
+                            <option value="gemini">Google Gemini</option>
+                          </select>
+                          {phaseModel.provider === 'openai' ? (
+                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
+                              <option value="gpt-4o">GPT-4o</option>
+                              <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                              <option value="gpt-4o-mini">GPT-4o Mini</option>
+                            </select>
+                          ) : (
+                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
+                              <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+                              <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                            </select>
+                          )}
                         </div>
-                      </details>
-                    ) : null;
+                        {session.model_used_phase1 && (
+                          <div className="current-model-badge">前回使用: {session.model_used_phase1}</div>
+                        )}
+                        {currentPrompt ? (
+                          <details className="prompt-viewer">
+                            <summary>LLM プロンプトを表示 / 編集</summary>
+                            <textarea
+                              className="prompt-editor"
+                              value={currentPrompt}
+                              onChange={(e) => handlePromptChange(session.id, 'phase1', e.target.value)}
+                            />
+                            <div className="prompt-actions">
+                              <button
+                                className="prompt-save-btn"
+                                onClick={() => handleSavePrompt(session.id, 'phase1')}
+                                disabled={savingPrompt[promptKey] || !hasEdit}
+                              >
+                                {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
+                              </button>
+                              <button
+                                className="prompt-rerun-btn"
+                                onClick={() => handlePhaseOnlyReanalyze(session.id, plan.id, 1)}
+                                disabled={reanalyzing[session.id]}
+                              >
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 1 のみ再実行'}
+                              </button>
+                            </div>
+                          </details>
+                        ) : null}
+                      </>
+                    );
                   })()}
                   {plan.sessions && plan.sessions.length > 0 && plan.sessions[0].fact_extraction_result_v1 ? (
                     <>
@@ -1514,32 +1557,65 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     const promptKey = getPromptKey(session.id, 'phase2');
                     const currentPrompt = editingPrompt[promptKey] ?? session.fact_structuring_prompt_v1 ?? '';
                     const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.fact_structuring_prompt_v1;
-                    return currentPrompt ? (
-                      <details className="prompt-viewer">
-                        <summary>LLM プロンプトを表示 / 編集</summary>
-                        <textarea
-                          className="prompt-editor"
-                          value={currentPrompt}
-                          onChange={(e) => handlePromptChange(session.id, 'phase2', e.target.value)}
-                        />
-                        <div className="prompt-actions">
-                          <button
-                            className="prompt-save-btn"
-                            onClick={() => handleSavePrompt(session.id, 'phase2')}
-                            disabled={savingPrompt[promptKey] || !hasEdit}
+                    const phaseModel = selectedModelByPhase[session.id] || { provider: 'openai', model: 'gpt-4o' };
+                    return (
+                      <>
+                        <div className="model-selector">
+                          <label>使用モデル:</label>
+                          <select
+                            value={phaseModel.provider}
+                            onChange={(e) => setSelectedModelByPhase(prev => ({
+                              ...prev,
+                              [session.id]: { provider: e.target.value, model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview' }
+                            }))}
                           >
-                            {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
-                          </button>
-                          <button
-                            className="prompt-rerun-btn"
-                            onClick={() => handleReanalyzeFromPhase(session.id, plan.id, 2)}
-                            disabled={reanalyzing[session.id]}
-                          >
-                            {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 2 から再実行'}
-                          </button>
+                            <option value="openai">OpenAI</option>
+                            <option value="gemini">Google Gemini</option>
+                          </select>
+                          {phaseModel.provider === 'openai' ? (
+                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
+                              <option value="gpt-4o">GPT-4o</option>
+                              <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                              <option value="gpt-4o-mini">GPT-4o Mini</option>
+                            </select>
+                          ) : (
+                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
+                              <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+                              <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                            </select>
+                          )}
                         </div>
-                      </details>
-                    ) : null;
+                        {session.model_used_phase2 && (
+                          <div className="current-model-badge">前回使用: {session.model_used_phase2}</div>
+                        )}
+                        {currentPrompt ? (
+                          <details className="prompt-viewer">
+                            <summary>LLM プロンプトを表示 / 編集</summary>
+                            <textarea
+                              className="prompt-editor"
+                              value={currentPrompt}
+                              onChange={(e) => handlePromptChange(session.id, 'phase2', e.target.value)}
+                            />
+                            <div className="prompt-actions">
+                              <button
+                                className="prompt-save-btn"
+                                onClick={() => handleSavePrompt(session.id, 'phase2')}
+                                disabled={savingPrompt[promptKey] || !hasEdit}
+                              >
+                                {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
+                              </button>
+                              <button
+                                className="prompt-rerun-btn"
+                                onClick={() => handlePhaseOnlyReanalyze(session.id, plan.id, 2)}
+                                disabled={reanalyzing[session.id]}
+                              >
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 2 のみ再実行'}
+                              </button>
+                            </div>
+                          </details>
+                        ) : null}
+                      </>
+                    );
                   })()}
                   {plan.sessions && plan.sessions.length > 0 && plan.sessions[0].fact_structuring_result_v1 ? (
                     <>
@@ -1571,32 +1647,65 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     const promptKey = getPromptKey(session.id, 'phase3');
                     const currentPrompt = editingPrompt[promptKey] ?? session.assessment_prompt_v1 ?? '';
                     const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.assessment_prompt_v1;
-                    return currentPrompt ? (
-                      <details className="prompt-viewer">
-                        <summary>LLM プロンプトを表示 / 編集</summary>
-                        <textarea
-                          className="prompt-editor"
-                          value={currentPrompt}
-                          onChange={(e) => handlePromptChange(session.id, 'phase3', e.target.value)}
-                        />
-                        <div className="prompt-actions">
-                          <button
-                            className="prompt-save-btn"
-                            onClick={() => handleSavePrompt(session.id, 'phase3')}
-                            disabled={savingPrompt[promptKey] || !hasEdit}
+                    const phaseModel = selectedModelByPhase[session.id] || { provider: 'openai', model: 'gpt-4o' };
+                    return (
+                      <>
+                        <div className="model-selector">
+                          <label>使用モデル:</label>
+                          <select
+                            value={phaseModel.provider}
+                            onChange={(e) => setSelectedModelByPhase(prev => ({
+                              ...prev,
+                              [session.id]: { provider: e.target.value, model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview' }
+                            }))}
                           >
-                            {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
-                          </button>
-                          <button
-                            className="prompt-rerun-btn"
-                            onClick={() => handleReanalyzeFromPhase(session.id, plan.id, 3)}
-                            disabled={reanalyzing[session.id]}
-                          >
-                            {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 3 のみ再実行'}
-                          </button>
+                            <option value="openai">OpenAI</option>
+                            <option value="gemini">Google Gemini</option>
+                          </select>
+                          {phaseModel.provider === 'openai' ? (
+                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
+                              <option value="gpt-4o">GPT-4o</option>
+                              <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                              <option value="gpt-4o-mini">GPT-4o Mini</option>
+                            </select>
+                          ) : (
+                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
+                              <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+                              <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                            </select>
+                          )}
                         </div>
-                      </details>
-                    ) : null;
+                        {session.model_used_phase3 && (
+                          <div className="current-model-badge">前回使用: {session.model_used_phase3}</div>
+                        )}
+                        {currentPrompt ? (
+                          <details className="prompt-viewer">
+                            <summary>LLM プロンプトを表示 / 編集</summary>
+                            <textarea
+                              className="prompt-editor"
+                              value={currentPrompt}
+                              onChange={(e) => handlePromptChange(session.id, 'phase3', e.target.value)}
+                            />
+                            <div className="prompt-actions">
+                              <button
+                                className="prompt-save-btn"
+                                onClick={() => handleSavePrompt(session.id, 'phase3')}
+                                disabled={savingPrompt[promptKey] || !hasEdit}
+                              >
+                                {savingPrompt[promptKey] ? '保存中...' : promptFeedback[promptKey] === 'success' ? '保存完了 ✓' : 'プロンプトを保存'}
+                              </button>
+                              <button
+                                className="prompt-rerun-btn"
+                                onClick={() => handlePhaseOnlyReanalyze(session.id, plan.id, 3)}
+                                disabled={reanalyzing[session.id]}
+                              >
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 3 のみ再実行'}
+                              </button>
+                            </div>
+                          </details>
+                        ) : null}
+                      </>
+                    );
                   })()}
                   {plan.sessions && plan.sessions.length > 0 && plan.sessions[0].assessment_result_v1 ? (
                     <>
@@ -1634,6 +1743,61 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           {creating ? '作成中...' : '新しい個別支援計画を作成する'}
         </button>
       </div >
+
+      {/* Model Selection Modal */}
+      {showModelModal && modelModalSessionId && modelModalPlanId && (
+        <div className="modal-overlay" onClick={() => setShowModelModal(false)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <h3>使用するLLMモデルを選択</h3>
+            <div className="modal-field">
+              <label>プロバイダー:</label>
+              <select
+                value={selectedModelForBatch.provider}
+                onChange={(e) => setSelectedModelForBatch({
+                  provider: e.target.value,
+                  model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview'
+                })}
+              >
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Google Gemini</option>
+              </select>
+            </div>
+            <div className="modal-field">
+              <label>モデル:</label>
+              {selectedModelForBatch.provider === 'openai' ? (
+                <select
+                  value={selectedModelForBatch.model}
+                  onChange={(e) => setSelectedModelForBatch(prev => ({ ...prev, model: e.target.value }))}
+                >
+                  <option value="gpt-4o">GPT-4o (default)</option>
+                  <option value="gpt-5.2-2025-12-11">GPT-5.2 (latest)</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini (low cost)</option>
+                </select>
+              ) : (
+                <select
+                  value={selectedModelForBatch.model}
+                  onChange={(e) => setSelectedModelForBatch(prev => ({ ...prev, model: e.target.value }))}
+                >
+                  <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+                  <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                </select>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => setShowModelModal(false)}>キャンセル</button>
+              <button
+                className="primary-button"
+                onClick={() => {
+                  setShowModelModal(false);
+                  handleBatchAnalyze(modelModalSessionId!, modelModalPlanId!, selectedModelForBatch);
+                }}
+              >
+                全Phase一括実行
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Plan Modal */}
       {showCreateModal && (
