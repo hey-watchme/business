@@ -925,6 +925,114 @@ async def generate_phase1_prompt(
         raise HTTPException(status_code=500, detail=f"Failed to generate prompt: {str(e)}")
 
 
+@app.get("/api/sessions/{session_id}/generate-prompt/phase2")
+async def generate_phase2_prompt(
+    session_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Generate Phase 2 prompt from Phase 1 result without executing analysis
+
+    Returns the generated prompt for user review/editing before execution.
+    Does NOT save to database or trigger analysis.
+
+    Args:
+        session_id: Session ID
+
+    Returns:
+        { "prompt": "...", "session_id": "..." }
+    """
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Fetch session data
+        result = supabase.table('business_interview_sessions')\
+            .select('*')\
+            .eq('id', session_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = result.data[0]
+
+        if not session.get('fact_extraction_result_v1'):
+            raise HTTPException(
+                status_code=400,
+                detail="Phase 1 result not found. Please run Phase 1 first."
+            )
+
+        # Generate prompt using session data (same as background_tasks.py)
+        from services.prompts import build_fact_structuring_prompt
+        prompt = build_fact_structuring_prompt(session)
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "prompt": prompt
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating Phase 2 prompt: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate prompt: {str(e)}")
+
+
+@app.get("/api/sessions/{session_id}/generate-prompt/phase3")
+async def generate_phase3_prompt(
+    session_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Generate Phase 3 prompt from Phase 2 result without executing analysis
+
+    Returns the generated prompt for user review/editing before execution.
+    Does NOT save to database or trigger analysis.
+    """
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        result = supabase.table('business_interview_sessions')\
+            .select('*')\
+            .eq('id', session_id)\
+            .execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = result.data[0]
+
+        if not session.get('fact_structuring_result_v1'):
+            raise HTTPException(
+                status_code=400,
+                detail="Phase 2 result not found. Please run Phase 2 first."
+            )
+
+        from services.prompts import build_assessment_prompt
+        prompt = build_assessment_prompt(session)
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "prompt": prompt
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating Phase 3 prompt: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate prompt: {str(e)}")
+
+
 class ManualSessionCreate(BaseModel):
     facility_id: str
     subject_id: str

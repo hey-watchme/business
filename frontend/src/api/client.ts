@@ -418,6 +418,18 @@ export const api = {
       method: 'GET',
     }),
 
+  // Generate Phase 2 prompt without executing analysis
+  generatePhase2Prompt: (sessionId: string) =>
+    apiRequest<{ success: boolean; session_id: string; prompt: string }>(`/api/sessions/${sessionId}/generate-prompt/phase2`, {
+      method: 'GET',
+    }),
+
+  // Generate Phase 3 prompt without executing analysis
+  generatePhase3Prompt: (sessionId: string) =>
+    apiRequest<{ success: boolean; session_id: string; prompt: string }>(`/api/sessions/${sessionId}/generate-prompt/phase3`, {
+      method: 'GET',
+    }),
+
   // Trigger analysis phases (returns 202 Accepted)
   triggerPhase1: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string) =>
     apiRequest<{ status: string; message: string }>(`/api/analyze`, {

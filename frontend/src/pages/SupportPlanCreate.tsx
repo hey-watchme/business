@@ -41,6 +41,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [reanalyzing, setReanalyzing] = useState<Record<string, boolean>>({});
   const [reanalysisPhase, setReanalysisPhase] = useState<Record<string, string>>({});
 
+  // Phase execution result feedback (key: sessionId, value: result info)
+  const [phaseResult, setPhaseResult] = useState<Record<string, { status: 'success' | 'error'; message: string } | null>>({});
+
   // Manual session creation state (key: planId)
   const [creatingManualSession, setCreatingManualSession] = useState<Record<string, boolean>>({});
 
@@ -57,7 +60,47 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [modelModalPlanId, setModelModalPlanId] = useState<string | null>(null);
   const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null);
   const [selectedModelForBatch, setSelectedModelForBatch] = useState({ provider: 'openai', model: 'gpt-4o' });
-  const [selectedModelByPhase, setSelectedModelByPhase] = useState<Record<string, { provider: string; model: string }>>({});
+  const [phaseRerunModal, setPhaseRerunModal] = useState<{ sessionId: string; planId: string; phase: 1 | 2 | 3; modelUsed?: string } | null>(null);
+  const [selectedModelForPhaseRerun, setSelectedModelForPhaseRerun] = useState({ provider: 'openai', model: 'gpt-4o' });
+
+  // Clipboard copy state (key: unique id, value: true = just copied)
+  const [copiedKey, setCopiedKey] = useState<Record<string, boolean>>({});
+
+  const handleCopyToClipboard = async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(prev => ({ ...prev, [key]: true }));
+      setTimeout(() => setCopiedKey(prev => ({ ...prev, [key]: false })), 2000);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+  };
+
+  const CopyButton: React.FC<{ text: string; copyKey: string }> = ({ text, copyKey }) => (
+    <button
+      onClick={() => handleCopyToClipboard(text, copyKey)}
+      title="クリップボードにコピー"
+      style={{
+        padding: '4px 8px',
+        borderRadius: '4px',
+        border: '1px solid var(--border-color)',
+        background: copiedKey[copyKey] ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-secondary)',
+        color: copiedKey[copyKey] ? '#10b981' : 'var(--text-secondary)',
+        fontSize: '12px',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        transition: 'all 0.2s ease',
+      }}
+    >
+      {copiedKey[copyKey] ? (
+        <><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>コピー済</>
+      ) : (
+        <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>コピー</>
+      )}
+    </button>
+  );
 
   // Get active tab for a plan (default to 'home')
   const getActiveTab = (planId: string): PlanTab => activeTabByPlan[planId] || 'home';
@@ -277,7 +320,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     throw new Error('Timeout waiting for analysis to complete');
   };
 
-  const pollSessionField = async (sessionId: string, field: string): Promise<boolean> => {
+  const pollSessionField = async (sessionId: string, field: string, previousUpdatedAt?: string): Promise<boolean> => {
     const maxAttempts = 60;
     let attempts = 0;
 
@@ -291,6 +334,12 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         }
         const value = (session as unknown as Record<string, unknown>)[field];
         if (value !== null && value !== undefined) {
+          // If we have a previous updated_at, wait until it actually changes
+          if (previousUpdatedAt && session.updated_at === previousUpdatedAt) {
+            // Data exists but hasn't been updated yet - keep waiting
+            attempts++;
+            continue;
+          }
           return true;
         }
       } catch (err) {
@@ -306,33 +355,54 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   const handleBatchAnalyze = async (sessionId: string, planId: string, modelConfig: { provider: string; model: string }) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
+    setPhaseResult(prev => ({ ...prev, [sessionId]: null }));
+    const startTime = Date.now();
+    const modelLabel = `${modelConfig.provider}/${modelConfig.model}`;
 
     try {
+      // Get current updated_at before starting
+      const currentSession = await api.getSession(sessionId);
+      let previousUpdatedAt = currentSession.updated_at;
+
       // Phase 1: Fact Extraction
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 1 実行中...' }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 1 実行中... (${modelLabel})` }));
       await api.triggerPhase1(sessionId, false, modelConfig.provider, modelConfig.model);
       await pollSessionStatus(sessionId, 'analyzed');
 
+      // Update previousUpdatedAt for Phase 2
+      const afterPhase1 = await api.getSession(sessionId);
+      previousUpdatedAt = afterPhase1.updated_at;
+
       // Phase 2: Fact Structuring
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2 実行中...' }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 2 実行中... (${modelLabel})` }));
       await api.triggerPhase2(sessionId, false, modelConfig.provider, modelConfig.model);
-      await pollSessionField(sessionId, 'fact_structuring_result_v1');
+      await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt);
+
+      // Update previousUpdatedAt for Phase 3
+      const afterPhase2 = await api.getSession(sessionId);
+      previousUpdatedAt = afterPhase2.updated_at;
 
       // Phase 3: Assessment
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3 実行中...' }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 3 実行中... (${modelLabel})` }));
       await api.triggerPhase3(sessionId, false, modelConfig.provider, modelConfig.model);
-      await pollSessionField(sessionId, 'assessment_result_v1');
+      await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt);
 
       // Refresh plan data
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
+      setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'success', message: `全Phase完了 (${modelLabel}, ${elapsed}秒)` } }));
       await fetchPlanDetails(planId);
     } catch (err) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.error('Batch analysis failed:', err);
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
+      const errorMsg = err instanceof Error ? err.message : '不明';
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
+      setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `エラー: ${errorMsg} (${elapsed}秒)` } }));
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
       setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '' }));
+      setTimeout(() => setPhaseResult(prev => ({ ...prev, [sessionId]: null })), 10000);
     }
   };
 
@@ -365,33 +435,46 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
   };
 
-  const handlePhaseOnlyReanalyze = async (sessionId: string, planId: string, phase: 1 | 2 | 3) => {
-    const modelConfig = selectedModelByPhase[sessionId] || { provider: 'openai', model: 'gpt-4o' };
+  const handlePhaseOnlyReanalyze = async (sessionId: string, planId: string, phase: 1 | 2 | 3, modelConfig: { provider: string; model: string }) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
+    setPhaseResult(prev => ({ ...prev, [sessionId]: null }));
+    const startTime = Date.now();
+    const modelLabel = `${modelConfig.provider}/${modelConfig.model}`;
 
     try {
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase ${phase} 実行中...` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase ${phase} 実行中... (${modelLabel})` }));
+
+      // Get current updated_at before starting, to detect actual change
+      const currentSession = await api.getSession(sessionId);
+      const previousUpdatedAt = currentSession.updated_at;
 
       if (phase === 1) {
         await api.triggerPhase1(sessionId, true, modelConfig.provider, modelConfig.model);
         await pollSessionStatus(sessionId, 'analyzed');
       } else if (phase === 2) {
         await api.triggerPhase2(sessionId, true, modelConfig.provider, modelConfig.model);
-        await pollSessionField(sessionId, 'fact_structuring_result_v1');
+        await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt);
       } else if (phase === 3) {
         await api.triggerPhase3(sessionId, true, modelConfig.provider, modelConfig.model);
-        await pollSessionField(sessionId, 'assessment_result_v1');
+        await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt);
       }
 
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
+      setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'success', message: `Phase ${phase} 完了 (${modelLabel}, ${elapsed}秒)` } }));
       await fetchPlanDetails(planId);
     } catch (err) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.error(`Phase ${phase} analysis failed:`, err);
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
+      const errorMsg = err instanceof Error ? err.message : '不明';
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
+      setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `Phase ${phase} エラー: ${errorMsg} (${elapsed}秒)` } }));
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
       setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '' }));
+      // Auto-clear result after 10 seconds
+      setTimeout(() => setPhaseResult(prev => ({ ...prev, [sessionId]: null })), 10000);
     }
   };
 
@@ -418,6 +501,66 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       }
     } catch (err) {
       console.error('Failed to generate Phase 1 prompt:', err);
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    } finally {
+      setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '' }));
+    }
+  };
+
+  const handleGeneratePhase2Prompt = async (sessionId: string, planId: string) => {
+    setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
+    setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2プロンプト生成中...' }));
+
+    try {
+      const result = await api.generatePhase2Prompt(sessionId);
+
+      if (result.success && result.prompt) {
+        // Store generated prompt in editing state
+        const key = `${sessionId}_phase2`;
+        setEditingPrompt(prev => ({ ...prev, [key]: result.prompt }));
+
+        // Refresh plan data
+        await fetchPlanDetails(planId);
+
+        // Switch to Phase 2 tab
+        setActiveTab(planId, 'phase2');
+
+        setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (err) {
+      console.error('Failed to generate Phase 2 prompt:', err);
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    } finally {
+      setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '' }));
+    }
+  };
+
+  const handleGeneratePhase3Prompt = async (sessionId: string, planId: string) => {
+    setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
+    setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3プロンプト生成中...' }));
+
+    try {
+      const result = await api.generatePhase3Prompt(sessionId);
+
+      if (result.success && result.prompt) {
+        const key = `${sessionId}_phase3`;
+        setEditingPrompt(prev => ({ ...prev, [key]: result.prompt }));
+
+        await fetchPlanDetails(planId);
+
+        // Switch to Phase 3 tab
+        setActiveTab(planId, 'phase3');
+
+        setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (err) {
+      console.error('Failed to generate Phase 3 prompt:', err);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${err instanceof Error ? err.message : '不明'}` }));
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
@@ -513,12 +656,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       month: 'long',
       day: 'numeric'
     });
-  };
-
-  const formatDuration = (seconds: number | null | undefined) => {
-    if (!seconds) return '-';
-    const mins = Math.floor(seconds / 60);
-    return `${mins}分`;
   };
 
 
@@ -1360,12 +1497,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '12px' }}>{plan.sessions[0].id}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '12px' }}>
-                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>実施日:</span>
+                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>実施日時:</span>
                           <span style={{ color: 'var(--text-primary)' }}>{formatDate(plan.sessions[0].recorded_at)}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>時間:</span>
-                          <span style={{ color: 'var(--text-primary)' }}>{formatDuration(plan.sessions[0].duration_seconds)}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                           <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>ステータス:</span>
@@ -1517,45 +1650,25 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <p className="phase-description">
                     ヒアリング内容から事実のみを抽出した結果です。推論や解釈は含まれていません。
                   </p>
+                  {plan.sessions?.[0]?.model_used_phase1 && (
+                    <div style={{ display: 'flex', gap: '16px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
+                      <span><strong>使用モデル:</strong> {plan.sessions[0].model_used_phase1}</span>
+                      <span><strong>実行日時:</strong> {formatDate(plan.sessions[0].updated_at)}</span>
+                    </div>
+                  )}
                   {plan.sessions?.[0] && (() => {
                     const session = plan.sessions![0];
                     const promptKey = getPromptKey(session.id, 'phase1');
                     const currentPrompt = editingPrompt[promptKey] ?? session.fact_extraction_prompt_v1 ?? '';
                     const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.fact_extraction_prompt_v1;
-                    const phaseModel = selectedModelByPhase[session.id] || { provider: 'openai', model: 'gpt-4o' };
                     return (
                       <>
-                        <div className="model-selector">
-                          <label>使用モデル:</label>
-                          <select
-                            value={phaseModel.provider}
-                            onChange={(e) => setSelectedModelByPhase(prev => ({
-                              ...prev,
-                              [session.id]: { provider: e.target.value, model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview' }
-                            }))}
-                          >
-                            <option value="openai">OpenAI</option>
-                            <option value="gemini">Google Gemini</option>
-                          </select>
-                          {phaseModel.provider === 'openai' ? (
-                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
-                              <option value="gpt-4o">GPT-4o</option>
-                              <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                              <option value="gpt-4o-mini">GPT-4o Mini</option>
-                            </select>
-                          ) : (
-                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
-                              <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
-                              <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
-                            </select>
-                          )}
-                        </div>
-                        {session.model_used_phase1 && (
-                          <div className="current-model-badge">前回使用: {session.model_used_phase1}</div>
-                        )}
                         {currentPrompt ? (
                           <details className="prompt-viewer">
                             <summary>LLM プロンプトを表示 / 編集</summary>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                              <CopyButton text={currentPrompt} copyKey={`prompt_phase1_${session.id}`} />
+                            </div>
                             <textarea
                               className="prompt-editor"
                               value={currentPrompt}
@@ -1571,12 +1684,29 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               </button>
                               <button
                                 className="prompt-rerun-btn"
-                                onClick={() => handlePhaseOnlyReanalyze(session.id, plan.id, 1)}
+                                onClick={() => {
+                                  setSelectedModelForPhaseRerun({ provider: 'openai', model: 'gpt-4o' });
+                                  setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 1, modelUsed: session.model_used_phase1 || undefined });
+                                }}
                                 disabled={reanalyzing[session.id]}
                               >
                                 {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 1 のみ再実行'}
                               </button>
                             </div>
+                            {phaseResult[session.id] && (
+                              <div style={{
+                                marginTop: '8px',
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                background: phaseResult[session.id]!.status === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                color: phaseResult[session.id]!.status === 'success' ? '#10b981' : '#ef4444',
+                                border: `1px solid ${phaseResult[session.id]!.status === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                              }}>
+                                {phaseResult[session.id]!.status === 'success' ? '\u2713 ' : '\u2717 '}{phaseResult[session.id]!.message}
+                              </div>
+                            )}
                           </details>
                         ) : null}
                       </>
@@ -1586,9 +1716,39 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     <>
                       <details className="prompt-viewer">
                         <summary>LLM 出力 (生JSON)</summary>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                          <CopyButton text={JSON.stringify(plan.sessions[0].fact_extraction_result_v1, null, 2)} copyKey={`output_phase1_${plan.sessions[0].id}`} />
+                        </div>
                         <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_extraction_result_v1, null, 2)}</pre>
                       </details>
                       <Phase1Display data={plan.sessions[0].fact_extraction_result_v1 as any} />
+                      {/* Phase 2 prompt generation button */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', padding: '16px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                        <button
+                          onClick={() => {
+                            if (plan.sessions?.[0]?.id) {
+                              handleGeneratePhase2Prompt(plan.sessions[0].id, plan.id);
+                            }
+                          }}
+                          disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                          style={{
+                            padding: '8px 20px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(59, 130, 246, 0.4)',
+                            background: '#3b82f6',
+                            color: 'white',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          {reanalyzing[plan.sessions[0].id]
+                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 2プロンプト生成中...')
+                            : 'Phase 2 プロンプト生成'}
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
@@ -1607,45 +1767,25 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <p className="phase-description">
                     抽出した事実を支援計画用に再分類した結果です。
                   </p>
+                  {plan.sessions?.[0]?.model_used_phase2 && (
+                    <div style={{ display: 'flex', gap: '16px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
+                      <span><strong>使用モデル:</strong> {plan.sessions[0].model_used_phase2}</span>
+                      <span><strong>実行日時:</strong> {formatDate(plan.sessions[0].updated_at)}</span>
+                    </div>
+                  )}
                   {plan.sessions?.[0] && (() => {
                     const session = plan.sessions![0];
                     const promptKey = getPromptKey(session.id, 'phase2');
                     const currentPrompt = editingPrompt[promptKey] ?? session.fact_structuring_prompt_v1 ?? '';
                     const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.fact_structuring_prompt_v1;
-                    const phaseModel = selectedModelByPhase[session.id] || { provider: 'openai', model: 'gpt-4o' };
                     return (
                       <>
-                        <div className="model-selector">
-                          <label>使用モデル:</label>
-                          <select
-                            value={phaseModel.provider}
-                            onChange={(e) => setSelectedModelByPhase(prev => ({
-                              ...prev,
-                              [session.id]: { provider: e.target.value, model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview' }
-                            }))}
-                          >
-                            <option value="openai">OpenAI</option>
-                            <option value="gemini">Google Gemini</option>
-                          </select>
-                          {phaseModel.provider === 'openai' ? (
-                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
-                              <option value="gpt-4o">GPT-4o</option>
-                              <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                              <option value="gpt-4o-mini">GPT-4o Mini</option>
-                            </select>
-                          ) : (
-                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
-                              <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
-                              <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
-                            </select>
-                          )}
-                        </div>
-                        {session.model_used_phase2 && (
-                          <div className="current-model-badge">前回使用: {session.model_used_phase2}</div>
-                        )}
                         {currentPrompt ? (
                           <details className="prompt-viewer">
                             <summary>LLM プロンプトを表示 / 編集</summary>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                              <CopyButton text={currentPrompt} copyKey={`prompt_phase2_${session.id}`} />
+                            </div>
                             <textarea
                               className="prompt-editor"
                               value={currentPrompt}
@@ -1661,12 +1801,29 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               </button>
                               <button
                                 className="prompt-rerun-btn"
-                                onClick={() => handlePhaseOnlyReanalyze(session.id, plan.id, 2)}
+                                onClick={() => {
+                                  setSelectedModelForPhaseRerun({ provider: 'openai', model: 'gpt-4o' });
+                                  setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 2, modelUsed: session.model_used_phase2 || undefined });
+                                }}
                                 disabled={reanalyzing[session.id]}
                               >
                                 {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 2 のみ再実行'}
                               </button>
                             </div>
+                            {phaseResult[session.id] && (
+                              <div style={{
+                                marginTop: '8px',
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                background: phaseResult[session.id]!.status === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                color: phaseResult[session.id]!.status === 'success' ? '#10b981' : '#ef4444',
+                                border: `1px solid ${phaseResult[session.id]!.status === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                              }}>
+                                {phaseResult[session.id]!.status === 'success' ? '\u2713 ' : '\u2717 '}{phaseResult[session.id]!.message}
+                              </div>
+                            )}
                           </details>
                         ) : null}
                       </>
@@ -1676,9 +1833,39 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     <>
                       <details className="prompt-viewer">
                         <summary>LLM 出力 (生JSON)</summary>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                          <CopyButton text={JSON.stringify(plan.sessions[0].fact_structuring_result_v1, null, 2)} copyKey={`output_phase2_${plan.sessions[0].id}`} />
+                        </div>
                         <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_structuring_result_v1, null, 2)}</pre>
                       </details>
                       <Phase2Display data={plan.sessions[0].fact_structuring_result_v1 as any} />
+                      {/* Phase 3 prompt generation button */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', padding: '16px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                        <button
+                          onClick={() => {
+                            if (plan.sessions?.[0]?.id) {
+                              handleGeneratePhase3Prompt(plan.sessions[0].id, plan.id);
+                            }
+                          }}
+                          disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                          style={{
+                            padding: '8px 20px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(59, 130, 246, 0.4)',
+                            background: '#3b82f6',
+                            color: 'white',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          {reanalyzing[plan.sessions[0].id]
+                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 3プロンプト生成中...')
+                            : 'Phase 3 プロンプト生成'}
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
@@ -1697,45 +1884,25 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <p className="phase-description">
                     事実整理結果から個別支援計画書を生成した結果です。
                   </p>
+                  {plan.sessions?.[0]?.model_used_phase3 && (
+                    <div style={{ display: 'flex', gap: '16px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
+                      <span><strong>使用モデル:</strong> {plan.sessions[0].model_used_phase3}</span>
+                      <span><strong>実行日時:</strong> {formatDate(plan.sessions[0].updated_at)}</span>
+                    </div>
+                  )}
                   {plan.sessions?.[0] && (() => {
                     const session = plan.sessions![0];
                     const promptKey = getPromptKey(session.id, 'phase3');
                     const currentPrompt = editingPrompt[promptKey] ?? session.assessment_prompt_v1 ?? '';
                     const hasEdit = editingPrompt[promptKey] !== undefined && editingPrompt[promptKey] !== session.assessment_prompt_v1;
-                    const phaseModel = selectedModelByPhase[session.id] || { provider: 'openai', model: 'gpt-4o' };
                     return (
                       <>
-                        <div className="model-selector">
-                          <label>使用モデル:</label>
-                          <select
-                            value={phaseModel.provider}
-                            onChange={(e) => setSelectedModelByPhase(prev => ({
-                              ...prev,
-                              [session.id]: { provider: e.target.value, model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview' }
-                            }))}
-                          >
-                            <option value="openai">OpenAI</option>
-                            <option value="gemini">Google Gemini</option>
-                          </select>
-                          {phaseModel.provider === 'openai' ? (
-                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
-                              <option value="gpt-4o">GPT-4o</option>
-                              <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                              <option value="gpt-4o-mini">GPT-4o Mini</option>
-                            </select>
-                          ) : (
-                            <select value={phaseModel.model} onChange={(e) => setSelectedModelByPhase(prev => ({ ...prev, [session.id]: { ...prev[session.id], model: e.target.value } }))}>
-                              <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
-                              <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
-                            </select>
-                          )}
-                        </div>
-                        {session.model_used_phase3 && (
-                          <div className="current-model-badge">前回使用: {session.model_used_phase3}</div>
-                        )}
                         {currentPrompt ? (
                           <details className="prompt-viewer">
                             <summary>LLM プロンプトを表示 / 編集</summary>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                              <CopyButton text={currentPrompt} copyKey={`prompt_phase3_${session.id}`} />
+                            </div>
                             <textarea
                               className="prompt-editor"
                               value={currentPrompt}
@@ -1751,12 +1918,29 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               </button>
                               <button
                                 className="prompt-rerun-btn"
-                                onClick={() => handlePhaseOnlyReanalyze(session.id, plan.id, 3)}
+                                onClick={() => {
+                                  setSelectedModelForPhaseRerun({ provider: 'openai', model: 'gpt-4o' });
+                                  setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 3, modelUsed: session.model_used_phase3 || undefined });
+                                }}
                                 disabled={reanalyzing[session.id]}
                               >
                                 {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 3 のみ再実行'}
                               </button>
                             </div>
+                            {phaseResult[session.id] && (
+                              <div style={{
+                                marginTop: '8px',
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                background: phaseResult[session.id]!.status === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                color: phaseResult[session.id]!.status === 'success' ? '#10b981' : '#ef4444',
+                                border: `1px solid ${phaseResult[session.id]!.status === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                              }}>
+                                {phaseResult[session.id]!.status === 'success' ? '\u2713 ' : '\u2717 '}{phaseResult[session.id]!.message}
+                              </div>
+                            )}
                           </details>
                         ) : null}
                       </>
@@ -1766,6 +1950,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     <>
                       <details className="prompt-viewer">
                         <summary>LLM 出力 (生JSON)</summary>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                          <CopyButton text={JSON.stringify(plan.sessions[0].assessment_result_v1, null, 2)} copyKey={`output_phase3_${plan.sessions[0].id}`} />
+                        </div>
                         <pre className="prompt-content">{JSON.stringify(plan.sessions[0].assessment_result_v1, null, 2)}</pre>
                       </details>
                       <Phase3Display data={plan.sessions[0].assessment_result_v1 as any} />
@@ -1848,6 +2035,67 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 }}
               >
                 全Phase一括実行
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase Rerun Modal */}
+      {phaseRerunModal && (
+        <div className="modal-overlay" onClick={() => setPhaseRerunModal(null)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <h3>Phase {phaseRerunModal.phase} を再実行</h3>
+            {phaseRerunModal.modelUsed && (
+              <div className="current-model-badge" style={{ marginBottom: '12px' }}>
+                前回使用: {phaseRerunModal.modelUsed}
+              </div>
+            )}
+            <div className="modal-field">
+              <label>プロバイダー:</label>
+              <select
+                value={selectedModelForPhaseRerun.provider}
+                onChange={(e) => setSelectedModelForPhaseRerun({
+                  provider: e.target.value,
+                  model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview'
+                })}
+              >
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Google Gemini</option>
+              </select>
+            </div>
+            <div className="modal-field">
+              <label>モデル:</label>
+              {selectedModelForPhaseRerun.provider === 'openai' ? (
+                <select
+                  value={selectedModelForPhaseRerun.model}
+                  onChange={(e) => setSelectedModelForPhaseRerun(prev => ({ ...prev, model: e.target.value }))}
+                >
+                  <option value="gpt-4o">GPT-4o (default)</option>
+                  <option value="gpt-5.2-2025-12-11">GPT-5.2 (latest)</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini (low cost)</option>
+                </select>
+              ) : (
+                <select
+                  value={selectedModelForPhaseRerun.model}
+                  onChange={(e) => setSelectedModelForPhaseRerun(prev => ({ ...prev, model: e.target.value }))}
+                >
+                  <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+                  <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                </select>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => setPhaseRerunModal(null)}>キャンセル</button>
+              <button
+                className="primary-button"
+                onClick={() => {
+                  const { sessionId, planId, phase } = phaseRerunModal;
+                  setPhaseRerunModal(null);
+                  handlePhaseOnlyReanalyze(sessionId, planId, phase, selectedModelForPhaseRerun);
+                }}
+              >
+                Phase {phaseRerunModal.phase} を実行
               </button>
             </div>
           </div>
