@@ -1,9 +1,9 @@
 # 個別支援計画 自動生成システム 技術仕様書
 
-**最終更新**: 2026-02-10 JST
+**最終更新**: 2026-02-11 JST
 **対象プロジェクト**: WatchMe Business API
-**システム状態**: Phase 0-3パイプライン完全稼働 ✅、自動sync実装完了 ✅、手動入力対応 ✅、複数LLMモデル選択対応 ✅
-**実装完了度**: 99% (コアパイプライン完了、タブUI実装完了、手動入力機能追加、マルチモデル対応)
+**システム状態**: Phase 0-3パイプライン完全稼働 ✅、Phase 2アノテーション方式転換完了 ✅、プロンプト日本語化完了 ✅、自動sync実装完了 ✅、手動入力対応 ✅、複数LLMモデル選択対応 ✅
+**実装完了度**: 99% (Phase 2アノテーション方式転換完了、Phase 3プロンプト日本語化完了、プロンプト保存フロー修正完了、タブUI実装完了)
 
 ---
 
@@ -53,9 +53,9 @@
 ### 設計思想
 
 **3段階パイプライン設計**:
-- **Phase 1**: 事実抽出（推論・解釈ゼロ）→ ノイズ除外 + 5領域の事実を抽出
-- **Phase 2**: 事実整理 + 専門的見立て（氷山モデル、強み分析、場面分離）→ Phase 3の"下ごしらえ"
-- **Phase 3**: 計画書生成（Phase 2の分析結果を計画書フォーマットに翻訳）→ 目標・支援内容の策定
+- **Phase 1**: 事実抽出（推論・解釈ゼロ）→ ノイズ除外 + 11カテゴリの事実を抽出
+- **Phase 2**: 事実アノテーション（原文保持 + 専門分析外付け）→ 氷山モデル背景分析・強みの活用可能性・優先度タグを付加
+- **Phase 3**: 計画書生成（Phase 2の `annotated_facts_v1` を計画書フォーマットに翻訳）→ 目標・支援内容の策定
 
 ---
 
@@ -84,14 +84,14 @@ OpenAI GPT-4o (事実のみ抽出、11カテゴリ)
   ↓
 fact_extraction_result_v1 保存
 
-【Phase 2: 事実整理】
+【Phase 2: 事実アノテーション】
 POST /api/structure-facts
   ↓
 structure_facts_background()
   ↓
-OpenAI GPT-4o (支援計画用に再分類)
+OpenAI GPT-4o (原文保持 + 専門分析外付け)
   ↓
-fact_structuring_result_v1 保存
+fact_structuring_result_v1 保存 (annotated_facts_v1形式)
 
 【Phase 3: 個別支援計画生成】
 POST /api/assess
@@ -315,11 +315,11 @@ Speaker 2: よろしくお願いします。
 
 ---
 
-## Phase 2: 事実整理 + 専門的見立て
+## Phase 2: 事実アノテーション（専門的分析の付加）
 
 ### 概要
 
-- **実装日**: 2026-01-18（プロンプト改善: 2026-02-10、マルチモデル対応: 2026-02-10）
+- **実装日**: 2026-01-18（アノテーション方式への転換: 2026-02-11、プロンプト日本語化: 2026-02-11）
 - **状態**: ✅ 稼働中
 - **エンドポイント**: `POST /api/structure-facts`
 - **使用モデル**: OpenAI gpt-4o（デフォルト）、GPT-5.2 / Gemini 3 Pro 選択可能
@@ -327,34 +327,65 @@ Speaker 2: よろしくお願いします。
 
 ### 責務
 
-extraction_v1から事実を5領域に再分類し、**専門的な見立て（背景分析・強みの活用可能性）**を付加。Phase 3の"下ごしらえ"を完成させる。
+Phase 1で抽出された事実に対して、**原文を完全保持したまま**専門的な分析（氷山モデル背景分析・強みの活用可能性・優先度タグ）を外付けする。Phase 3の"下ごしらえ"を完成させる。
+
+**アノテーション方式の特徴**:
+- **原文保持**: Phase 1の `summary` を `original_fact` として完全コピー（要約・言い換え禁止）
+- **1対1対応**: Phase 1のアイテム数 = Phase 2のアイテム数（情報の欠落なし）
+- **専門分析の外付け**: `professional_analysis` フィールドで背景・強み・優先度を付加
 
 **プロンプト構造** (`build_fact_structuring_prompt()`):
-- **Role**: 児童発達支援の専門アセスメント担当者
-- **場面（setting）の明記**: 各事実に「家庭」「園」「療育」「全般」を付加
-- **氷山モデル**: 行動の背景にある特性・機能を推測（background フィールド）
-- **強みの活用**: 強みが支援でどう活かせるかのヒント（strength_use フィールド）
-- **優先度タグ**: 保護者ニーズ直結の課題に priority: high を付与
+- **Role**: 児童発達支援の専門アセスメント担当者（アノテーター）
+- **絶対ルール**: `original_fact` = Phase 1の `summary` の完全コピー
+- **5領域分類**: 健康・生活、運動・感覚、認知・行動、言語・コミュニケーション、人間関係・社会性
+- **場面（setting）タグ**: 「home」「school」「therapy」「general」
+- **専門分析**:
+  - `background`: 氷山モデル分析（行動の背景にある特性・ニーズ）
+  - `strength_potential`: 強みの活用可能性（支援でどう活かせるか）
+  - `priority`: 保護者の懸念に直結する場合は「high」
 - **DON'T**: 事実の捏造禁止、目標・支援方法の記述禁止（Phase 3の責務）
 
 ### 出力構造
 
-**fact_structuring_result_v1**:
+**fact_structuring_result_v1** (新形式: `annotated_facts_v1`):
 ```json
 {
-  "fact_clusters_v1": {
-    "child_profile": {...},
-    "strengths_facts": [{"fact": "...", "setting": "...", "strength_use": "..."}],
-    "challenges_facts": [{"fact": "...", "setting": "...", "background": "...", "priority": "high|normal"}],
-    "cognitive_facts": [{"fact": "...", "setting": "...", "background": "..."}],
-    "behavior_facts": [{"fact": "...", "setting": "...", "background": "..."}],
-    "social_communication_facts": [{"fact": "...", "setting": "...", "background": "..."}],
-    "physical_sensory_facts": [{"fact": "...", "setting": "...", "background": "..."}],
-    "daily_living_facts": [{"fact": "...", "setting": "...", "background": "..."}],
-    "medical_facts": [...],
-    "family_context": [...],
-    "parent_child_intentions": [{"speaker": "...", "intention": "...", "priority": "..."}],
-    "service_administrative_facts": [...]
+  "annotated_facts_v1": {
+    "child_profile": {
+      "name": "氏名",
+      "age": 5,
+      "birth_date": "YYYY-MM-DD",
+      "gender": "性別",
+      "diagnosis": ["診断名"],
+      "school_name": "通園先名",
+      "school_type": "園の種別"
+    },
+    "annotated_items": [
+      {
+        "source_category": "Phase 1のカテゴリキー (例: strengths, challenges)",
+        "original_fact": "Phase 1の summary テキストをそのまま転記（完全一致必須）",
+        "category": "social_communication | cognitive_behavior | health_daily_living | motor_sensory | language_communication",
+        "setting": "home | school | therapy | general",
+        "professional_analysis": {
+          "background": "氷山モデル：この事実の背景にある特性・ニーズの分析",
+          "strength_potential": "この事実を支援の中でどう強みとして活かせるか、または null",
+          "priority": "high | normal"
+        }
+      }
+    ],
+    "parent_child_intentions": [
+      {
+        "speaker": "本人 | 保護者（父） | 保護者（母）",
+        "original_intention": "Phase 1の summary テキストをそのまま転記",
+        "priority": "high | normal"
+      }
+    ],
+    "unresolved_items": [
+      {
+        "original_fact": "Phase 1の summary テキストをそのまま転記",
+        "reason": "未解決の理由"
+      }
+    ]
   }
 }
 ```
@@ -363,7 +394,8 @@ extraction_v1から事実を5領域に再分類し、**専門的な見立て（�
 
 - `backend/app.py`: エンドポイント定義
 - `backend/services/background_tasks.py`: `structure_facts_background()`
-- `backend/services/prompts.py`: `build_fact_structuring_prompt()`
+- `backend/services/prompts.py`: `build_fact_structuring_prompt()` (日本語プロンプト)
+- `frontend/src/components/Phase2Display.tsx`: 新構造 `annotated_facts_v1` 対応UI
 
 ---
 
@@ -380,14 +412,23 @@ extraction_v1から事実を5領域に再分類し、**専門的な見立て（�
 
 ### 責務
 
-Phase 2で整理・分析された事実と見立て（background, strength_use, priority）を、**個別支援計画書のフォーマットに翻訳**する。
+Phase 2でアノテーションされた事実（`annotated_facts_v1`）と専門分析（background, strength_potential, priority）を、**個別支援計画書のフォーマットに翻訳**する。
 
-**プロンプト構造** (`build_assessment_prompt()`):
+**プロンプト構造** (`build_assessment_prompt()`)（2026-02-11日本語化）:
 - **Role**: 児童発達支援管理責任者
-- **Phase 2連携**: background → 支援の根拠、strength_use → 支援の手法、priority: high → 計画の中心
-- **論理構造**: 意向の反映 → 根拠に基づく目標 → 強み活用の支援案 → 5領域の網羅 → 優先度の反映
+- **Phase 2連携**:
+  - `background` → 支援が必要な根拠
+  - `strength_potential` → 具体的な支援方法の基盤
+  - `priority: high` → 長期目標・支援方針の中心
+  - `original_fact` → 個別性を担保するための具体的エピソード引用
+- **計画生成のロジック**:
+  1. 保護者の願い（parent_child_intentions）→ 長期目標の柱
+  2. Phase 2の background を引用 → 「なぜこの目標が必要か」を説明
+  3. strength_potential を変換 → 具体的な支援方法
+  4. 5領域を網羅 → 各 support_item に領域ラベル
+  5. priority: high のアイテムが計画の中心
 - **氷山モデルに基づく支援設計**: 問題行動の制止ではなく背景ニーズへのアプローチ
-- **執筆スタイル**: 到達目標（「〜ができる」）と支援者アクション（「〜を行う」）を分離
+- **執筆スタイル**: 到達目標（「〜ができる」）と支援者アクション（「〜を行う」「〜を促す」）を分離
 - **DON'T**: Phase 2にない分析の捏造禁止、テンプレート的目標禁止、一般論補完禁止
 
 ### 出力構造

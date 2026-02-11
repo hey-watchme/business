@@ -102,8 +102,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     </button>
   );
 
-  // Get active tab for a plan (default to 'home')
-  const getActiveTab = (planId: string): PlanTab => activeTabByPlan[planId] || 'home';
+  // Get active tab for a plan (default to 'assessment')
+  const getActiveTab = (planId: string): PlanTab => activeTabByPlan[planId] || 'assessment';
 
   // Set active tab for a plan
   const setActiveTab = (planId: string, tab: PlanTab) => {
@@ -1014,25 +1014,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             {/* Tab Navigation */}
             <div className="plan-tabs">
               <button
-                className={`plan-tab ${getActiveTab(plan.id) === 'home' ? 'active' : ''}`}
-                onClick={() => setActiveTab(plan.id, 'home')}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                </svg>
-                個別支援計画書
-              </button>
-              <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'assessment' ? 'active' : ''}`}
                 onClick={() => setActiveTab(plan.id, 'assessment')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                アセスメント
+                0: アセスメント
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase1' ? 'active' : ''}`}
@@ -1043,7 +1031,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                Phase 1
+                1: 事実抽出
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase2' ? 'active' : ''}`}
@@ -1052,11 +1040,21 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                 </svg>
-                Phase 2
+                2: 事実分析
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase3' ? 'active' : ''}`}
                 onClick={() => setActiveTab(plan.id, 'phase3')}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 12l2 2 4-4" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                3: 生成
+              </button>
+              <button
+                className={`plan-tab ${getActiveTab(plan.id) === 'home' ? 'active' : ''}`}
+                onClick={() => setActiveTab(plan.id, 'home')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1064,7 +1062,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <line x1="16" y1="13" x2="8" y2="13" />
                   <line x1="16" y1="17" x2="8" y2="17" />
                 </svg>
-                Phase 3
+                4: 個別支援計画書
               </button>
             </div>
 
@@ -1714,12 +1712,12 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                         <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_extraction_result_v1, null, 2)}</pre>
                       </details>
                       <Phase1Display data={plan.sessions[0].fact_extraction_result_v1 as any} />
-                      {/* Phase 3 prompt generation button (bypass Phase 2) */}
+                      {/* Phase 2 prompt generation button */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', padding: '16px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                         <button
                           onClick={() => {
                             if (plan.sessions?.[0]?.id) {
-                              handleGeneratePhase3Prompt(plan.sessions[0].id, plan.id);
+                              handleGeneratePhase2Prompt(plan.sessions[0].id, plan.id);
                             }
                           }}
                           disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
@@ -1737,8 +1735,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           }}
                         >
                           {reanalyzing[plan.sessions[0].id]
-                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 3プロンプト生成中...')
-                            : 'Phase 3 プロンプト生成'}
+                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '事実分析プロンプト生成中...')
+                            : '次へ: 事実分析プロンプト生成'}
                         </button>
                       </div>
                     </>

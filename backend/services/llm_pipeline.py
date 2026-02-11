@@ -86,12 +86,13 @@ def execute_llm_phase(
             prompt = prompt_result.data.get(prompt_column) if prompt_result.data else None
             if not prompt:
                 raise ValueError(f"No stored prompt found in {prompt_column}")
-            print(f"[Background] Using stored prompt for {phase_name}")
+            print(f"[Background] Using stored prompt for {phase_name} (first 80 chars): {prompt[:80]}")
         else:
             if additional_data:
                 prompt = prompt_builder(result.data, **additional_data)
             else:
                 prompt = prompt_builder(result.data)
+            print(f"[Background] Generated new prompt for {phase_name} (first 80 chars): {prompt[:80]}")
 
             # 3. Save prompt to DB
             supabase.table('business_interview_sessions').update({

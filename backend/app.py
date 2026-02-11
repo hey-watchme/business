@@ -565,15 +565,15 @@ async def assess(
                 detail="fact_structuring_result_v1 not found. Please run /api/structure-facts first."
             )
 
-        # Validate fact_clusters_v1 exists
+        # Validate annotated_facts_v1 exists
         from services.llm_pipeline import validate_previous_phase_result
 
-        has_valid_data = validate_previous_phase_result(structuring_result, 'fact_clusters_v1')
+        has_valid_data = validate_previous_phase_result(structuring_result, 'annotated_facts_v1')
 
         if not has_valid_data:
             raise HTTPException(
                 status_code=400,
-                detail="fact_clusters_v1 is invalid. Please run /api/structure-facts first."
+                detail="annotated_facts_v1 is invalid. Please run /api/structure-facts first."
             )
 
         # Start background task
@@ -832,7 +832,7 @@ async def generate_phase1_prompt(
     Generate Phase 1 prompt from transcription without executing analysis
 
     Returns the generated prompt for user review/editing before execution.
-    Does NOT save to database or trigger analysis.
+    Saves prompt to database for later use with use_custom_prompt=true.
 
     Args:
         session_id: Session ID
@@ -912,6 +912,12 @@ async def generate_phase1_prompt(
             recorded_at=session.get('recorded_at', '不明')
         )
 
+        # Save prompt to DB for later use with use_custom_prompt=true
+        supabase.table('business_interview_sessions').update({
+            'fact_extraction_prompt_v1': prompt,
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', session_id).execute()
+
         return {
             "success": True,
             "session_id": session_id,
@@ -934,7 +940,7 @@ async def generate_phase2_prompt(
     Generate Phase 2 prompt from Phase 1 result without executing analysis
 
     Returns the generated prompt for user review/editing before execution.
-    Does NOT save to database or trigger analysis.
+    Saves prompt to database for later use with use_custom_prompt=true.
 
     Args:
         session_id: Session ID
@@ -970,6 +976,12 @@ async def generate_phase2_prompt(
         from services.prompts import build_fact_structuring_prompt
         prompt = build_fact_structuring_prompt(session)
 
+        # Save prompt to DB for later use with use_custom_prompt=true
+        supabase.table('business_interview_sessions').update({
+            'fact_structuring_prompt_v1': prompt,
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', session_id).execute()
+
         return {
             "success": True,
             "session_id": session_id,
@@ -992,7 +1004,7 @@ async def generate_phase3_prompt(
     Generate Phase 3 prompt from Phase 2 result without executing analysis
 
     Returns the generated prompt for user review/editing before execution.
-    Does NOT save to database or trigger analysis.
+    Saves prompt to database for later use with use_custom_prompt=true.
     """
     if x_api_token != API_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid API token")
@@ -1019,6 +1031,12 @@ async def generate_phase3_prompt(
 
         from services.prompts import build_assessment_prompt
         prompt = build_assessment_prompt(session)
+
+        # Save prompt to DB for later use with use_custom_prompt=true
+        supabase.table('business_interview_sessions').update({
+            'assessment_prompt_v1': prompt,
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', session_id).execute()
 
         return {
             "success": True,
