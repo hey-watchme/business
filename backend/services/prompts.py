@@ -117,9 +117,13 @@ def build_fact_extraction_prompt(
 - 睡眠、着替え、身の回りの自立度
 
 ## 4. 本人の意向
+- 本人が発した言葉、または保護者が代弁した本人の希望・気持ち・感想
+- 例：「楽しかったと言っていた」「ちゃんとしたいけどできないと言っていた」「〜したいようだ」
 - 体験の感想（「楽しかった」等）
 - やりたいこと、好きな遊び
-- 本人が表現した気持ち
+- 本人が表現した気持ち・葛藤
+
+**注意**: 保護者との面談であっても、保護者が引用した「本人の発言」は必ず child_intentions として抽出すること。
 
 ## 5. 保護者の意向・課題
 - 将来の不安（就学等）
@@ -208,6 +212,12 @@ def build_fact_extraction_prompt(
         "confidence": "high/medium/low"
       }}
     ],
+    "child_intentions": [
+      {{
+        "summary": "本人の希望・気持ち（保護者が代弁したものも含む）",
+        "confidence": "high/medium/low"
+      }}
+    ],
     "staff_notes": [
       {{
         "summary": "スタッフの観察・メモ",
@@ -278,14 +288,15 @@ def build_fact_structuring_prompt(session_data: dict) -> str:
 原文を**一切変更せずに**専門的な分析コメントを付加するのがあなたの仕事です。
 
 Phase 1で完了していること：
-- ヒアリング文字起こしからの事実抽出（11カテゴリ）
+- ヒアリング文字起こしからの事実抽出（12カテゴリ）
 - 具体的なエピソード・数値・詳細の保持
-- 保護者の意向・優先度の記録
+- 保護者の意向・本人の意向・優先度の記録
 
 あなたの仕事：
 1. **全ての事実を原文のまま保持する**（コピー＆ペースト、言い換え禁止）
 2. **各事実を5領域のいずれかに分類する**
 3. **専門的な分析を付加する**（背景分析・強みの活用可能性・優先度）
+4. **意向カテゴリの処理**: `parent_intentions` と `child_intentions` は `parent_child_intentions` に統合する
 
 ---
 
@@ -304,6 +315,12 @@ Phase 1で完了していること：
 **ルール3: 情報の欠落禁止**
 - Phase 1の全ての事実が出力に含まれていること
 - 些細に見える事実でもスキップ・省略してはならない
+
+**ルール4: 意向カテゴリの振り分け**
+- Phase 1の `parent_intentions` → `parent_child_intentions` に `speaker: "保護者（母）"` 等で出力
+- Phase 1の `child_intentions` → `parent_child_intentions` に `speaker: "本人"` で出力
+- **`child_intentions` の全アイテムが `parent_child_intentions` に含まれていること（欠落禁止）**
+- `original_intention` は Phase 1 の `summary` の完全コピー（言い換え禁止）
 
 ---
 
@@ -344,11 +361,13 @@ Phase 1で完了していること：
 ## 出力前の自己チェック
 
 1. Phase 1の全ての事実が annotated_items に含まれているか？ → YES
-2. original_fact は Phase 1 の summary と完全に一致しているか？ → YES
+2. original_fact / original_intention は Phase 1 の summary と**完全に一致**しているか？ → YES
 3. 各アイテムに professional_analysis が付与されているか？ → YES
 4. 目標や支援方法は一切書いていないか？ → YES
+5. Phase 1の `parent_intentions` の全件が `parent_child_intentions` に含まれているか？ → YES
+6. Phase 1の `child_intentions` の全件が `parent_child_intentions` に `speaker: "本人"` で含まれているか？ → YES
 
-**4つ全て YES であること。**
+**6つ全て YES であること。**
 
 ---
 

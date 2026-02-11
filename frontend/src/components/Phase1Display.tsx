@@ -10,6 +10,7 @@ interface Phase1Data {
     medical_development?: Array<{ summary: string; confidence?: string }>;
     family_environment?: Array<{ summary: string; confidence?: string }>;
     parent_intentions?: Array<{ summary: string; priority?: number; confidence?: string }>;
+    child_intentions?: Array<{ summary: string; confidence?: string }>;
     staff_notes?: Array<{ summary: string; confidence?: string }>;
     administrative_notes?: Array<{ summary: string; confidence?: string }>;
     unresolved_items?: Array<{ summary: string; confidence?: string }>;
@@ -120,6 +121,7 @@ const Phase1Display: React.FC<Props> = ({ data }) => {
     { title: '医療・発達', key: 'medical_development', type: 'list' as const },
     { title: '家庭環境', key: 'family_environment', type: 'list' as const },
     { title: '保護者の意向', key: 'parent_intentions', type: 'list' as const },
+    { title: '本人の意向', key: 'child_intentions', type: 'list' as const },
     { title: 'スタッフメモ', key: 'staff_notes', type: 'list' as const },
     { title: '事務的事項', key: 'administrative_notes', type: 'list' as const },
     { title: '未解決事項', key: 'unresolved_items', type: 'list' as const },

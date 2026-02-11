@@ -2,8 +2,8 @@
 
 **最終更新**: 2026-02-11 JST
 **対象プロジェクト**: WatchMe Business API
-**システム状態**: Phase 0-3パイプライン完全稼働 ✅、Phase 2アノテーション方式転換完了 ✅、プロンプト日本語化完了 ✅、自動sync実装完了 ✅、手動入力対応 ✅、複数LLMモデル選択対応 ✅
-**実装完了度**: 99% (Phase 2アノテーション方式転換完了、Phase 3プロンプト日本語化完了、プロンプト保存フロー修正完了、タブUI実装完了)
+**システム状態**: Phase 0-3パイプライン完全稼働 ✅、Phase 2アノテーション方式転換完了 ✅、自動sync実装完了 ✅、手動入力対応 ✅、複数LLMモデル選択対応 ✅
+**実装完了度**: 99% (Phase 2アノテーション方式転換完了、プロンプト保存フロー修正完了、タブUI実装完了)
 
 ---
 
@@ -32,7 +32,7 @@
 ```
 録音（webm）
   → 文字起こし（Speechmatics、話者分離）
-  → 事実抽出（LLM、11カテゴリ）
+  → 事実抽出（LLM、12カテゴリ）
   → 事実整理（LLM、支援計画用に再分類）
   → 個別支援計画生成（LLM、5領域の支援項目）
   → 自動sync（business_support_plans へ同期）
@@ -53,7 +53,7 @@
 ### 設計思想
 
 **3段階パイプライン設計**:
-- **Phase 1**: 事実抽出（推論・解釈ゼロ）→ ノイズ除外 + 11カテゴリの事実を抽出
+- **Phase 1**: 事実抽出（推論・解釈ゼロ）→ ノイズ除外 + 12カテゴリの事実を抽出
 - **Phase 2**: 事実アノテーション（原文保持 + 専門分析外付け）→ 氷山モデル背景分析・強みの活用可能性・優先度タグを付加
 - **Phase 3**: 計画書生成（Phase 2の `annotated_facts_v1` を計画書フォーマットに翻訳）→ 目標・支援内容の策定
 
@@ -80,7 +80,7 @@ POST /api/analyze
   ↓
 analyze_background() (バックグラウンドスレッド)
   ↓
-OpenAI GPT-4o (事実のみ抽出、11カテゴリ)
+OpenAI GPT-4o (事実のみ抽出、12カテゴリ)
   ↓
 fact_extraction_result_v1 保存
 
@@ -276,7 +276,7 @@ Speaker 2: よろしくお願いします。
 
 ### 責務
 
-トランスクリプションから**支援の根拠となる事実**を11カテゴリに分類して抽出。
+トランスクリプションから**支援の根拠となる事実**を12カテゴリに分類して抽出。
 
 **プロンプト構造** (`build_fact_extraction_prompt()`):
 - **Role**: 児童発達支援の専門アセスメント担当者
@@ -299,6 +299,7 @@ Speaker 2: よろしくお願いします。
     "medical_development": [...],
     "family_environment": [...],
     "parent_intentions": [...],
+    "child_intentions": [...],
     "staff_notes": [...],
     "administrative_notes": [...],
     "unresolved_items": [...]
@@ -414,7 +415,7 @@ Phase 1で抽出された事実に対して、**原文を完全保持したま�
 
 Phase 2でアノテーションされた事実（`annotated_facts_v1`）と専門分析（background, strength_potential, priority）を、**個別支援計画書のフォーマットに翻訳**する。
 
-**プロンプト構造** (`build_assessment_prompt()`)（2026-02-11日本語化）:
+**プロンプト構造** (`build_assessment_prompt()`):
 - **Role**: 児童発達支援管理責任者
 - **Phase 2連携**:
   - `background` → 支援が必要な根拠

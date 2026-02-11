@@ -7,6 +7,7 @@ import Phase3Display from '../components/Phase3Display';
 import EditableField from '../components/EditableField';
 import EditableTableRow, { type SupportItem } from '../components/EditableTableRow';
 import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { calculateAge } from '../utils/date';
 import './SupportPlanCreate.css';
 
@@ -19,6 +20,7 @@ interface SupportPlanCreateProps {
 }
 
 const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId, hideHeader }) => {
+  const { profile } = useAuth();
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('none');
   const [selectedChild, setSelectedChild] = useState('田中太郎'); // Will be updated by Subject data in real usage
   const [supportPlans, setSupportPlans] = useState<SupportPlan[]>([]);
@@ -1084,10 +1086,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               planId={plan.id}
                               field="facility_name"
                               value={plan.facility_name ?? null}
-                              aiValue={null}
+                              aiValue={profile?.facility_name || null}
                               type="text"
                               label="事業所名"
-                              placeholder="ヨリドコロ横浜白楽"
                               onSave={(field, value) => handleFieldSave(plan.id, field, value)}
                             />
                           </div>
@@ -1110,10 +1111,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               planId={plan.id}
                               field="manager_name"
                               value={plan.manager_name ?? null}
-                              aiValue={null}
+                              aiValue={profile?.name || null}
                               type="text"
                               label="計画作成者"
-                              placeholder="児童発達支援管理責任者 山田太郎"
                               onSave={(field, value) => handleFieldSave(plan.id, field, value)}
                             />
                           </div>
@@ -1403,10 +1403,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           planId={plan.id}
                           field="explainer_name"
                           value={plan.explainer_name ?? null}
-                          aiValue={null}
+                          aiValue={profile?.name || null}
                           type="text"
                           label="説明者"
-                          placeholder="児童発達支援管理責任者　山田太郎"
                           onSave={(field, value) => handleFieldSave(plan.id, field, value)}
                         />
                       </div>
