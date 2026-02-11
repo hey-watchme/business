@@ -508,39 +508,38 @@ def build_assessment_prompt(session_data: dict) -> str:
     Returns:
         Prompt string for LLM
     """
-    # Extract fact_clusters_v1 from session data
-    fact_structuring_data = session_data.get('fact_structuring_result_v1')
-    fact_clusters_v1 = extract_from_wrapped_result(fact_structuring_data, 'fact_clusters_v1')
+    # Experiment: use Phase 1 output (extraction_v1) directly, bypassing Phase 2
+    fact_extraction_data = session_data.get('fact_extraction_result_v1')
+    extraction_v1 = extract_from_wrapped_result(fact_extraction_data, 'extraction_v1')
 
-    if not fact_clusters_v1:
-        raise ValueError("fact_clusters_v1 not found in session data")
+    if not extraction_v1:
+        raise ValueError("extraction_v1 not found in session data")
 
     import json
-    fact_clusters_json = json.dumps(fact_clusters_v1, ensure_ascii=False, indent=2)
+    extraction_json = json.dumps(extraction_v1, ensure_ascii=False, indent=2)
 
     prompt = f"""あなたは児童発達支援の専門職（児童発達支援管理責任者）です。
 
 # あなたの役割（Phase 3: Assessment - 個別支援計画の策定）
 
-Phase 2で整理・分析された事実と見立て（背景分析・強みの活用可能性）を、
-**個別支援計画書のフォーマットに翻訳する** 工程です。
+Phase 1で抽出された事実（11カテゴリ）から直接、
+**個別支援計画書を生成する** 工程です。
 
-Phase 2で完了していること：
-- 事実の5領域への分類
-- 氷山モデルによる行動の背景分析（background）
-- 強みの活用可能性の特定（strength_use）
-- 保護者ニーズに基づく優先度タグ（priority）
+Phase 1で完了していること：
+- ヒアリングからの事実抽出（11カテゴリ）
+- 具体的エピソード・数値の保持
+- 保護者の意向・優先度の記録
 
-あなたの仕事は、これらの分析結果を **具体的な目標と支援内容** に変換することです。
+あなたの仕事は、これらの事実を分析し、**氷山モデルによる背景分析・強みの活用を自ら行いながら**、具体的な目標と支援内容に変換することです。
 
 ---
 
 ## Phase 3 の責務（DO）
 
-✅ **Phase 2の分析結果を計画書に翻訳する**
-- background（背景分析）→ 「支援が必要な理由（根拠）」として活用
-- strength_use（強みの活用可能性）→ 「具体的な支援の手立て（手法）」に変換
-- priority: high の項目 → 長期目標・総合的な支援の方針の核心に反映
+✅ **Phase 1の事実から分析・計画を一貫して行う**
+- 事実から行動の背景を推測（氷山モデル）→ 「支援が必要な理由（根拠）」として活用
+- 強み・得意なことから活用可能性を分析 → 「具体的な支援の手立て（手法）」に変換
+- 保護者の意向（priority高）の項目 → 長期目標・総合的な支援の方針の核心に反映
 
 ✅ **5領域への支援項目マッピング**
 - 各支援項目を5領域（健康・生活、運動・感覚、認知・行動、言語・コミュニケーション、人間関係・社会性）に分類
@@ -594,10 +593,10 @@ Phase 2で完了していること：
 
 # 入力データ
 
-以下は Phase 2 で整理・分析された事実です（fact_clusters_v1）:
+以下は Phase 1 で抽出された事実です（extraction_v1）:
 
 ```json
-{fact_clusters_json}
+{extraction_json}
 ```
 
 ---

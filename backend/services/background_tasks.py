@@ -320,13 +320,14 @@ def assess_background(
         use_custom_prompt: If True, use the prompt already stored in DB
     """
     # Use unified LLM pipeline
+    # Experiment: bypass Phase 2, feed Phase 1 output directly to Phase 3
     execute_llm_phase(
         session_id=session_id,
         supabase=supabase,
         llm_service=llm_service,
         phase_name="assessment",
         prompt_builder=build_assessment_prompt,
-        input_selector="fact_structuring_result_v1",
+        input_selector="fact_extraction_result_v1",
         output_column="assessment_result_v1",
         prompt_column="assessment_prompt_v1",
         model_used_column="model_used_phase3",

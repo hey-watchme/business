@@ -1011,10 +1011,10 @@ async def generate_phase3_prompt(
 
         session = result.data[0]
 
-        if not session.get('fact_structuring_result_v1'):
+        if not session.get('fact_extraction_result_v1'):
             raise HTTPException(
                 status_code=400,
-                detail="Phase 2 result not found. Please run Phase 2 first."
+                detail="Phase 1 result not found. Please run Phase 1 first."
             )
 
         from services.prompts import build_assessment_prompt

@@ -1328,21 +1328,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </div>
                   </div>
 
-                  {/* Document Page Actions */}
+                  {/* Document Page Footer */}
                   <div className="doc-footer">
                     <span className="page-indicator">個別支援計画書 1/2ページ</span>
-                    <button
-                      className="excel-download-mini-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownloadExcel(plan);
-                      }}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-                        <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      Excelをダウンロード (1/2)
-                    </button>
                   </div>
                 </div>
 
@@ -1458,22 +1446,26 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </div>
                   </div>
 
-                  {/* Document Page Actions */}
+                  {/* Document Page Footer */}
                   <div className="doc-footer">
                     <span className="page-indicator">個別支援計画書 2/2ページ</span>
-                    <button
-                      className="excel-download-mini-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownloadExcel(plan);
-                      }}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-                        <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      Excelをダウンロード (2/2)
-                    </button>
                   </div>
+                </div>
+
+                {/* Excel Download Button - outside document UI */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                  <button
+                    className="excel-download-mini-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadExcel(plan);
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                      <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Excelをダウンロード
+                  </button>
                 </div>
 
               </>
@@ -1722,12 +1714,12 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                         <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_extraction_result_v1, null, 2)}</pre>
                       </details>
                       <Phase1Display data={plan.sessions[0].fact_extraction_result_v1 as any} />
-                      {/* Phase 2 prompt generation button */}
+                      {/* Phase 3 prompt generation button (bypass Phase 2) */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', padding: '16px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                         <button
                           onClick={() => {
                             if (plan.sessions?.[0]?.id) {
-                              handleGeneratePhase2Prompt(plan.sessions[0].id, plan.id);
+                              handleGeneratePhase3Prompt(plan.sessions[0].id, plan.id);
                             }
                           }}
                           disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
@@ -1745,8 +1737,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           }}
                         >
                           {reanalyzing[plan.sessions[0].id]
-                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 2プロンプト生成中...')
-                            : 'Phase 2 プロンプト生成'}
+                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 3プロンプト生成中...')
+                            : 'Phase 3 プロンプト生成'}
                         </button>
                       </div>
                     </>
