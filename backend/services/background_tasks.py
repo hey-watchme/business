@@ -249,6 +249,28 @@ def analyze_background(
             )
             print(f"[Background] SQS message sent for session: {session_id}")
 
+        # Auto-chain: Phase 1 -> Phase 2 -> Phase 3
+        print(f"[Background] Auto-chaining Phase 2 (Fact Structuring) for session: {session_id}")
+        try:
+            structure_facts_background(
+                session_id=session_id,
+                supabase=supabase,
+                llm_service=llm_service,
+                use_custom_prompt=False
+            )
+            print(f"[Background] Phase 2 completed. Auto-chaining Phase 3 (Assessment) for session: {session_id}")
+            assess_background(
+                session_id=session_id,
+                supabase=supabase,
+                llm_service=llm_service,
+                use_custom_prompt=False
+            )
+            print(f"[Background] Phase 3 completed. Full pipeline finished for session: {session_id}")
+        except Exception as chain_err:
+            print(f"[Background] ERROR in auto-chain (Phase 2/3): {str(chain_err)}")
+            import traceback
+            print(f"[Background] Chain traceback:\n{traceback.format_exc()}")
+
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()

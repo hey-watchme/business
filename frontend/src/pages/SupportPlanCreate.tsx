@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import RecordingSetup from '../components/RecordingSetup';
 import RecordingSession from '../components/RecordingSession';
 import Phase1Display from '../components/Phase1Display';
@@ -121,6 +121,47 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       fetchPlanDetails(selectedPlan.id);
     }
   }, [selectedPlan?.id]); // Only depend on ID to prevent infinite loop
+
+  // Polling: auto-refresh when any session is in a processing state
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Check if session is still being processed (not yet in a terminal state)
+  const isSessionProcessing = (status: string) => {
+    const terminalStates = ['completed', 'error', 'failed'];
+    return !terminalStates.includes(status);
+  };
+
+  useEffect(() => {
+    const hasInProgressSession = supportPlans.some(plan =>
+      plan.sessions?.some(s => s.status && isSessionProcessing(s.status))
+    );
+
+    if (hasInProgressSession) {
+      // Start polling every 5 seconds
+      if (!pollingRef.current) {
+        pollingRef.current = setInterval(async () => {
+          try {
+            await fetchSupportPlans();
+          } catch (err) {
+            console.error('Polling error:', err);
+          }
+        }, 5000);
+      }
+    } else {
+      // Stop polling when no sessions are in progress
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    }
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [supportPlans]);
 
   const fetchSupportPlans = async () => {
     try {
@@ -637,6 +678,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       case 'uploaded': return 'アップロード済み';
       default: return '待機中';
     }
+  };
+
+  // Check if transcription is still in progress (not yet ready for editing)
+  const isTranscriptionInProgress = (status: InterviewSession['status']) => {
+    return status === 'uploaded' || status === 'transcribing';
   };
 
   const formatDate = (dateString: string) => {
@@ -1518,7 +1564,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           )}
                           <button
                             onClick={() => plan.sessions?.[0]?.id && handleSaveTranscription(plan.sessions[0].id)}
-                            disabled={savingTranscription[plan.sessions?.[0]?.id || ''] || !editingTranscription[plan.sessions?.[0]?.id || '']}
+                            disabled={savingTranscription[plan.sessions?.[0]?.id || ''] || !editingTranscription[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)}
                             style={{
                               padding: '8px 20px',
                               borderRadius: '6px',
@@ -1528,7 +1574,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               fontSize: '13px',
                               fontWeight: '600',
                               cursor: 'pointer',
-                              opacity: (!editingTranscription[plan.sessions?.[0]?.id || ''] || savingTranscription[plan.sessions?.[0]?.id || '']) ? 0.4 : 1,
+                              opacity: (!editingTranscription[plan.sessions?.[0]?.id || ''] || savingTranscription[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)) ? 0.4 : 1,
                               transition: 'all 0.2s ease',
                             }}
                           >
@@ -1540,7 +1586,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 handleGeneratePhase1Prompt(plan.sessions[0].id, plan.id);
                               }
                             }}
-                            disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                            disabled={reanalyzing[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)}
                             style={{
                               padding: '8px 20px',
                               borderRadius: '6px',
@@ -1550,7 +1596,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               fontSize: '13px',
                               fontWeight: '600',
                               cursor: 'pointer',
-                              opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
+                              opacity: (reanalyzing[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)) ? 0.4 : 1,
                               transition: 'all 0.2s ease',
                             }}
                           >
@@ -1566,7 +1612,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 setShowModelModal(true);
                               }
                             }}
-                            disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                            disabled={reanalyzing[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)}
                             style={{
                               padding: '8px 20px',
                               borderRadius: '6px',
@@ -1576,7 +1622,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               fontSize: '13px',
                               fontWeight: '600',
                               cursor: 'pointer',
-                              opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
+                              opacity: (reanalyzing[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)) ? 0.4 : 1,
                               transition: 'all 0.2s ease',
                             }}
                           >
@@ -1586,25 +1632,48 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           </button>
                         </div>
                       </div>
-                      <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', borderLeft: '4px solid var(--accent-primary)', maxHeight: '600px', overflowY: 'auto' }}>
-                        <textarea
-                          value={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription ?? ''}
-                          onChange={(e) => plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value)}
-                          style={{
-                            width: '100%',
-                            minHeight: '400px',
-                            padding: '16px',
-                            fontFamily: 'inherit',
-                            fontSize: '13px',
-                            lineHeight: '1.7',
-                            border: 'none',
-                            background: 'transparent',
-                            resize: 'vertical',
-                            outline: 'none',
-                            color: 'var(--text-primary)',
-                          }}
-                          placeholder="面談記録のテキストを入力してください"
-                        />
+                      <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', borderLeft: `4px solid ${isTranscriptionInProgress(plan.sessions[0].status) ? 'var(--accent-warning, #f59e0b)' : 'var(--accent-primary)'}`, maxHeight: '600px', overflowY: 'auto', position: 'relative' }}>
+                        {isTranscriptionInProgress(plan.sessions[0].status) && (
+                          <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '48px 16px',
+                            gap: '16px',
+                          }}>
+                            <svg width="32" height="32" className="spinning" viewBox="0 0 32 32" fill="none">
+                              <circle cx="16" cy="16" r="12" stroke="var(--text-muted)" strokeWidth="2" opacity="0.3" />
+                              <path d="M16 4C9.37 4 4 9.37 4 16" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" />
+                            </svg>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '600', margin: 0 }}>
+                              {plan.sessions[0].status === 'uploaded' ? '音声をアップロード中です...' : '文字起こし中です...'}
+                            </p>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: 0 }}>
+                              完了するまでしばらくお待ちください。自動的に反映されます。
+                            </p>
+                          </div>
+                        )}
+                        {!isTranscriptionInProgress(plan.sessions[0].status) && (
+                          <textarea
+                            value={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription ?? ''}
+                            onChange={(e) => plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value)}
+                            style={{
+                              width: '100%',
+                              minHeight: '400px',
+                              padding: '16px',
+                              fontFamily: 'inherit',
+                              fontSize: '13px',
+                              lineHeight: '1.7',
+                              border: 'none',
+                              background: 'transparent',
+                              resize: 'vertical',
+                              outline: 'none',
+                              color: 'var(--text-primary)',
+                            }}
+                            placeholder="面談記録のテキストを入力してください"
+                          />
+                        )}
                       </div>
                     </div>
                   </>
