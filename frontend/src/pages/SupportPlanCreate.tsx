@@ -721,7 +721,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
     const latestSession = sessions[0];
 
-    switch (latestSession.status) {
+    const latestStatus = String(latestSession.status || '');
+
+    switch (latestStatus) {
       case 'uploaded':
         return { label: '録音完了・処理待ち', icon: '🔄', color: '#F59E0B' }; // amber
       case 'transcribing':
@@ -731,12 +733,72 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       case 'analyzing':
         return { label: 'AI分析中...', icon: '🔄', color: '#8B5CF6' }; // violet
       case 'completed':
-        return { label: 'アセスメント完了', icon: '✅', color: '#10B981' }; // green
+        return { label: '個別支援計画書作成完了', icon: '✅', color: '#10B981' }; // green
       case 'error':
+      case 'failed':
         return { label: 'エラー発生', icon: '⚠️', color: '#EF4444' }; // red
       default:
         return { label: '処理中', icon: '🔄', color: '#6B7280' }; // gray
     }
+  };
+
+  const getTabStatusLabel = (plan: SupportPlan, tab: PlanTab): string => {
+    const session = plan.sessions?.[0];
+    if (!session) return '未開始';
+
+    const hasPhase1 = !!session.fact_extraction_result_v1;
+    const hasPhase2 = !!session.fact_structuring_result_v1;
+    const hasPhase3 = !!session.assessment_result_v1;
+    const sessionStatus = String(session.status || '');
+    const isError = sessionStatus === 'error' || sessionStatus === 'failed';
+
+    if (isError) return 'エラー';
+
+    if (tab === 'assessment') {
+      switch (sessionStatus) {
+        case 'uploaded':
+          return '録音済み';
+        case 'transcribing':
+          return '文字起こし中';
+        case 'transcribed':
+          return '文字起こし完了';
+        case 'analyzing':
+          return hasPhase1 ? '分析中' : '事実抽出中';
+        case 'completed':
+          return '完了';
+        default:
+          return '待機中';
+      }
+    }
+
+    if (tab === 'phase1') {
+      if (hasPhase1) return '完了';
+      if (sessionStatus === 'analyzing') return '分析中';
+      if (sessionStatus === 'uploaded' || sessionStatus === 'transcribing' || sessionStatus === 'transcribed') return '待機中';
+      return '未開始';
+    }
+
+    if (tab === 'phase2') {
+      if (hasPhase2) return '完了';
+      if (hasPhase1 && sessionStatus === 'analyzing') return '分析中';
+      if (!hasPhase1) return '未開始';
+      return '待機中';
+    }
+
+    if (tab === 'phase3') {
+      if (hasPhase3) return '完了';
+      if (hasPhase2 && sessionStatus === 'analyzing') return '分析中';
+      if (!hasPhase2) return '未開始';
+      return '待機中';
+    }
+
+    if (tab === 'home') {
+      if (hasPhase3) return '作成完了';
+      if (sessionStatus === 'analyzing') return '作成中';
+      return '未開始';
+    }
+
+    return '未開始';
   };
 
   const handleRecordingStart = (childName: string) => {
@@ -1068,7 +1130,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                0: アセスメント
+                0: アセスメント（{getTabStatusLabel(plan, 'assessment')}）
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase1' ? 'active' : ''}`}
@@ -1079,7 +1141,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                1: 事実抽出
+                1: 事実抽出（{getTabStatusLabel(plan, 'phase1')}）
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase2' ? 'active' : ''}`}
@@ -1088,7 +1150,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                 </svg>
-                2: 事実分析
+                2: 事実整理（{getTabStatusLabel(plan, 'phase2')}）
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase3' ? 'active' : ''}`}
@@ -1098,7 +1160,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <path d="M9 12l2 2 4-4" />
                   <circle cx="12" cy="12" r="10" />
                 </svg>
-                3: 生成
+                3: 計画生成（{getTabStatusLabel(plan, 'phase3')}）
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'home' ? 'active' : ''}`}
@@ -1110,7 +1172,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <line x1="16" y1="13" x2="8" y2="13" />
                   <line x1="16" y1="17" x2="8" y2="17" />
                 </svg>
-                4: 個別支援計画書
+                4: 個別支援計画書（{getTabStatusLabel(plan, 'home')}）
               </button>
             </div>
 
