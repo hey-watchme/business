@@ -32,6 +32,23 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const stopMediaResources = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioLevel(0);
+  };
+
   // Mock transcript data
   const mockTranscript: TranscriptMessage[] = [
     { id: 1, speaker: 'staff', name: '山田太郎', text: 'それでは、本日のヒアリングを始めさせていただきます。', timestamp: '00:02' },
@@ -86,11 +103,8 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
         mediaRecorder.onstop = async () => {
           const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
 
-          // Clean up media stream BEFORE uploading
-          if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
-          }
+          // Ensure microphone and audio resources are fully released
+          stopMediaResources();
 
           await uploadAudio(blob);
         };
@@ -129,15 +143,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        audioContextRef.current.close();
-      }
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
+      stopMediaResources();
     };
   }, []);
 
@@ -187,9 +193,8 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+    } else {
+      stopMediaResources();
     }
   };
 

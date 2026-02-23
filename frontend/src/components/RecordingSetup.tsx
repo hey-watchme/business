@@ -14,6 +14,25 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
   const [micPermission, setMicPermission] = useState<'checking' | 'granted' | 'denied'>('checking');
   const [selectedChild, setSelectedChild] = useState(subjectName || '未選択');
   const [audioLevel, setAudioLevel] = useState(0);
+  const activeStreamRef = React.useRef<MediaStream | null>(null);
+  const audioContextRef = React.useRef<AudioContext | null>(null);
+  const animationFrameRef = React.useRef<number | null>(null);
+
+  const stopMicPreview = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (activeStreamRef.current) {
+      activeStreamRef.current.getTracks().forEach(track => track.stop());
+      activeStreamRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    setAudioLevel(0);
+  };
 
   useEffect(() => {
     if (subjectName) {
@@ -22,10 +41,7 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
   }, [subjectName]);
 
   useEffect(() => {
-    let audioContext: AudioContext | null = null;
-    let animationFrame: number | null = null;
     let isUnmounted = false;
-    let activeStream: MediaStream | null = null;
 
     const startMic = async () => {
       try {
@@ -36,10 +52,11 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
           return;
         }
 
-        activeStream = stream;
+        activeStreamRef.current = stream;
         setMicPermission('granted');
 
-        audioContext = new AudioContext();
+        const audioContext = new AudioContext();
+        audioContextRef.current = audioContext;
         const analyser = audioContext.createAnalyser();
         const microphone = audioContext.createMediaStreamSource(stream);
         microphone.connect(analyser);
@@ -52,7 +69,7 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
           analyser.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
           setAudioLevel(average);
-          animationFrame = requestAnimationFrame(checkAudioLevel);
+          animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
         };
         checkAudioLevel();
       } catch (err) {
@@ -67,15 +84,7 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
 
     return () => {
       isUnmounted = true;
-      if (activeStream) {
-        activeStream.getTracks().forEach(track => track.stop());
-      }
-      if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close();
-      }
-      if (animationFrame) {
-        cancelAnimationFrame(animationFrame);
-      }
+      stopMicPreview();
     };
   }, []);
 
@@ -184,12 +193,18 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
             </div>
 
             <div className="action-buttons">
-              <button className="cancel-button" onClick={onCancel}>
+              <button className="cancel-button" onClick={() => {
+                stopMicPreview();
+                onCancel();
+              }}>
                 キャンセル
               </button>
               <button
                 className="start-button"
-                onClick={() => onStart(selectedChild)}
+                onClick={() => {
+                  stopMicPreview();
+                  onStart(selectedChild);
+                }}
                 disabled={micPermission !== 'granted' || !selectedChild}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
