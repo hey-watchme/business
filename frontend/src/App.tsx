@@ -1,13 +1,57 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Layout from './components/Layout';
 import SupportPlanCreate from './pages/SupportPlanCreate';
 import ChildrenList from './pages/ChildrenList';
 import StaffList from './pages/StaffList';
 import Login from './pages/Login';
 import { useAuth } from './contexts/AuthContext';
+import { useSubjects } from './contexts/SubjectContext';
 import { type Subject } from './api/client';
 import { calculateAge } from './utils/date';
 import './App.css';
+
+type AppMenu = 'dashboard' | 'children' | 'staff' | 'settings' | 'organization' | 'facilities' | 'subject-detail';
+
+const MENU_PATHS: Record<Exclude<AppMenu, 'subject-detail'>, string> = {
+  dashboard: '/dashboard',
+  children: '/children',
+  staff: '/staff',
+  settings: '/settings',
+  organization: '/organization',
+  facilities: '/facilities'
+};
+
+const normalizePath = (path: string) => {
+  if (!path || path === '/') return '/dashboard';
+  return path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
+};
+
+const parseLocationToMenu = (pathname: string): { menu: AppMenu; subjectId?: string } => {
+  const normalized = normalizePath(pathname);
+
+  if (normalized.startsWith('/subjects/')) {
+    const subjectId = normalized.replace('/subjects/', '').trim();
+    if (subjectId) {
+      return { menu: 'subject-detail', subjectId };
+    }
+  }
+
+  const found = (Object.entries(MENU_PATHS) as Array<[Exclude<AppMenu, 'subject-detail'>, string]>)
+    .find(([, path]) => path === normalized);
+
+  if (found) {
+    return { menu: found[0] };
+  }
+
+  return { menu: 'dashboard' };
+};
+
+const buildPathFromMenu = (menu: AppMenu, subjectId?: string): string => {
+  if (menu === 'subject-detail' && subjectId) {
+    return `/subjects/${subjectId}`;
+  }
+  return MENU_PATHS[menu as Exclude<AppMenu, 'subject-detail'>] || '/dashboard';
+};
 
 // Format date as "YYYY年MM月DD日"
 const formatDateOnly = (dateString: string | null | undefined): string => {
@@ -93,8 +137,48 @@ const StatCards = () => (
 
 function App() {
   const { user, profile, loading, error: authError, isBusinessUser, signOut } = useAuth();
-  const [selectedMenu, setSelectedMenu] = useState('dashboard');
+  const { subjects } = useSubjects();
+  const [selectedMenu, setSelectedMenu] = useState<AppMenu>('dashboard');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+
+  const syncStateFromLocation = useCallback(() => {
+    const { menu, subjectId } = parseLocationToMenu(window.location.pathname);
+
+    setSelectedMenu(menu);
+
+    if (menu === 'subject-detail' && subjectId) {
+      const matchedSubject = subjects.find((subject) => subject.id === subjectId) || null;
+      setSelectedSubject(matchedSubject);
+    } else {
+      setSelectedSubject(null);
+    }
+  }, [subjects]);
+
+  useEffect(() => {
+    syncStateFromLocation();
+  }, [syncStateFromLocation]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      syncStateFromLocation();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [syncStateFromLocation]);
+
+  const navigateTo = useCallback((menu: AppMenu, subject?: Subject | null) => {
+    const subjectId = menu === 'subject-detail' ? subject?.id : undefined;
+    const nextPath = buildPathFromMenu(menu, subjectId);
+    const currentPath = normalizePath(window.location.pathname);
+
+    setSelectedMenu(menu);
+    setSelectedSubject(menu === 'subject-detail' ? (subject || null) : null);
+
+    if (currentPath !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+  }, []);
 
   // ローディング中
   if (loading) {
@@ -204,13 +288,11 @@ function App() {
   }
 
   const handleMenuSelect = (menuId: string) => {
-    setSelectedMenu(menuId);
-    setSelectedSubject(null);
+    navigateTo(menuId as AppMenu, null);
   };
 
   const handleSubjectSelect = (subject: Subject) => {
-    setSelectedSubject(subject);
-    setSelectedMenu('subject-detail');
+    navigateTo('subject-detail', subject);
   };
 
   const renderContent = () => {
@@ -411,9 +493,9 @@ function App() {
       onMenuSelect={handleMenuSelect}
       selectedSubjectId={selectedSubject?.id}
       onSubjectSelect={handleSubjectSelect}
-      onOrganizationClick={() => setSelectedMenu('organization')}
-      onFacilityClick={() => setSelectedMenu('facilities')}
-      onSettingsClick={() => setSelectedMenu('settings')}
+      onOrganizationClick={() => navigateTo('organization', null)}
+      onFacilityClick={() => navigateTo('facilities', null)}
+      onSettingsClick={() => navigateTo('settings', null)}
     >
       {renderContent()}
     </Layout>
