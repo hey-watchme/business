@@ -26,6 +26,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [supportPlans, setSupportPlans] = useState<SupportPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<SupportPlan | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPollingRefresh, setIsPollingRefresh] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -141,7 +142,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       if (!pollingRef.current) {
         pollingRef.current = setInterval(async () => {
           try {
-            await fetchSupportPlans();
+            await fetchSupportPlans({ silent: true });
           } catch (err) {
             console.error('Polling error:', err);
           }
@@ -163,9 +164,14 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     };
   }, [supportPlans]);
 
-  const fetchSupportPlans = async () => {
+  const fetchSupportPlans = async (options?: { silent?: boolean }) => {
+    const isSilent = !!options?.silent;
     try {
-      setLoading(true);
+      if (isSilent) {
+        setIsPollingRefresh(true);
+      } else {
+        setLoading(true);
+      }
       let plans = await api.getSupportPlans();
 
       if (initialSubjectId) {
@@ -181,7 +187,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch support plans');
     } finally {
-      setLoading(false);
+      if (isSilent) {
+        setIsPollingRefresh(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
@@ -720,8 +730,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
 
     const latestSession = sessions[0];
-
     const latestStatus = String(latestSession.status || '');
+    const hasPhase1 = !!latestSession.fact_extraction_result_v1;
+    const hasPhase2 = !!latestSession.fact_structuring_result_v1;
+    const hasPhase3 = !!latestSession.assessment_result_v1;
 
     switch (latestStatus) {
       case 'uploaded':
@@ -731,7 +743,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       case 'transcribed':
         return { label: '事実抽出待ち', icon: '🔄', color: '#8B5CF6' }; // violet
       case 'analyzing':
-        return { label: 'AI分析中...', icon: '🔄', color: '#8B5CF6' }; // violet
+        if (!hasPhase1) return { label: '事実抽出中...', icon: '🔄', color: '#8B5CF6' };
+        if (!hasPhase2) return { label: '事実整理中...', icon: '🔄', color: '#8B5CF6' };
+        if (!hasPhase3) return { label: '個別支援計画生成中...', icon: '🔄', color: '#8B5CF6' };
+        return { label: '最終処理中...', icon: '🔄', color: '#8B5CF6' };
       case 'completed':
         return { label: '個別支援計画書作成完了', icon: '✅', color: '#10B981' }; // green
       case 'error':
@@ -799,6 +814,36 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
 
     return '未開始';
+  };
+
+  const getGlobalProcessingToastMessage = (): string | null => {
+    const processingPlan = supportPlans.find(plan => {
+      const session = plan.sessions?.[0];
+      return session?.status && isSessionProcessing(String(session.status));
+    });
+
+    if (!processingPlan?.sessions?.[0]) return null;
+
+    const session = processingPlan.sessions[0];
+    const sessionStatus = String(session.status || '');
+    const hasPhase1 = !!session.fact_extraction_result_v1;
+    const hasPhase2 = !!session.fact_structuring_result_v1;
+    const hasPhase3 = !!session.assessment_result_v1;
+
+    if (sessionStatus === 'uploaded' || sessionStatus === 'transcribing') {
+      return '文字起こし中です...';
+    }
+    if (sessionStatus === 'transcribed') {
+      return '事実抽出を開始しています...';
+    }
+    if (sessionStatus === 'analyzing') {
+      if (!hasPhase1) return '事実抽出中です...';
+      if (!hasPhase2) return '事実整理中です...';
+      if (!hasPhase3) return '個別支援計画を生成中です...';
+      return '最終処理中です...';
+    }
+
+    return null;
   };
 
   const handleRecordingStart = (childName: string) => {
@@ -1040,6 +1085,34 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         {!loading && !error && supportPlans.length === 0 && (
           <div style={{ padding: '48px', textAlign: 'center', background: 'var(--bg-tertiary)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
             <p style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>登録されている個別支援計画がありません</p>
+          </div>
+        )}
+
+        {getGlobalProcessingToastMessage() && (
+          <div
+            style={{
+              position: 'fixed',
+              left: '20px',
+              bottom: '20px',
+              zIndex: 1000,
+              background: 'rgba(17, 24, 39, 0.92)',
+              color: '#fff',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              fontSize: '12px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              maxWidth: '320px'
+            }}
+          >
+            <svg width="14" height="14" className="spinning" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
+              <path d="M8 2C4.69 2 2 4.69 2 8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <span>{getGlobalProcessingToastMessage()}</span>
+            {isPollingRefresh && <span style={{ opacity: 0.65 }}>更新中...</span>}
           </div>
         )}
 

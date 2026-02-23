@@ -117,8 +117,28 @@ business_support_plans から表示
 ### ステータス遷移
 
 ```
-uploaded → transcribing → transcribed → analyzing → analyzed → completed
+uploaded → transcribing → transcribed → analyzing → completed
+                       └──────────────→ error / failed
 ```
+
+### ステータス名（表示用）と順序
+
+| 順序 | status（DB） | 画面表示 | 意味 |
+|------|--------------|----------|------|
+| 1 | `uploaded` | 録音完了・処理待ち | 音声アップロード完了、文字起こしキュー待ち |
+| 2 | `transcribing` | 文字起こし中 | ASR実行中 |
+| 3 | `transcribed` | 事実抽出待ち | 文字起こし完了、Phase 1待ち |
+| 4 | `analyzing` | 事実抽出中 / 事実整理中 / 個別支援計画生成中 | Phase 1〜3のいずれかを実行中 |
+| 5 | `completed` | 個別支援計画書作成完了 | Phase 3完了＋計画書同期完了 |
+| - | `error` / `failed` | エラー発生 | 途中フェーズで失敗 |
+
+### ポーリング仕様（UI自動更新）
+
+- ポーリング間隔: **5秒ごと**
+- 実装方式: フロントエンドが **5秒に1回HTTPで再取得**（Push通知ではない）
+- 対象: `status` が `completed` / `error` / `failed` 以外のセッション
+- 表示: 画面下部左側にトースト表示（例: `文字起こし中です...`, `事実抽出中です...`, `事実整理中です...`, `個別支援計画を生成中です...`）
+- 注意: 初回読み込み以外のポーリング更新はサイレント更新で、全画面ローディングは表示しない
 
 ---
 
