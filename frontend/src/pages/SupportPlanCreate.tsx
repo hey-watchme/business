@@ -25,6 +25,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [selectedChild, setSelectedChild] = useState('田中太郎'); // Will be updated by Subject data in real usage
   const [supportPlans, setSupportPlans] = useState<SupportPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<SupportPlan | null>(null);
+  const [focusedPlanId, setFocusedPlanId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPollingRefresh, setIsPollingRefresh] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +205,17 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       console.error('Failed to fetch plan details:', err);
     }
   };
+
+  useEffect(() => {
+    if (supportPlans.length === 0) {
+      setFocusedPlanId(null);
+      return;
+    }
+
+    if (!focusedPlanId || !supportPlans.some(plan => plan.id === focusedPlanId)) {
+      setFocusedPlanId(supportPlans[0].id);
+    }
+  }, [supportPlans, focusedPlanId]);
 
   // ===== 2-column structure helpers and handlers =====
 
@@ -1127,7 +1139,52 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           </div>
         )}
 
-        {supportPlans.map(plan => (
+        {supportPlans.length > 0 && (
+          <div className="plan-selector-grid">
+            {supportPlans.map(plan => {
+              const statusBadge = getPlanStatusBadge(plan);
+              const isActive = plan.id === focusedPlanId;
+              return (
+                <button
+                  key={plan.id}
+                  type="button"
+                  className={`plan-summary-card ${isActive ? 'active' : ''}`}
+                  onClick={() => {
+                    setFocusedPlanId(plan.id);
+                    setSelectedPlan(plan);
+                  }}
+                >
+                  <div className="plan-summary-title">{plan.title}</div>
+                  <div className="plan-summary-meta">作成日: {formatDate(plan.created_at)}</div>
+                  <span
+                    className="plan-summary-status"
+                    style={{
+                      color: statusBadge.color,
+                      background: `${statusBadge.color}15`,
+                      border: `1px solid ${statusBadge.color}30`
+                    }}
+                  >
+                    <span>{statusBadge.icon}</span>
+                    <span>{statusBadge.label}</span>
+                  </span>
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              className="plan-summary-card plan-summary-create"
+              onClick={handleCreatePlan}
+              disabled={creating}
+            >
+              <div className="plan-summary-create-icon">+</div>
+              <div className="plan-summary-title">{creating ? '作成中...' : '新しい個別支援計画'}</div>
+              <div className="plan-summary-meta">カードを作成して下に詳細表示</div>
+            </button>
+          </div>
+        )}
+
+        {(supportPlans.filter(plan => plan.id === focusedPlanId)).map(plan => (
           <div key={plan.id} className="plan-island">
             {/* Plan Header */}
             <div className="plan-header">
@@ -2194,15 +2251,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           </div >
         ))}
 
-        {/* New Plan Button at the Bottom */}
-        <button
-          className="new-plan-island-btn"
-          onClick={handleCreatePlan}
-          disabled={creating}
-        >
-          <div className="icon-circle">+</div>
-          {creating ? '作成中...' : '新しい個別支援計画を作成する'}
-        </button>
       </div >
 
       {/* Model Selection Modal */}
