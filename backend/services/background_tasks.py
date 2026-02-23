@@ -227,7 +227,7 @@ def analyze_background(
         update_data = {
             'fact_extraction_prompt_v1': prompt,
             'fact_extraction_result_v1': analysis_data,
-            'status': 'completed',
+            'status': 'analyzing',
             'updated_at': datetime.now().isoformat()
         }
         # Record which model was used
@@ -265,11 +265,21 @@ def analyze_background(
                 llm_service=llm_service,
                 use_custom_prompt=False
             )
+            supabase.table('business_interview_sessions').update({
+                'status': 'completed',
+                'error_message': None,
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', session_id).execute()
             print(f"[Background] Phase 3 completed. Full pipeline finished for session: {session_id}")
         except Exception as chain_err:
             print(f"[Background] ERROR in auto-chain (Phase 2/3): {str(chain_err)}")
             import traceback
             print(f"[Background] Chain traceback:\n{traceback.format_exc()}")
+            supabase.table('business_interview_sessions').update({
+                'status': 'failed',
+                'error_message': f"Pipeline chain failed: {str(chain_err)}",
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', session_id).execute()
 
     except Exception as e:
         import traceback
