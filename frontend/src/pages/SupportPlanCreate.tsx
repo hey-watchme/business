@@ -816,6 +816,17 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     return '未開始';
   };
 
+  const getTabStatusMeta = (plan: SupportPlan, tab: PlanTab): { label: string; className: string } => {
+    const label = getTabStatusLabel(plan, tab);
+    if (label === '完了' || label === '作成完了') {
+      return { label, className: 'done' };
+    }
+    if (label === 'エラー') {
+      return { label, className: 'error' };
+    }
+    return { label, className: 'pending' };
+  };
+
   const getGlobalProcessingToastMessage = (): string | null => {
     const processingPlan = supportPlans.find(plan => {
       const session = plan.sessions?.[0];
@@ -1203,7 +1214,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                0: アセスメント（{getTabStatusLabel(plan, 'assessment')}）
+                <span className="plan-tab-label">0: アセスメント</span>
+                <span className={`tab-status-badge ${getTabStatusMeta(plan, 'assessment').className}`}>
+                  {getTabStatusMeta(plan, 'assessment').label}
+                </span>
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase1' ? 'active' : ''}`}
@@ -1214,7 +1228,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                1: 事実抽出（{getTabStatusLabel(plan, 'phase1')}）
+                <span className="plan-tab-label">1: 事実抽出</span>
+                <span className={`tab-status-badge ${getTabStatusMeta(plan, 'phase1').className}`}>
+                  {getTabStatusMeta(plan, 'phase1').label}
+                </span>
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase2' ? 'active' : ''}`}
@@ -1223,7 +1240,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                 </svg>
-                2: 事実整理（{getTabStatusLabel(plan, 'phase2')}）
+                <span className="plan-tab-label">2: 事実整理</span>
+                <span className={`tab-status-badge ${getTabStatusMeta(plan, 'phase2').className}`}>
+                  {getTabStatusMeta(plan, 'phase2').label}
+                </span>
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'phase3' ? 'active' : ''}`}
@@ -1233,7 +1253,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <path d="M9 12l2 2 4-4" />
                   <circle cx="12" cy="12" r="10" />
                 </svg>
-                3: 計画生成（{getTabStatusLabel(plan, 'phase3')}）
+                <span className="plan-tab-label">3: 計画生成</span>
+                <span className={`tab-status-badge ${getTabStatusMeta(plan, 'phase3').className}`}>
+                  {getTabStatusMeta(plan, 'phase3').label}
+                </span>
               </button>
               <button
                 className={`plan-tab ${getActiveTab(plan.id) === 'home' ? 'active' : ''}`}
@@ -1245,7 +1268,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <line x1="16" y1="13" x2="8" y2="13" />
                   <line x1="16" y1="17" x2="8" y2="17" />
                 </svg>
-                4: 個別支援計画書（{getTabStatusLabel(plan, 'home')}）
+                <span className="plan-tab-label">4: 個別支援計画書</span>
+                <span className={`tab-status-badge ${getTabStatusMeta(plan, 'home').className}`}>
+                  {getTabStatusMeta(plan, 'home').label}
+                </span>
               </button>
             </div>
 

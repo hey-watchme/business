@@ -742,8 +742,8 @@
 /* ===== Tab Navigation ===== */
 .plan-tabs {
   display: flex;
-  gap: 4px;
-  padding: 16px 40px;
+  gap: 8px;
+  padding: 16px 40px 0;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   margin: 0 -40px;
@@ -753,15 +753,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
+  margin-bottom: -1px;
 }
 
 .plan-tab:hover {
@@ -770,9 +772,10 @@
 }
 
 .plan-tab.active {
-  background: white;
+  background: var(--bg-card);
   color: var(--accent-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: var(--accent-primary);
+  box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.06);
 }
 
 .plan-tab svg {
@@ -781,6 +784,39 @@
 
 .plan-tab.active svg {
   opacity: 1;
+}
+
+.plan-tab-label {
+  white-space: nowrap;
+}
+
+.tab-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tab-status-badge.pending {
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+.tab-status-badge.done {
+  border-color: var(--accent-success);
+  color: var(--accent-success);
+}
+
+.tab-status-badge.error {
+  border-color: var(--accent-danger);
+  color: var(--accent-danger);
 }
 
 /* ===== Tab Content ===== */
