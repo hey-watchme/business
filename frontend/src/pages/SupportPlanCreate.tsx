@@ -60,6 +60,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [pendingPlanTitle, setPendingPlanTitle] = useState<string | null>(null);
   const [pendingSubjectName, setPendingSubjectName] = useState<string | null>(null);
   const [pendingSubjectAvatar, setPendingSubjectAvatar] = useState<string | null>(null);
+  const [recordingCompletionToastMessage, setRecordingCompletionToastMessage] = useState<string | null>(null);
   // Tab state per plan (key: planId, value: active tab)
   const [activeTabByPlan, setActiveTabByPlan] = useState<Record<string, PlanTab>>({});
 
@@ -175,6 +176,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   // Polling: auto-refresh when any session is in a processing state
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check if session is still being processed (not yet in a terminal state)
   const isSessionProcessing = (status: string) => {
@@ -1057,17 +1059,45 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     return null;
   };
 
+  const showRecordingCompletionToast = (message: string) => {
+    setRecordingCompletionToastMessage(message);
+    if (recordingToastTimerRef.current) {
+      clearTimeout(recordingToastTimerRef.current);
+    }
+    recordingToastTimerRef.current = setTimeout(() => {
+      setRecordingCompletionToastMessage(null);
+      recordingToastTimerRef.current = null;
+    }, 8000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recordingToastTimerRef.current) {
+        clearTimeout(recordingToastTimerRef.current);
+        recordingToastTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleRecordingStart = (childName: string) => {
     setSelectedChild(childName);
     setRecordingMode('recording');
   };
 
-  const handleRecordingStop = async (sessionId?: string) => {
+  const handleRecordingClose = () => {
     setRecordingMode('none');
+    showRecordingCompletionToast('面談が終了しました。文字起こしが完了するまで少々お待ちください。');
+  };
 
+  const handleRecordingUploadComplete = async (sessionId?: string) => {
     try {
+      if (!sessionId) {
+        showRecordingCompletionToast('面談は終了しましたが、録音データの保存に失敗しました。再度お試しください。');
+        return;
+      }
+
       // If we were in the "new plan via assessment" flow, create the plan now
-      if (pendingPlanTitle && sessionId) {
+      if (pendingPlanTitle) {
         setCreating(true);
         const newPlan = await api.createSupportPlan({
           subject_id: initialSubjectId || '',
@@ -1249,7 +1279,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         childAvatar={pendingSubjectAvatar || undefined}
         subjectId={selectedPlan?.subject_id || initialSubjectId || ''}
         supportPlanId={selectedPlan?.id}
-        onStop={handleRecordingStop}
+        onClose={handleRecordingClose}
+        onUploadComplete={handleRecordingUploadComplete}
       />
     );
   }
@@ -1295,31 +1326,40 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           </div>
         )}
 
-        {getGlobalProcessingToastMessage() && (
+        {(recordingCompletionToastMessage || getGlobalProcessingToastMessage()) && (
           <div
             style={{
               position: 'fixed',
-              left: '20px',
-              bottom: '20px',
+              left: '24px',
+              bottom: '24px',
               zIndex: 1000,
-              background: 'rgba(17, 24, 39, 0.92)',
-              color: '#fff',
-              padding: '10px 14px',
-              borderRadius: '10px',
-              fontSize: '12px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+              background: '#ffffff',
+              color: '#111827',
+              border: '1px solid #E5E7EB',
+              padding: '14px 16px',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontWeight: 500,
+              boxShadow: '0 10px 28px rgba(15, 23, 42, 0.16)',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              maxWidth: '320px'
+              maxWidth: '420px'
             }}
           >
-            <svg width="14" height="14" className="spinning" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
-              <path d="M8 2C4.69 2 2 4.69 2 8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <span>{getGlobalProcessingToastMessage()}</span>
-            {isPollingRefresh && <span style={{ opacity: 0.65 }}>更新中...</span>}
+            {recordingCompletionToastMessage ? (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6.25" stroke="#10B981" strokeWidth="1.5" />
+                <path d="M5 8L7 10L11 6" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" className="spinning" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="#D1D5DB" strokeWidth="1.5" />
+                <path d="M8 2C4.69 2 2 4.69 2 8" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            )}
+            <span>{recordingCompletionToastMessage || getGlobalProcessingToastMessage()}</span>
+            {!recordingCompletionToastMessage && isPollingRefresh && <span style={{ color: '#6B7280' }}>更新中...</span>}
           </div>
         )}
 
@@ -1363,7 +1403,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             >
               <div className="plan-summary-create-icon">+</div>
               <div className="plan-summary-title">{creating ? '作成中...' : '新しい個別支援計画'}</div>
-              <div className="plan-summary-meta">カードを作成して下に詳細表示</div>
+              <div className="plan-summary-meta">面談の記録と計画書の自動起票</div>
             </button>
           </div>
         )}

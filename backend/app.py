@@ -1,6 +1,7 @@
 import os
 import uuid
 import io
+import asyncio
 import threading
 from datetime import datetime
 from typing import Optional
@@ -61,6 +62,7 @@ S3_BUCKET = os.getenv("S3_BUCKET", "watchme-business")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # Use service_role key for backend
 API_TOKEN = os.getenv("API_TOKEN", "watchme-b2b-poc-2025")
+REALTIME_TRANSCRIBE_MODEL = os.getenv("REALTIME_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")
 SQS_TRANSCRIPTION_QUEUE_URL = os.getenv(
     "SQS_TRANSCRIPTION_QUEUE_URL",
     "https://sqs.ap-southeast-2.amazonaws.com/754724220380/business-transcription-completed-queue.fifo"
@@ -94,6 +96,13 @@ class TranscribeResponse(BaseModel):
     utterances: list
     paragraphs: list
     speaker_count: int
+    model: str
+    message: str
+
+class RealtimeTranscribeResponse(BaseModel):
+    success: bool
+    text: str
+    chunk_index: Optional[int] = None
     model: str
     message: str
 
@@ -379,6 +388,85 @@ async def transcribe_audio(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start transcription: {str(e)}")
+
+@app.post("/api/transcribe/realtime", response_model=RealtimeTranscribeResponse)
+async def transcribe_realtime_chunk(
+    audio: UploadFile = File(...),
+    language: Optional[str] = Form("ja"),
+    prompt: Optional[str] = Form(None),
+    chunk_index: Optional[int] = Form(None),
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    """
+    Lightweight near-realtime transcription endpoint for recording UX.
+    """
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not audio.content_type or not audio.content_type.startswith('audio/'):
+        raise HTTPException(status_code=400, detail="File must be audio format")
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY environment variable not set")
+
+    try:
+        file_content = await audio.read()
+        if not file_content:
+            return RealtimeTranscribeResponse(
+                success=True,
+                text="",
+                chunk_index=chunk_index,
+                model=REALTIME_TRANSCRIBE_MODEL,
+                message="Empty audio chunk"
+            )
+
+        def _transcribe() -> str:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=openai_api_key)
+            file_obj = io.BytesIO(file_content)
+            file_obj.name = audio.filename or "chunk.webm"
+
+            request_data = {
+                "model": REALTIME_TRANSCRIBE_MODEL,
+                "file": file_obj,
+            }
+            if language:
+                request_data["language"] = language
+            if prompt and prompt.strip():
+                request_data["prompt"] = prompt.strip()
+
+            response = client.audio.transcriptions.create(**request_data)
+            return (response.text or "").strip()
+
+        text = await asyncio.to_thread(_transcribe)
+
+        return RealtimeTranscribeResponse(
+            success=True,
+            text=text,
+            chunk_index=chunk_index,
+            model=REALTIME_TRANSCRIBE_MODEL,
+            message="Realtime transcription completed"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_text = str(e)
+        print(f"Realtime transcription error: {error_text}")
+
+        # Keep recording UX resilient: skip invalid realtime chunks instead of failing hard.
+        lowered = error_text.lower()
+        if "corrupted or unsupported" in lowered or "invalid_value" in lowered:
+            return RealtimeTranscribeResponse(
+                success=True,
+                text="",
+                chunk_index=chunk_index,
+                model=REALTIME_TRANSCRIBE_MODEL,
+                message="Skipped invalid audio chunk"
+            )
+
+        raise HTTPException(status_code=500, detail=f"Realtime transcription failed: {error_text}")
 
 @app.post("/api/analyze")
 async def analyze_interview(
@@ -1642,6 +1730,8 @@ async def get_current_user_profile(
             "organization_name": organization_name
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error fetching profile: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

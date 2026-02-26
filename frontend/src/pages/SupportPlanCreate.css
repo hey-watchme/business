@@ -314,8 +314,24 @@
 .plan-summary-create {
   justify-content: center;
   align-items: center;
-  border-style: dashed;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border: none;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(124, 77, 255, 0.32);
   min-height: 112px;
+}
+
+.plan-summary-create:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(124, 77, 255, 0.4);
+}
+
+.plan-summary-create .plan-summary-title {
+  color: #fff;
+}
+
+.plan-summary-create .plan-summary-meta {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .plan-summary-create-icon {
@@ -325,8 +341,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
   font-weight: 700;
 }
 

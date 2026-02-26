@@ -82,6 +82,13 @@
   transform: scale(1.02);
 }
 
+.end-button:disabled {
+  background: #b91c1c;
+  opacity: 0.8;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* Main Content */
 .session-content {
   flex: 1;

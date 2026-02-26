@@ -302,8 +302,8 @@ function App() {
           {/* Child Info Card */}
           <div style={{
             display: 'flex',
-            alignItems: 'center',
-            gap: '24px',
+            flexDirection: 'column',
+            gap: '12px',
             marginBottom: '32px',
             background: 'var(--bg-tertiary)',
             padding: '24px',
@@ -311,28 +311,28 @@ function App() {
             border: '1px solid var(--border-color)',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)'
           }}>
-            <div style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--bg-secondary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '32px',
-              fontWeight: '600',
-              border: '4px solid var(--bg-primary)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              overflow: 'hidden'
-            }}>
-              {selectedSubject.avatar_url ? (
-                <img src={selectedSubject.avatar_url} alt={selectedSubject.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                selectedSubject.name.charAt(0)
-              )}
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+              <div style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--bg-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '32px',
+                fontWeight: '600',
+                border: '4px solid var(--bg-primary)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                overflow: 'hidden'
+              }}>
+                {selectedSubject.avatar_url ? (
+                  <img src={selectedSubject.avatar_url} alt={selectedSubject.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  selectedSubject.name.charAt(0)
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', minWidth: '220px' }}>
                 <h2 style={{ fontSize: '24px', fontWeight: '700', margin: 0, color: 'var(--text-primary)' }}>{selectedSubject.name}</h2>
                 <span style={{
                   background: 'var(--accent-primary)',
@@ -345,47 +345,51 @@ function App() {
                   letterSpacing: '0.5px'
                 }}>支援対象</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
-                {/* 基本情報 */}
-                <div style={{ display: 'flex', gap: '16px', fontSize: '15px' }}>
-                  <div><span style={{ color: 'var(--text-muted)' }}>生年月日:</span> <span style={{ color: 'var(--text-primary)' }}>{formatDateOnly(selectedSubject.birth_date)}</span></div>
-                  <div><span style={{ color: 'var(--text-muted)' }}>年齢:</span> <span style={{ color: 'var(--text-primary)' }}>{calculateAge(selectedSubject.birth_date) ?? '---'}歳</span></div>
-                  <div><span style={{ color: 'var(--text-muted)' }}>性別:</span> <span style={{ color: 'var(--text-primary)' }}>{
-                    selectedSubject.gender === 'male' || selectedSubject.gender === '男性' ? '男性' :
-                      selectedSubject.gender === 'female' || selectedSubject.gender === '女性' ? '女性' :
-                        'その他'
-                  }</span></div>
-                </div>
-                {/* 診断・特性 */}
-                {(selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0) && (
-                  <div style={{ fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>診断・特性:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.diagnosis.join(', ')}</span>
-                  </div>
-                )}
-                {/* 所属 */}
-                {selectedSubject.school_name && (
-                  <div style={{ fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>所属:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.school_name} ({selectedSubject.school_type || '学校'})</span>
-                  </div>
-                )}
-                {/* お住まい - Removed as property doesn't exist */}
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-secondary)'
+            }}>
+              <div style={{ display: 'flex', gap: '16px', fontSize: '15px', flexWrap: 'wrap' }}>
+                <div><span style={{ color: 'var(--text-muted)' }}>生年月日:</span> <span style={{ color: 'var(--text-primary)' }}>{formatDateOnly(selectedSubject.birth_date)}</span></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>年齢:</span> <span style={{ color: 'var(--text-primary)' }}>{calculateAge(selectedSubject.birth_date) ?? '---'}歳</span></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>性別:</span> <span style={{ color: 'var(--text-primary)' }}>{
+                  selectedSubject.gender === 'male' || selectedSubject.gender === '男性' ? '男性' :
+                    selectedSubject.gender === 'female' || selectedSubject.gender === '女性' ? '女性' :
+                      'その他'
+                }</span></div>
               </div>
-              {selectedSubject.notes && (
-                <p style={{
-                  color: 'var(--text-muted)',
-                  margin: '12px 0 0',
-                  fontSize: '13px',
-                  lineHeight: '1.6',
-                  maxWidth: '850px',
-                  whiteSpace: 'pre-wrap',
-                  padding: '8px 12px',
-                  background: 'var(--bg-tertiary)',
-                  borderRadius: '8px'
-                }}>
-                  {selectedSubject.notes}
-                </p>
+              {(selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0) && (
+                <div style={{ fontSize: '14px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>診断・特性:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.diagnosis.join(', ')}</span>
+                </div>
+              )}
+              {selectedSubject.school_name && (
+                <div style={{ fontSize: '14px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>所属:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.school_name} ({selectedSubject.school_type || '学校'})</span>
+                </div>
               )}
             </div>
+            {selectedSubject.notes && (
+              <p style={{
+                color: 'var(--text-muted)',
+                margin: '0',
+                fontSize: '13px',
+                lineHeight: '1.6',
+                maxWidth: '850px',
+                whiteSpace: 'pre-wrap',
+                padding: '8px 12px',
+                background: 'var(--bg-tertiary)',
+                borderRadius: '8px'
+              }}>
+                {selectedSubject.notes}
+              </p>
+            )}
           </div>
 
           <SupportPlanCreate initialSubjectId={selectedSubject.id} hideHeader={true} />
