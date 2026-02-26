@@ -8,7 +8,7 @@ export interface InterviewSession {
   staff_id?: string | null;
   s3_audio_path: string;
   transcription?: string | null;
-  status: 'uploaded' | 'transcribing' | 'transcribed' | 'analyzing' | 'completed' | 'error';
+  status: 'uploaded' | 'transcribing' | 'transcribed' | 'analyzing' | 'completed' | 'error' | 'failed';
   duration_seconds?: number | null;
   recorded_at: string;
   created_at: string;
@@ -20,7 +20,7 @@ export interface InterviewSession {
   assessment_prompt_v1?: string | null;
   assessment_result_v1?: object | string | null;
   error_message?: string | null;
-  transcription_metadata?: string | null;
+  transcription_metadata?: string | Record<string, unknown> | null;
   model_used_phase1?: string | null;
   model_used_phase2?: string | null;
   model_used_phase3?: string | null;
@@ -29,6 +29,14 @@ export interface InterviewSession {
 export interface SessionsResponse {
   sessions: InterviewSession[];
   count: number;
+}
+
+export interface LlmModelCatalog {
+  providers: Record<string, {
+    default_model: string;
+    models: string[];
+    aliases?: Record<string, string>;
+  }>;
 }
 
 // Support Plan interfaces
@@ -431,23 +439,26 @@ export const api = {
     }),
 
   // Trigger analysis phases (returns 202 Accepted)
-  triggerPhase1: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string) =>
+  triggerPhase1: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string, customPrompt?: string, autoChain: boolean = true) =>
     apiRequest<{ status: string; message: string }>(`/api/analyze`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, provider, model }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, auto_chain: autoChain, provider, model, custom_prompt: customPrompt }),
     }),
 
-  triggerPhase2: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string) =>
+  triggerPhase2: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string, customPrompt?: string) =>
     apiRequest<{ status: string; message: string }>(`/api/structure-facts`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, provider, model }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, provider, model, custom_prompt: customPrompt }),
     }),
 
-  triggerPhase3: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string) =>
+  triggerPhase3: (sessionId: string, useCustomPrompt: boolean = false, provider?: string, model?: string, customPrompt?: string) =>
     apiRequest<{ status: string; message: string }>(`/api/assess`, {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, provider, model }),
+      body: JSON.stringify({ session_id: sessionId, use_custom_prompt: useCustomPrompt, provider, model, custom_prompt: customPrompt }),
     }),
+
+  getLlmModels: () =>
+    apiRequest<LlmModelCatalog>(`/api/llm/models`),
 
   // Auth/Profile API
   getMe: (userId: string) =>

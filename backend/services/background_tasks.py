@@ -7,7 +7,7 @@ from datetime import datetime
 import boto3
 from supabase import Client
 from services.prompts import build_fact_extraction_prompt, build_fact_structuring_prompt, build_assessment_prompt
-from services.llm_pipeline import execute_llm_phase
+from services.llm_pipeline import execute_llm_phase, format_llm_error_message
 
 
 def transcribe_background(
@@ -71,6 +71,7 @@ def transcribe_background(
                 'speaker_count': transcription_result.get('speaker_count', 0),
                 'confidence': transcription_result.get('confidence', 0.0),
                 'word_count': transcription_result.get('word_count', 0),
+                'provider': transcription_result.get('provider', os.getenv('ASR_PROVIDER', 'unknown')),
                 'model': transcription_result.get('model', 'unknown'),
                 'processing_time': transcription_result.get('processing_time', 0.0),
             },
@@ -108,7 +109,8 @@ def analyze_background(
     supabase: Client,
     llm_service,
     sqs_queue_url: str = None,
-    use_custom_prompt: bool = False
+    use_custom_prompt: bool = False,
+    auto_chain: bool = True
 ):
     """
     Background task for interview analysis
@@ -119,7 +121,9 @@ def analyze_background(
         llm_service: LLM service instance
         sqs_queue_url: SQS queue URL for completion notification (optional)
         use_custom_prompt: If True, use the prompt already stored in DB
+        auto_chain: If True, auto-chain Phase 2->3 after Phase 1 (default: True for Lambda/standard route)
     """
+    previous_status = None
     try:
         print(f"[Background] Starting analysis for session: {session_id}")
         start_time = time.time()
@@ -136,15 +140,17 @@ def analyze_background(
 
         session = result.data
         transcription = session.get('transcription')
+        previous_status = session.get('status')
 
         if not transcription:
             raise Exception("Transcription not found")
 
-        # Update status to 'analyzing'
-        supabase.table('business_interview_sessions').update({
-            'status': 'analyzing',
-            'updated_at': datetime.now().isoformat()
-        }).eq('id', session_id).execute()
+        # Update status to 'analyzing' (only for standard route or if not yet completed)
+        if auto_chain or previous_status != 'completed':
+            supabase.table('business_interview_sessions').update({
+                'status': 'analyzing',
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', session_id).execute()
 
         # Initialize variables with default values
         subject = None
@@ -210,7 +216,7 @@ def analyze_background(
             if not llm_response:
                 raise Exception("LLM returned empty response")
         except Exception as e:
-            raise Exception(f"LLM generation failed: {str(e)}")
+            raise Exception(format_llm_error_message(e))
 
         # Parse LLM response (handle both JSON string and plain text)
         try:
@@ -249,35 +255,46 @@ def analyze_background(
             )
             print(f"[Background] SQS message sent for session: {session_id}")
 
-        # Auto-chain: Phase 1 -> Phase 2 -> Phase 3
-        print(f"[Background] Auto-chaining Phase 2 (Fact Structuring) for session: {session_id}")
-        try:
-            structure_facts_background(
-                session_id=session_id,
-                supabase=supabase,
-                llm_service=llm_service,
-                use_custom_prompt=False
-            )
-            print(f"[Background] Phase 2 completed. Auto-chaining Phase 3 (Assessment) for session: {session_id}")
-            assess_background(
-                session_id=session_id,
-                supabase=supabase,
-                llm_service=llm_service,
-                use_custom_prompt=False
-            )
+        if auto_chain:
+            # Auto-chain: Phase 1 -> Phase 2 -> Phase 3 (standard route / Lambda)
+            print(f"[Background] Auto-chaining Phase 2 (Fact Structuring) for session: {session_id}")
+            try:
+                structure_facts_background(
+                    session_id=session_id,
+                    supabase=supabase,
+                    llm_service=llm_service,
+                    use_custom_prompt=False
+                )
+                print(f"[Background] Phase 2 completed. Auto-chaining Phase 3 (Assessment) for session: {session_id}")
+                assess_background(
+                    session_id=session_id,
+                    supabase=supabase,
+                    llm_service=llm_service,
+                    use_custom_prompt=False
+                )
+                supabase.table('business_interview_sessions').update({
+                    'status': 'completed',
+                    'error_message': None,
+                    'updated_at': datetime.now().isoformat()
+                }).eq('id', session_id).execute()
+                print(f"[Background] Phase 3 completed. Full pipeline finished for session: {session_id}")
+            except Exception as chain_err:
+                print(f"[Background] ERROR in auto-chain (Phase 2/3): {str(chain_err)}")
+                import traceback
+                print(f"[Background] Chain traceback:\n{traceback.format_exc()}")
+                supabase.table('business_interview_sessions').update({
+                    'status': 'failed',
+                    'error_message': f"Pipeline chain failed: {str(chain_err)}",
+                    'updated_at': datetime.now().isoformat()
+                }).eq('id', session_id).execute()
+        else:
+            # Spot execution: Phase 1 only (no auto-chain)
+            # Preserve previous status if already completed; only advance if not yet completed
+            print(f"[Background] Phase 1 only (auto_chain=False) for session: {session_id}")
+            final_status = previous_status if previous_status == 'completed' else 'completed'
             supabase.table('business_interview_sessions').update({
-                'status': 'completed',
+                'status': final_status,
                 'error_message': None,
-                'updated_at': datetime.now().isoformat()
-            }).eq('id', session_id).execute()
-            print(f"[Background] Phase 3 completed. Full pipeline finished for session: {session_id}")
-        except Exception as chain_err:
-            print(f"[Background] ERROR in auto-chain (Phase 2/3): {str(chain_err)}")
-            import traceback
-            print(f"[Background] Chain traceback:\n{traceback.format_exc()}")
-            supabase.table('business_interview_sessions').update({
-                'status': 'failed',
-                'error_message': f"Pipeline chain failed: {str(chain_err)}",
                 'updated_at': datetime.now().isoformat()
             }).eq('id', session_id).execute()
 
@@ -288,11 +305,21 @@ def analyze_background(
         print(f"[Background] Traceback:\n{error_details}")
         # Update DB with error
         if supabase:
-            supabase.table('business_interview_sessions').update({
-                'status': 'failed',
-                'error_message': f"Analysis failed: {str(e)}",
-                'updated_at': datetime.now().isoformat()
-            }).eq('id', session_id).execute()
+            if auto_chain:
+                # Standard route: mark as failed
+                supabase.table('business_interview_sessions').update({
+                    'status': 'failed',
+                    'error_message': f"Analysis failed: {str(e)}",
+                    'updated_at': datetime.now().isoformat()
+                }).eq('id', session_id).execute()
+            else:
+                # Spot execution: preserve previous status, only update error_message
+                restore_status = previous_status if previous_status else 'failed'
+                supabase.table('business_interview_sessions').update({
+                    'status': restore_status,
+                    'error_message': f"Spot analysis failed: {str(e)}",
+                    'updated_at': datetime.now().isoformat()
+                }).eq('id', session_id).execute()
 
 
 def structure_facts_background(

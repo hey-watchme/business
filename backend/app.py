@@ -32,6 +32,7 @@ def get_asr_provider():
         raise ValueError(f"Unknown ASR provider: {provider_name}. Supported: deepgram, speechmatics")
 
 from services.llm_providers import get_current_llm, LLMFactory, CURRENT_PROVIDER, CURRENT_MODEL
+from services.llm_models import get_model_catalog
 
 # Load environment variables
 load_dotenv()
@@ -99,8 +100,10 @@ class TranscribeResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     session_id: str
     use_custom_prompt: bool = False
+    auto_chain: bool = True          # If True, auto-chain Phase 2->3 after Phase 1
     provider: Optional[str] = None   # LLM provider ("openai", "gemini")
     model: Optional[str] = None      # Model name (e.g., "gpt-4o", "gpt-5.2-2025-12-11")
+    custom_prompt: Optional[str] = None
 
 
 class PromptUpdate(BaseModel):
@@ -195,6 +198,29 @@ class SubjectCreate(BaseModel):
 class SubjectLinkRequest(BaseModel):
     facility_id: str
 
+
+def resolve_llm_service(request: AnalyzeRequest):
+    """Resolve LLM service from request/default with robust error mapping."""
+    provider = (request.provider or CURRENT_PROVIDER).lower()
+    model = request.model or CURRENT_MODEL
+
+    try:
+        llm_service = LLMFactory.create(provider, model)
+        print(f"Using LLM: {llm_service.model_name}")
+        return llm_service
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"LLM runtime dependency missing: {str(e)}. "
+                "Use backend/run-local.sh to run with the managed venv."
+            )
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid LLM setting: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initialize LLM: {str(e)}")
+
 @app.get("/health")
 async def health_check():
     return {
@@ -203,6 +229,16 @@ async def health_check():
         "s3_bucket": S3_BUCKET,
         "supabase_connected": supabase is not None
     }
+
+
+@app.get("/api/llm/models")
+async def get_llm_models(
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    return get_model_catalog()
 
 @app.post("/api/upload", response_model=UploadResponse)
 async def upload_audio(
@@ -382,17 +418,16 @@ async def analyze_interview(
         if not transcription:
             raise HTTPException(status_code=400, detail="Transcription not found. Please run /api/transcribe first.")
 
+        if request.use_custom_prompt and request.custom_prompt is not None:
+            supabase.table('business_interview_sessions').update({
+                'fact_extraction_prompt_v1': request.custom_prompt,
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', request.session_id).execute()
+
         # Start background task
         from services.background_tasks import analyze_background
 
-        # Use specified provider/model or default
-        if request.provider or request.model:
-            provider = request.provider or CURRENT_PROVIDER
-            model = request.model or CURRENT_MODEL
-            llm_service = LLMFactory.create(provider, model)
-            print(f"Using custom LLM: {llm_service.model_name}")
-        else:
-            llm_service = get_current_llm()
+        llm_service = resolve_llm_service(request)
 
         thread = threading.Thread(
             target=analyze_background,
@@ -401,7 +436,8 @@ async def analyze_interview(
                 supabase,
                 llm_service,
                 SQS_ANALYSIS_QUEUE_URL,
-                request.use_custom_prompt
+                request.use_custom_prompt,
+                request.auto_chain
             )
         )
         thread.daemon = True
@@ -465,6 +501,12 @@ async def structure_facts(
                 detail="fact_extraction_result_v1 not found. Please run /api/analyze first."
             )
 
+        if request.use_custom_prompt and request.custom_prompt is not None:
+            supabase.table('business_interview_sessions').update({
+                'fact_structuring_prompt_v1': request.custom_prompt,
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', request.session_id).execute()
+
         # Handle different data structures (same logic as in background_tasks.py)
         has_valid_data = False
 
@@ -488,14 +530,7 @@ async def structure_facts(
         # Start background task
         from services.background_tasks import structure_facts_background
 
-        # Use specified provider/model or default
-        if request.provider or request.model:
-            provider = request.provider or CURRENT_PROVIDER
-            model = request.model or CURRENT_MODEL
-            llm_service = LLMFactory.create(provider, model)
-            print(f"Using custom LLM: {llm_service.model_name}")
-        else:
-            llm_service = get_current_llm()
+        llm_service = resolve_llm_service(request)
 
         thread = threading.Thread(
             target=structure_facts_background,
@@ -565,6 +600,12 @@ async def assess(
                 detail="fact_structuring_result_v1 not found. Please run /api/structure-facts first."
             )
 
+        if request.use_custom_prompt and request.custom_prompt is not None:
+            supabase.table('business_interview_sessions').update({
+                'assessment_prompt_v1': request.custom_prompt,
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', request.session_id).execute()
+
         # Validate annotated_facts_v1 exists
         from services.llm_pipeline import validate_previous_phase_result
 
@@ -579,14 +620,7 @@ async def assess(
         # Start background task
         from services.background_tasks import assess_background
 
-        # Use specified provider/model or default
-        if request.provider or request.model:
-            provider = request.provider or CURRENT_PROVIDER
-            model = request.model or CURRENT_MODEL
-            llm_service = LLMFactory.create(provider, model)
-            print(f"Using custom LLM: {llm_service.model_name}")
-        else:
-            llm_service = get_current_llm()
+        llm_service = resolve_llm_service(request)
 
         thread = threading.Thread(
             target=assess_background,

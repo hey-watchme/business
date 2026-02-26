@@ -6,7 +6,7 @@ import Phase2Display from '../components/Phase2Display';
 import Phase3Display from '../components/Phase3Display';
 import EditableField from '../components/EditableField';
 import EditableTableRow, { type SupportItem } from '../components/EditableTableRow';
-import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate } from '../api/client';
+import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate, type LlmModelCatalog } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateAge } from '../utils/date';
 import './SupportPlanCreate.css';
@@ -18,6 +18,32 @@ interface SupportPlanCreateProps {
   initialSubjectId?: string;
   hideHeader?: boolean;
 }
+
+const FALLBACK_MODEL_CATALOG: LlmModelCatalog = {
+  providers: {
+    openai: {
+      default_model: 'gpt-4o',
+      models: ['gpt-4o', 'gpt-4o-mini', 'gpt-5.2-2025-12-11'],
+      aliases: {},
+    },
+    gemini: {
+      default_model: 'gemini-3.1-pro-preview',
+      models: ['gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+      aliases: {},
+    },
+  },
+};
+
+const MODEL_LABELS: Record<string, string> = {
+  'gpt-4o': 'GPT-4o (default)',
+  'gpt-4o-mini': 'GPT-4o Mini (low cost)',
+  'gpt-5.2-2025-12-11': 'GPT-5.2 (latest)',
+  'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
+  'gemini-3-pro-preview': 'Gemini 3 Pro Preview',
+  'gemini-3-flash-preview': 'Gemini 3 Flash Preview',
+  'gemini-2.5-pro': 'Gemini 2.5 Pro',
+  'gemini-2.5-flash': 'Gemini 2.5 Flash',
+};
 
 const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId, hideHeader }) => {
   const { profile } = useAuth();
@@ -63,6 +89,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [showModelModal, setShowModelModal] = useState(false);
   const [modelModalPlanId, setModelModalPlanId] = useState<string | null>(null);
   const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null);
+  const [llmModelCatalog, setLlmModelCatalog] = useState<LlmModelCatalog>(FALLBACK_MODEL_CATALOG);
   const [selectedModelForBatch, setSelectedModelForBatch] = useState({ provider: 'openai', model: 'gpt-4o' });
   const [phaseRerunModal, setPhaseRerunModal] = useState<{ sessionId: string; planId: string; phase: 1 | 2 | 3; modelUsed?: string } | null>(null);
   const [selectedModelForPhaseRerun, setSelectedModelForPhaseRerun] = useState({ provider: 'openai', model: 'gpt-4o' });
@@ -114,9 +141,31 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     setActiveTabByPlan(prev => ({ ...prev, [planId]: tab }));
   };
 
+  const getProviderDefaultModel = (provider: string): string => {
+    return llmModelCatalog.providers?.[provider]?.default_model || 'gpt-4o';
+  };
+
+  const getProviderModels = (provider: string): string[] => {
+    return llmModelCatalog.providers?.[provider]?.models || [];
+  };
+
   useEffect(() => {
     fetchSupportPlans();
   }, [initialSubjectId]);
+
+  useEffect(() => {
+    const loadLlmModels = async () => {
+      try {
+        const catalog = await api.getLlmModels();
+        if (!catalog?.providers) return;
+        setLlmModelCatalog(catalog);
+      } catch (err) {
+        console.warn('Failed to fetch llm model catalog, fallback models are used:', err);
+      }
+    };
+
+    loadLlmModels();
+  }, []);
 
   useEffect(() => {
     if (selectedPlan) {
@@ -360,42 +409,39 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   };
 
   // ===== Re-analysis handlers =====
-  const pollSessionStatus = async (sessionId: string, targetStatus: string): Promise<boolean> => {
-    const maxAttempts = 60; // Max 60 attempts (60 seconds)
-    let attempts = 0;
 
-    while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-
-      try {
-        const session = await api.getSession(sessionId);
-        if (session.status === 'completed' || session.status === targetStatus) {
-          return true;
-        }
-        if (session.status === 'error') {
-          throw new Error(session.error_message || 'Analysis failed');
-        }
-      } catch (err) {
-        console.error('Polling error:', err);
-      }
-
-      attempts++;
-    }
-
-    throw new Error('Timeout waiting for analysis to complete');
-  };
-
-  const pollSessionField = async (sessionId: string, field: string, previousUpdatedAt?: string): Promise<boolean> => {
+  const pollSessionField = async (
+    sessionId: string,
+    field: string,
+    previousUpdatedAt?: string,
+    previousFieldValue?: unknown
+  ): Promise<boolean> => {
     const maxAttempts = 60;
     let attempts = 0;
+
+    const stringifyValue = (value: unknown): string | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'string') return value;
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    };
+
+    const previousFieldSerialized = stringifyValue(previousFieldValue);
 
     while (attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       try {
         const session = await api.getSession(sessionId);
-        if (session.status === 'error') {
+        if (session.status === 'error' || session.status === 'failed') {
           throw new Error(session.error_message || 'Processing failed');
+        }
+        // Detect spot execution errors (status stays completed but error_message is set)
+        if (session.error_message && session.error_message.includes('Spot analysis failed')) {
+          throw new Error(session.error_message);
         }
         const value = (session as unknown as Record<string, unknown>)[field];
         if (value !== null && value !== undefined) {
@@ -405,6 +451,16 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             attempts++;
             continue;
           }
+
+          // If previous value exists, ensure this field itself changed (not just status/updated_at)
+          if (previousFieldSerialized !== null) {
+            const currentFieldSerialized = stringifyValue(value);
+            if (currentFieldSerialized === previousFieldSerialized) {
+              attempts++;
+              continue;
+            }
+          }
+
           return true;
         }
       } catch (err) {
@@ -428,29 +484,32 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       // Get current updated_at before starting
       const currentSession = await api.getSession(sessionId);
       let previousUpdatedAt = currentSession.updated_at;
+      const previousPhase1Value = (currentSession as unknown as Record<string, unknown>).fact_extraction_result_v1;
 
       // Phase 1: Fact Extraction
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 1 実行中... (${modelLabel})` }));
-      await api.triggerPhase1(sessionId, false, modelConfig.provider, modelConfig.model);
-      await pollSessionStatus(sessionId, 'analyzed');
+      await api.triggerPhase1(sessionId, false, modelConfig.provider, modelConfig.model, undefined, false);
+      await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousPhase1Value);
 
       // Update previousUpdatedAt for Phase 2
       const afterPhase1 = await api.getSession(sessionId);
       previousUpdatedAt = afterPhase1.updated_at;
+      const previousPhase2Value = (afterPhase1 as unknown as Record<string, unknown>).fact_structuring_result_v1;
 
       // Phase 2: Fact Structuring
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 2 実行中... (${modelLabel})` }));
       await api.triggerPhase2(sessionId, false, modelConfig.provider, modelConfig.model);
-      await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt);
+      await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousPhase2Value);
 
       // Update previousUpdatedAt for Phase 3
       const afterPhase2 = await api.getSession(sessionId);
       previousUpdatedAt = afterPhase2.updated_at;
+      const previousPhase3Value = (afterPhase2 as unknown as Record<string, unknown>).assessment_result_v1;
 
       // Phase 3: Assessment
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 3 実行中... (${modelLabel})` }));
       await api.triggerPhase3(sessionId, false, modelConfig.provider, modelConfig.model);
-      await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt);
+      await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousPhase3Value);
 
       // Refresh plan data
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -460,7 +519,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     } catch (err) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.error('Batch analysis failed:', err);
-      const errorMsg = err instanceof Error ? err.message : '不明';
+      const errorMsgRaw = err instanceof Error ? err.message : '不明';
+      const errorMsg = normalizeErrorMessage(errorMsgRaw);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `エラー: ${errorMsg} (${elapsed}秒)` } }));
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -509,19 +569,43 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     try {
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase ${phase} 実行中... (${modelLabel})` }));
 
+      // Ensure currently edited prompt is persisted before running with use_custom_prompt=true
+      const phaseKey = `phase${phase}`;
+      const promptStateKey = getPromptKey(sessionId, phaseKey);
+      const editedPrompt = editingPrompt[promptStateKey];
+      const currentPlan = supportPlans.find(p => p.id === planId);
+      const sessionInPlan = currentPlan?.sessions?.find(s => s.id === sessionId);
+      const storedPrompt = phase === 1
+        ? sessionInPlan?.fact_extraction_prompt_v1
+        : phase === 2
+          ? sessionInPlan?.fact_structuring_prompt_v1
+          : sessionInPlan?.assessment_prompt_v1;
+
+      if (editedPrompt !== undefined && editedPrompt !== (storedPrompt ?? '')) {
+        setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase ${phase} プロンプト保存中...` }));
+        await api.updatePrompt(sessionId, phaseKey, editedPrompt);
+      }
+
+      const promptForExecution = editedPrompt !== undefined ? editedPrompt : (storedPrompt ?? undefined);
+
       // Get current updated_at before starting, to detect actual change
       const currentSession = await api.getSession(sessionId);
       const previousUpdatedAt = currentSession.updated_at;
+      const previousFieldValue = phase === 1
+        ? (currentSession as unknown as Record<string, unknown>).fact_extraction_result_v1
+        : phase === 2
+          ? (currentSession as unknown as Record<string, unknown>).fact_structuring_result_v1
+          : (currentSession as unknown as Record<string, unknown>).assessment_result_v1;
 
       if (phase === 1) {
-        await api.triggerPhase1(sessionId, true, modelConfig.provider, modelConfig.model);
-        await pollSessionStatus(sessionId, 'analyzed');
+        await api.triggerPhase1(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution, false);
+        await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousFieldValue);
       } else if (phase === 2) {
-        await api.triggerPhase2(sessionId, true, modelConfig.provider, modelConfig.model);
-        await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt);
+        await api.triggerPhase2(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution);
+        await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousFieldValue);
       } else if (phase === 3) {
-        await api.triggerPhase3(sessionId, true, modelConfig.provider, modelConfig.model);
-        await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt);
+        await api.triggerPhase3(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution);
+        await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousFieldValue);
       }
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -531,7 +615,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     } catch (err) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.error(`Phase ${phase} analysis failed:`, err);
-      const errorMsg = err instanceof Error ? err.message : '不明';
+      const errorMsgRaw = err instanceof Error ? err.message : '不明';
+      const errorMsg = normalizeErrorMessage(errorMsgRaw);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `Phase ${phase} エラー: ${errorMsg} (${elapsed}秒)` } }));
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -545,7 +630,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   const handleGeneratePhase1Prompt = async (sessionId: string, planId: string) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
-    setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 1プロンプト生成中...' }));
+    setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実抽出プロンプト生成中...' }));
 
     try {
       const result = await api.generatePhase1Prompt(sessionId);
@@ -707,6 +792,33 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     return status === 'uploaded' || status === 'transcribing';
   };
 
+  const getTranscriptionMetadata = (session?: InterviewSession | null): Record<string, unknown> | null => {
+    if (!session?.transcription_metadata) return null;
+
+    if (typeof session.transcription_metadata === 'string') {
+      try {
+        const parsed = JSON.parse(session.transcription_metadata);
+        return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+      } catch {
+        return null;
+      }
+    }
+
+    return typeof session.transcription_metadata === 'object'
+      ? session.transcription_metadata as Record<string, unknown>
+      : null;
+  };
+
+  const getTranscriptionModelLabel = (session?: InterviewSession | null): string | null => {
+    const metadata = getTranscriptionMetadata(session);
+    const provider = typeof metadata?.provider === 'string' ? metadata.provider : '';
+    const model = typeof metadata?.model === 'string' ? metadata.model : '';
+
+    if (provider && model) return `${provider}/${model}`;
+    if (model) return model;
+    return null;
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('ja-JP', {
@@ -728,6 +840,60 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     });
   };
 
+  const normalizeErrorMessage = (rawMessage: string): string => {
+    const message = (rawMessage || '').trim();
+    const lower = message.toLowerCase();
+
+    const isQuotaError =
+      lower.includes('llm quota exceeded') ||
+      lower.includes('resource_exhausted') ||
+      lower.includes('quota') ||
+      lower.includes('rate-limit') ||
+      lower.includes('rate limit') ||
+      lower.includes('generate_content_free_tier') ||
+      lower.includes('insufficient_quota') ||
+      lower.includes('429');
+
+    if (isQuotaError) {
+      const isGemini = lower.includes('gemini') || lower.includes('generativelanguage.googleapis.com');
+      if (isGemini) {
+        return '原因: Gemini APIのクオータ超過です（時間をおいて再実行、または別モデルを選択してください）';
+      }
+      return '原因: LLM APIのクオータ/レート制限に到達しています（時間をおいて再実行、または別モデルを選択してください）';
+    }
+
+    const isModelError =
+      lower.includes('llm model error') ||
+      lower.includes('model_not_found') ||
+      lower.includes('invalid model') ||
+      lower.includes('unsupported model') ||
+      lower.includes('not found');
+
+    if (isModelError) {
+      return '原因: モデル指定エラーです（モデル名と利用可能リージョン/権限を確認してください）';
+    }
+
+    return message;
+  };
+
+  const getFailedPhase = (session: InterviewSession): PlanTab | null => {
+    const errorMessage = String(session.error_message || '');
+    const lowerError = errorMessage.toLowerCase();
+
+    if (lowerError.includes('analysis failed')) return 'phase1';
+    if (lowerError.includes('fact_structuring failed') || lowerError.includes('pipeline chain failed: fact_structuring failed')) return 'phase2';
+    if (lowerError.includes('assessment failed') || lowerError.includes('pipeline chain failed: assessment failed')) return 'phase3';
+
+    const hasPhase1 = !!session.fact_extraction_result_v1;
+    const hasPhase2 = !!session.fact_structuring_result_v1;
+    const hasPhase3 = !!session.assessment_result_v1;
+
+    if (!hasPhase1) return 'phase1';
+    if (!hasPhase2) return 'phase2';
+    if (!hasPhase3) return 'phase3';
+    return null;
+  };
+
 
   // Get plan status badge (for plan card)
   const getPlanStatusBadge = (plan: SupportPlan): { label: string; icon: string; color: string } => {
@@ -746,6 +912,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     const hasPhase1 = !!latestSession.fact_extraction_result_v1;
     const hasPhase2 = !!latestSession.fact_structuring_result_v1;
     const hasPhase3 = !!latestSession.assessment_result_v1;
+    const failedPhase = getFailedPhase(latestSession);
 
     switch (latestStatus) {
       case 'uploaded':
@@ -763,6 +930,18 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         return { label: '個別支援計画書作成完了', icon: '✅', color: '#10B981' }; // green
       case 'error':
       case 'failed':
+        if (failedPhase === 'phase1') {
+          return { label: '事実抽出でエラー', icon: '⚠️', color: '#EF4444' };
+        }
+        if (failedPhase === 'phase2') {
+          return { label: '事実整理でエラー', icon: '⚠️', color: '#EF4444' };
+        }
+        if (failedPhase === 'phase3') {
+          return { label: '個別支援計画生成でエラー', icon: '⚠️', color: '#EF4444' };
+        }
+        if (hasPhase3) {
+          return { label: '再実行エラー（既存結果あり）', icon: '⚠️', color: '#F59E0B' };
+        }
         return { label: 'エラー発生', icon: '⚠️', color: '#EF4444' }; // red
       default:
         return { label: '処理中', icon: '🔄', color: '#6B7280' }; // gray
@@ -778,8 +957,17 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     const hasPhase3 = !!session.assessment_result_v1;
     const sessionStatus = String(session.status || '');
     const isError = sessionStatus === 'error' || sessionStatus === 'failed';
+    const failedPhase = getFailedPhase(session);
 
-    if (isError) return 'エラー';
+    if (isError) {
+      if (tab === failedPhase) return 'エラー';
+      if (tab === 'phase1' && hasPhase1) return '完了';
+      if (tab === 'phase2' && hasPhase2) return '完了';
+      if (tab === 'phase3' && hasPhase3) return '完了';
+      if (tab === 'home' && hasPhase3) return '作成完了';
+      if (tab === 'assessment' && hasPhase3) return '完了';
+      return '未開始';
+    }
 
     if (tab === 'assessment') {
       switch (sessionStatus) {
@@ -1070,10 +1258,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     <div className="support-plan-create">
       {!hideHeader && (
         <div className="page-header">
-          <div>
-            <h1 className="page-title">個別支援計画管理</h1>
-            <p className="page-subtitle">保護者ヒアリング録音から個別支援計画書を自動生成</p>
-          </div>
           <button className="primary-button" onClick={handleCreatePlan} disabled={creating}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -1735,9 +1919,20 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             {/* Assessment Tab Content */}
             {getActiveTab(plan.id) === 'assessment' && (
               <div className="tab-content-assessment" style={{ display: 'grid', gap: '16px' }}>
+                <div className="phase-section">
+                  <p className="phase-description">
+                    保護者との面談の内容を表示します。
+                  </p>
 
-                {plan.sessions && plan.sessions.length > 0 ? (
-                  <>
+                  {plan.sessions?.[0] && getTranscriptionModelLabel(plan.sessions[0]) && (
+                    <div style={{ display: 'flex', gap: '16px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
+                      <span><strong>文字起こしモデル:</strong> {getTranscriptionModelLabel(plan.sessions[0])}</span>
+                      <span><strong>実行日時:</strong> {formatDate(plan.sessions[0].updated_at)}</span>
+                    </div>
+                  )}
+
+                  {plan.sessions && plan.sessions.length > 0 ? (
+                    <>
                     {/* Session Info Section */}
                     <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
                       <h5 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1819,8 +2014,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                             }}
                           >
                             {reanalyzing[plan.sessions[0].id]
-                              ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 1プロンプト生成中...')
-                              : 'Phase 1プロンプト生成'}
+                              ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '事実抽出プロンプト生成中...')
+                              : '事実抽出プロンプト生成'}
                           </button>
                           <button
                             onClick={() => {
@@ -1846,11 +2041,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           >
                             {reanalyzing[plan.sessions[0].id]
                               ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '分析中...')
-                              : '分析開始'}
+                              : '全Phase実行'}
                           </button>
                         </div>
                       </div>
-                      <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', borderLeft: `4px solid ${isTranscriptionInProgress(plan.sessions[0].status) ? 'var(--accent-warning, #f59e0b)' : 'var(--accent-primary)'}`, maxHeight: '600px', overflowY: 'auto', position: 'relative' }}>
+                      <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', borderLeft: `4px solid ${isTranscriptionInProgress(plan.sessions[0].status) ? 'var(--accent-warning, #f59e0b)' : 'var(--accent-primary)'}`, position: 'relative' }}>
                         {isTranscriptionInProgress(plan.sessions[0].status) && (
                           <div style={{
                             display: 'flex',
@@ -1874,8 +2069,18 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                         )}
                         {!isTranscriptionInProgress(plan.sessions[0].status) && (
                           <textarea
+                            ref={(el) => {
+                              if (el) {
+                                el.style.height = 'auto';
+                                el.style.height = `${el.scrollHeight}px`;
+                              }
+                            }}
                             value={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription ?? ''}
-                            onChange={(e) => plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value)}
+                            onChange={(e) => {
+                              e.target.style.height = 'auto';
+                              e.target.style.height = `${e.target.scrollHeight}px`;
+                              plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value);
+                            }}
                             style={{
                               width: '100%',
                               minHeight: '400px',
@@ -1885,7 +2090,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               lineHeight: '1.7',
                               border: 'none',
                               background: 'transparent',
-                              resize: 'vertical',
+                              resize: 'none',
+                              overflow: 'hidden',
                               outline: 'none',
                               color: 'var(--text-primary)',
                             }}
@@ -1894,27 +2100,28 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                         )}
                       </div>
                     </div>
-                  </>
-                ) : (
-                  <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '32px', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
-                      アセスメントデータが紐付けられていません
-                    </p>
-                    <button
-                      className="action-button"
-                      onClick={() => handleCreateManualSession(plan)}
-                      disabled={creatingManualSession[plan.id]}
-                      style={{
-                        background: 'rgba(16, 185, 129, 0.1)',
-                        color: '#10b981',
-                        borderColor: 'rgba(16, 185, 129, 0.2)',
-                        opacity: creatingManualSession[plan.id] ? 0.5 : 1,
-                      }}
-                    >
-                      {creatingManualSession[plan.id] ? 'セッション作成中...' : '面談記録を手動入力'}
-                    </button>
-                  </div>
-                )}
+                    </>
+                  ) : (
+                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '32px', textAlign: 'center' }}>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
+                        アセスメントデータが紐付けられていません
+                      </p>
+                      <button
+                        className="action-button"
+                        onClick={() => handleCreateManualSession(plan)}
+                        disabled={creatingManualSession[plan.id]}
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.1)',
+                          color: '#10b981',
+                          borderColor: 'rgba(16, 185, 129, 0.2)',
+                          opacity: creatingManualSession[plan.id] ? 0.5 : 1,
+                        }}
+                      >
+                        {creatingManualSession[plan.id] ? 'セッション作成中...' : '面談記録を手動入力'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1922,7 +2129,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             {getActiveTab(plan.id) === 'phase1' && (
               <div className="tab-content-phase1">
                 <div className="phase-section">
-                  <h4 className="phase-title">Phase 1: 事実抽出結果</h4>
                   <p className="phase-description">
                     ヒアリング内容から事実のみを抽出した結果です。推論や解釈は含まれていません。
                   </p>
@@ -1966,7 +2172,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
-                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 1 のみ再実行'}
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : '事実抽出を再実行'}
                               </button>
                             </div>
                             {phaseResult[session.id] && (
@@ -1996,35 +2202,23 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           <CopyButton text={JSON.stringify(plan.sessions[0].fact_extraction_result_v1, null, 2)} copyKey={`output_phase1_${plan.sessions[0].id}`} />
                         </div>
                         <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_extraction_result_v1, null, 2)}</pre>
+                        <div className="prompt-actions">
+                          <button
+                            className="prompt-rerun-btn"
+                            onClick={() => {
+                              if (plan.sessions?.[0]?.id) {
+                                handleGeneratePhase2Prompt(plan.sessions[0].id, plan.id);
+                              }
+                            }}
+                            disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                          >
+                            {reanalyzing[plan.sessions[0].id]
+                              ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '事実整理プロンプト生成中...')
+                              : '事実整理プロンプト生成'}
+                          </button>
+                        </div>
                       </details>
                       <Phase1Display data={plan.sessions[0].fact_extraction_result_v1 as any} />
-                      {/* Phase 2 prompt generation button */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', padding: '16px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                        <button
-                          onClick={() => {
-                            if (plan.sessions?.[0]?.id) {
-                              handleGeneratePhase2Prompt(plan.sessions[0].id, plan.id);
-                            }
-                          }}
-                          disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
-                          style={{
-                            padding: '8px 20px',
-                            borderRadius: '6px',
-                            border: '1px solid rgba(59, 130, 246, 0.4)',
-                            background: '#3b82f6',
-                            color: 'white',
-                            fontSize: '13px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
-                            transition: 'all 0.2s ease',
-                          }}
-                        >
-                          {reanalyzing[plan.sessions[0].id]
-                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '事実分析プロンプト生成中...')
-                            : '次へ: 事実分析プロンプト生成'}
-                        </button>
-                      </div>
                     </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
@@ -2039,7 +2233,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             {getActiveTab(plan.id) === 'phase2' && (
               <div className="tab-content-phase2">
                 <div className="phase-section">
-                  <h4 className="phase-title">Phase 2: 事実整理結果</h4>
                   <p className="phase-description">
                     抽出した事実を支援計画用に再分類した結果です。
                   </p>
@@ -2156,7 +2349,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             {getActiveTab(plan.id) === 'phase3' && (
               <div className="tab-content-phase3">
                 <div className="phase-section">
-                  <h4 className="phase-title">Phase 3: 個別支援計画生成結果</h4>
                   <p className="phase-description">
                     事実整理結果から個別支援計画書を生成した結果です。
                   </p>
@@ -2264,7 +2456,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 value={selectedModelForBatch.provider}
                 onChange={(e) => setSelectedModelForBatch({
                   provider: e.target.value,
-                  model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview'
+                  model: getProviderDefaultModel(e.target.value)
                 })}
               >
                 <option value="openai">OpenAI</option>
@@ -2273,24 +2465,14 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             </div>
             <div className="modal-field">
               <label>モデル:</label>
-              {selectedModelForBatch.provider === 'openai' ? (
-                <select
-                  value={selectedModelForBatch.model}
-                  onChange={(e) => setSelectedModelForBatch(prev => ({ ...prev, model: e.target.value }))}
-                >
-                  <option value="gpt-4o">GPT-4o (default)</option>
-                  <option value="gpt-5.2-2025-12-11">GPT-5.2 (latest)</option>
-                  <option value="gpt-4o-mini">GPT-4o Mini (low cost)</option>
-                </select>
-              ) : (
-                <select
-                  value={selectedModelForBatch.model}
-                  onChange={(e) => setSelectedModelForBatch(prev => ({ ...prev, model: e.target.value }))}
-                >
-                  <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
-                  <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
-                </select>
-              )}
+              <select
+                value={selectedModelForBatch.model}
+                onChange={(e) => setSelectedModelForBatch(prev => ({ ...prev, model: e.target.value }))}
+              >
+                {getProviderModels(selectedModelForBatch.provider).map((model) => (
+                  <option key={model} value={model}>{MODEL_LABELS[model] || model}</option>
+                ))}
+              </select>
             </div>
             <div className="modal-actions">
               <button onClick={() => setShowModelModal(false)}>キャンセル</button>
@@ -2312,7 +2494,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       {phaseRerunModal && (
         <div className="modal-overlay" onClick={() => setPhaseRerunModal(null)}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <h3>Phase {phaseRerunModal.phase} を再実行</h3>
+            <h3>{phaseRerunModal.phase === 1 ? '事実抽出を再実行' : `Phase ${phaseRerunModal.phase} を再実行`}</h3>
             {phaseRerunModal.modelUsed && (
               <div className="current-model-badge" style={{ marginBottom: '12px' }}>
                 前回使用: {phaseRerunModal.modelUsed}
@@ -2324,7 +2506,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 value={selectedModelForPhaseRerun.provider}
                 onChange={(e) => setSelectedModelForPhaseRerun({
                   provider: e.target.value,
-                  model: e.target.value === 'openai' ? 'gpt-4o' : 'gemini-3-pro-preview'
+                  model: getProviderDefaultModel(e.target.value)
                 })}
               >
                 <option value="openai">OpenAI</option>
@@ -2333,24 +2515,14 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             </div>
             <div className="modal-field">
               <label>モデル:</label>
-              {selectedModelForPhaseRerun.provider === 'openai' ? (
-                <select
-                  value={selectedModelForPhaseRerun.model}
-                  onChange={(e) => setSelectedModelForPhaseRerun(prev => ({ ...prev, model: e.target.value }))}
-                >
-                  <option value="gpt-4o">GPT-4o (default)</option>
-                  <option value="gpt-5.2-2025-12-11">GPT-5.2 (latest)</option>
-                  <option value="gpt-4o-mini">GPT-4o Mini (low cost)</option>
-                </select>
-              ) : (
-                <select
-                  value={selectedModelForPhaseRerun.model}
-                  onChange={(e) => setSelectedModelForPhaseRerun(prev => ({ ...prev, model: e.target.value }))}
-                >
-                  <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
-                  <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
-                </select>
-              )}
+              <select
+                value={selectedModelForPhaseRerun.model}
+                onChange={(e) => setSelectedModelForPhaseRerun(prev => ({ ...prev, model: e.target.value }))}
+              >
+                {getProviderModels(selectedModelForPhaseRerun.provider).map((model) => (
+                  <option key={model} value={model}>{MODEL_LABELS[model] || model}</option>
+                ))}
+              </select>
             </div>
             <div className="modal-actions">
               <button onClick={() => setPhaseRerunModal(null)}>キャンセル</button>
@@ -2362,7 +2534,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   handlePhaseOnlyReanalyze(sessionId, planId, phase, selectedModelForPhaseRerun);
                 }}
               >
-                Phase {phaseRerunModal.phase} を実行
+                実行
               </button>
             </div>
           </div>
