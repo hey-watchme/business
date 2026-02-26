@@ -299,12 +299,6 @@ function App() {
     if (selectedMenu === 'subject-detail' && selectedSubject) {
       return (
         <div style={{ padding: '24px' }}>
-          {/* Header Section */}
-          <div style={{ marginBottom: '32px' }}>
-            <h1 className="page-title">支援管理</h1>
-            <p className="page-subtitle">支援対象の個別支援計画の作成と管理</p>
-          </div>
-
           {/* Child Info Card */}
           <div style={{
             display: 'flex',

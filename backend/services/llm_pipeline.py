@@ -16,6 +16,36 @@ from typing import Callable, Dict, Any, Optional
 from supabase import Client
 
 
+def format_llm_error_message(error: Exception) -> str:
+    """Convert provider-specific exceptions into user-facing classified error messages."""
+    message = str(error)
+    lower = message.lower()
+
+    is_quota_or_rate_limit = (
+        'resource_exhausted' in lower
+        or 'quota' in lower
+        or 'rate limit' in lower
+        or 'rate_limit' in lower
+        or '429' in lower
+        or 'insufficient_quota' in lower
+    )
+    if is_quota_or_rate_limit:
+        return f"LLM quota exceeded: {message}"
+
+    is_model_not_found = (
+        'not found' in lower
+        or 'invalid model' in lower
+        or 'model_not_found' in lower
+        or 'not supported in the v1/chat/completions endpoint' in lower
+        or 'unsupported model' in lower
+        or '404' in lower
+    )
+    if is_model_not_found:
+        return f"LLM model error: {message}"
+
+    return f"LLM generation failed: {message}"
+
+
 def execute_llm_phase(
     session_id: str,
     supabase: Client,
@@ -106,7 +136,7 @@ def execute_llm_phase(
             if not llm_output:
                 raise ValueError("LLM returned empty response")
         except Exception as e:
-            raise ValueError(f"LLM generation failed: {str(e)}")
+            raise ValueError(format_llm_error_message(e))
 
         # 5. Parse JSON response (flexible handling)
         try:

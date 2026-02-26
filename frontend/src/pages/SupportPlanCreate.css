@@ -895,7 +895,8 @@
 /* ===== Tab Content ===== */
 .tab-content-assessment,
 .tab-content-phase1,
-.tab-content-phase2 {
+.tab-content-phase2,
+.tab-content-phase3 {
   padding: 24px 0;
 }
 

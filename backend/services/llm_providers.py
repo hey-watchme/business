@@ -9,12 +9,39 @@ from abc import ABC, abstractmethod
 from typing import Optional
 import os
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from services.llm_models import (
+    DEFAULT_MODEL_BY_PROVIDER,
+    normalize_model,
+    normalize_provider,
+)
+
+def _resolve_default_provider() -> str:
+    configured = os.getenv("LLM_DEFAULT_PROVIDER", "openai")
+    try:
+        return normalize_provider(configured)
+    except ValueError:
+        print(f"Invalid LLM_DEFAULT_PROVIDER='{configured}', falling back to 'openai'")
+        return "openai"
+
+
+def _resolve_default_model(provider: str) -> str:
+    default_model = DEFAULT_MODEL_BY_PROVIDER[provider]
+    configured = os.getenv("LLM_DEFAULT_MODEL", default_model)
+    try:
+        return normalize_model(provider, configured)
+    except ValueError:
+        print(
+            f"Invalid LLM_DEFAULT_MODEL='{configured}' for provider='{provider}', "
+            f"falling back to '{default_model}'"
+        )
+        return default_model
+
 
 # ==========================================
 # Default LLM Provider Configuration
 # ==========================================
-CURRENT_PROVIDER = os.getenv("LLM_DEFAULT_PROVIDER", "openai")
-CURRENT_MODEL = os.getenv("LLM_DEFAULT_MODEL", "gpt-4o")
+CURRENT_PROVIDER = _resolve_default_provider()
+CURRENT_MODEL = _resolve_default_model(CURRENT_PROVIDER)
 # ==========================================
 
 
@@ -61,7 +88,8 @@ class OpenAIProvider(LLMProvider):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(Exception)
+        retry=retry_if_exception_type(Exception),
+        reraise=True
     )
     def generate(self, prompt: str) -> str:
         """Call OpenAI API with retry"""
@@ -89,7 +117,13 @@ class GeminiProvider(LLMProvider):
         Args:
             model: Gemini model name (e.g., "gemini-3-pro-preview", "gemini-2.0-flash-exp")
         """
-        from google import genai
+        try:
+            from google import genai
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "Gemini SDK not installed in current Python environment. "
+                "Install dependency with: pip install -r requirements.txt"
+            ) from exc
 
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
@@ -101,7 +135,8 @@ class GeminiProvider(LLMProvider):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(Exception)
+        retry=retry_if_exception_type(Exception),
+        reraise=True
     )
     def generate(self, prompt: str) -> str:
         """Call Gemini API with retry"""
@@ -136,12 +171,14 @@ class LLMFactory:
         Returns:
             LLMProvider instance
         """
-        provider = provider.lower()
+        normalized_provider = normalize_provider(provider)
+        requested_model = model or DEFAULT_MODEL_BY_PROVIDER[normalized_provider]
+        normalized_model = normalize_model(normalized_provider, requested_model)
 
-        if provider == "openai":
-            return OpenAIProvider(model or "gpt-4o")
-        elif provider == "gemini":
-            return GeminiProvider(model or "gemini-3-pro-preview")
+        if normalized_provider == "openai":
+            return OpenAIProvider(normalized_model)
+        elif normalized_provider == "gemini":
+            return GeminiProvider(normalized_model)
         else:
             raise ValueError(f"Unknown provider: {provider}. Supported: openai, gemini")
 

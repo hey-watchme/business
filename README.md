@@ -170,30 +170,28 @@ ASR_PROVIDER=deepgram
  
  ローカル環境での開発・動作確認が可能です。
  
- ### 1. バックエンド (Backend)
- 
- 1. ディレクトリ移動
-    ```bash
-    cd backend
-    ```
- 
- 2. 仮想環境の作成と有効化（推奨）
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
- 
- 3. 依存ライブラリのインストール
-    ```bash
-    pip install -r requirements.txt
-    ```
- 
- 4. サーバー起動
-    ```bash
-    python3 app.py
-    ```
-    - サーバーは `http://localhost:8052` で起動します。
-    - APIドキュメント: `http://localhost:8052/docs`
+### 1. バックエンド (Backend)
+
+1. ディレクトリ移動
+   ```bash
+   cd backend
+   ```
+
+2. 共通ランチャーで起動（推奨）
+   ```bash
+   bash run-local.sh
+   ```
+   - `venv` が無ければ自動作成
+   - 必要な依存が無ければ `venv` に自動インストール
+   - 常に `backend/venv` の Python で起動するため、環境差分を防げます
+   - サーバーは `http://localhost:8052` で起動します
+   - APIドキュメント: `http://localhost:8052/docs`
+
+3. 環境確認だけ行いたい場合
+   ```bash
+   bash run-local.sh --check
+   ```
+   - 使用Pythonパスと Gemini SDK import を確認できます
  
  ### 2. フロントエンド (Frontend)
  
@@ -227,6 +225,10 @@ ASR_PROVIDER=deepgram
  もし `https://api.hey-watch.me/business`（本番）を向いていると、ローカルで修正したDBフィルタリングや新機能が反映されず、本番の全データが表示されるなどのトラブルの原因になります。
  
  本番のデータを確認したい時以外は、必ず `localhost` を向けるようにしてください。
+
+⚠️ **重要: Python実行環境の統一**
+- ローカル実行時は `python3 app.py` ではなく `bash run-local.sh` を使用してください。
+- これにより「同じリポジトリで system Python と venv が混在して依存がずれる」問題を回避できます（例: `No module named 'google'`）。
 
 ---
 
