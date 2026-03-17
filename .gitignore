@@ -46,3 +46,6 @@ docs/screenshot/
 backend/check_db_permissions.py
 backend/debug_user.py
 backend/fix_user.py
+
+# Sales materials
+sales/

@@ -44,10 +44,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await api.getMe(userId);
       console.log('🔓 fetchProfile: Backend returned profile:', data);
       return data as UserProfile;
-    } catch (err: any) {
-      console.error('🔓 fetchProfile: Backend error:', err.message);
-      // We don't block the whole app if profile fails, but we log the error
-      return null;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error('🔓 fetchProfile: Backend error:', message);
+
+      // No profile means "not registered as business user yet" (handled as access denied UI)
+      if (message.includes('404')) {
+        return null;
+      }
+
+      // Other errors are treated as connectivity/backend failures
+      throw err;
     }
   };
 
@@ -73,8 +80,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (initialSession?.user) {
             console.log('🔓 initAuth: Found user, fetching profile from backend...');
-            const p = await fetchProfile(initialSession.user.id);
-            if (isMounted) setProfile(p);
+            try {
+              const p = await fetchProfile(initialSession.user.id);
+              if (isMounted) {
+                setProfile(p);
+                setError(null);
+              }
+            } catch (profileError: unknown) {
+              const message = profileError instanceof Error ? profileError.message : 'Unknown error';
+              if (isMounted) {
+                setProfile(null);
+                setError(`プロフィール取得失敗: ${message}`);
+              }
+            }
           }
         }
       } catch (err: any) {
@@ -95,10 +113,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentSession?.user ?? null);
 
         if (currentSession?.user) {
-          const p = await fetchProfile(currentSession.user.id);
-          if (isMounted) setProfile(p);
+          try {
+            const p = await fetchProfile(currentSession.user.id);
+            if (isMounted) {
+              setProfile(p);
+              setError(null);
+            }
+          } catch (profileError: unknown) {
+            const message = profileError instanceof Error ? profileError.message : 'Unknown error';
+            if (isMounted) {
+              setProfile(null);
+              setError(`プロフィール取得失敗: ${message}`);
+            }
+          }
         } else {
           setProfile(null);
+          setError(null);
         }
         setLoading(false);
       }

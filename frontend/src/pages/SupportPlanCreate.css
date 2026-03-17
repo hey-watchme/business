@@ -314,8 +314,24 @@
 .plan-summary-create {
   justify-content: center;
   align-items: center;
-  border-style: dashed;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border: none;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(124, 77, 255, 0.32);
   min-height: 112px;
+}
+
+.plan-summary-create:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(124, 77, 255, 0.4);
+}
+
+.plan-summary-create .plan-summary-title {
+  color: #fff;
+}
+
+.plan-summary-create .plan-summary-meta {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .plan-summary-create-icon {
@@ -325,8 +341,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
   font-weight: 700;
 }
 
@@ -350,6 +367,88 @@
   justify-content: space-between;
   align-items: flex-start;
   background: linear-gradient(to bottom, var(--bg-tertiary), transparent);
+}
+
+.session-actions {
+  position: relative;
+}
+
+.session-actions[open] .session-actions-menu {
+  display: flex;
+}
+
+.session-actions-trigger {
+  list-style: none;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.session-actions-trigger:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.session-actions-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.session-actions-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  min-width: 220px;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+}
+
+.session-actions-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.session-actions-item:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+.session-actions-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.session-actions-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .plan-title-area {
@@ -920,6 +1019,31 @@
   line-height: 1.5;
 }
 
+.assessment-section-list {
+  display: grid;
+  gap: 16px;
+}
+
+.assessment-section-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.assessment-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.assessment-section-footer {
+  margin-top: 12px;
+  border-radius: 0 0 6px 6px;
+}
+
 /* ===== Creation Modal Styles ===== */
 .creation-modal-overlay {
   position: fixed;
@@ -1131,7 +1255,7 @@
 }
 
 /* Prompt Action Buttons */
-.prompt-viewer .prompt-actions {
+.prompt-actions {
   display: flex;
   gap: 8px;
   padding: 10px 16px;
@@ -1178,6 +1302,48 @@
 }
 
 .prompt-rerun-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prompt-success-btn {
+  padding: 6px 14px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.prompt-success-btn:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.prompt-success-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prompt-primary-btn {
+  padding: 6px 14px;
+  border: 1px solid rgba(124, 77, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(124, 77, 255, 0.12);
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.prompt-primary-btn:hover:not(:disabled) {
+  background: rgba(124, 77, 255, 0.2);
+}
+
+.prompt-primary-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-console.error('Supabase check:', !!supabaseUrl, !!supabaseAnonKey);
-console.error('Supabase URL:', supabaseUrl || '(empty)');
-console.error('Supabase Key:', supabaseAnonKey ? supabaseAnonKey.substring(0, 10) + '...' : '(empty)');
+if (import.meta.env.DEV && (!supabaseUrl || !supabaseAnonKey)) {
+  console.warn('Supabase environment variables are missing. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

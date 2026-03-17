@@ -6,13 +6,19 @@ import Phase2Display from '../components/Phase2Display';
 import Phase3Display from '../components/Phase3Display';
 import EditableField from '../components/EditableField';
 import EditableTableRow, { type SupportItem } from '../components/EditableTableRow';
-import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate, type LlmModelCatalog } from '../api/client';
+import { api, type InterviewSession, type SupportPlan, type SupportPlanUpdate, type LlmModelCatalog, type Subject, type User } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateAge } from '../utils/date';
 import './SupportPlanCreate.css';
 
 type RecordingMode = 'none' | 'setup' | 'recording';
 type PlanTab = 'home' | 'assessment' | 'phase1' | 'phase2' | 'phase3';
+type RecordingAttendees = {
+  parent_father: boolean;
+  parent_mother: boolean;
+  subject: boolean;
+  other: boolean;
+};
 
 interface SupportPlanCreateProps {
   initialSubjectId?: string;
@@ -22,8 +28,8 @@ interface SupportPlanCreateProps {
 const FALLBACK_MODEL_CATALOG: LlmModelCatalog = {
   providers: {
     openai: {
-      default_model: 'gpt-4o',
-      models: ['gpt-4o', 'gpt-4o-mini', 'gpt-5.2-2025-12-11'],
+      default_model: 'gpt-5.4-2026-03-05',
+      models: ['gpt-4o', 'gpt-4o-mini', 'gpt-5.2-2025-12-11', 'gpt-5.4', 'gpt-5.4-2026-03-05'],
       aliases: {},
     },
     gemini: {
@@ -35,9 +41,11 @@ const FALLBACK_MODEL_CATALOG: LlmModelCatalog = {
 };
 
 const MODEL_LABELS: Record<string, string> = {
-  'gpt-4o': 'GPT-4o (default)',
+  'gpt-4o': 'GPT-4o',
   'gpt-4o-mini': 'GPT-4o Mini (low cost)',
-  'gpt-5.2-2025-12-11': 'GPT-5.2 (latest)',
+  'gpt-5.2-2025-12-11': 'GPT-5.2 (2025-12-11)',
+  'gpt-5.4': 'GPT-5.4',
+  'gpt-5.4-2026-03-05': 'GPT-5.4 (2026-03-05)',
   'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
   'gemini-3-pro-preview': 'Gemini 3 Pro Preview',
   'gemini-3-flash-preview': 'Gemini 3 Flash Preview',
@@ -49,6 +57,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const { profile } = useAuth();
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('none');
   const [selectedChild, setSelectedChild] = useState('田中太郎'); // Will be updated by Subject data in real usage
+  const [recordingAttendees, setRecordingAttendees] = useState<RecordingAttendees | null>(null);
   const [supportPlans, setSupportPlans] = useState<SupportPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<SupportPlan | null>(null);
   const [focusedPlanId, setFocusedPlanId] = useState<string | null>(null);
@@ -60,6 +69,15 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [pendingPlanTitle, setPendingPlanTitle] = useState<string | null>(null);
   const [pendingSubjectName, setPendingSubjectName] = useState<string | null>(null);
   const [pendingSubjectAvatar, setPendingSubjectAvatar] = useState<string | null>(null);
+  const [recordingSubjectDetail, setRecordingSubjectDetail] = useState<Subject | null>(null);
+  const [usersById, setUsersById] = useState<Record<string, User>>({});
+  const [sessionAudioSrc, setSessionAudioSrc] = useState<Record<string, string>>({});
+  const [sessionAudioLoading, setSessionAudioLoading] = useState<Record<string, boolean>>({});
+  const [sessionAudioDownloading, setSessionAudioDownloading] = useState<Record<string, boolean>>({});
+  const [sessionAudioError, setSessionAudioError] = useState<Record<string, { kind: 'not_found' | 'error'; message: string }>>({});
+  const sessionAudioSrcRef = useRef<Record<string, string>>({});
+  const [recordingCompletionToastMessage, setRecordingCompletionToastMessage] = useState<string | null>(null);
+  const [manualProcessingToast, setManualProcessingToast] = useState<{ message: string; kind: 'loading' | 'success' | 'error' } | null>(null);
   // Tab state per plan (key: planId, value: active tab)
   const [activeTabByPlan, setActiveTabByPlan] = useState<Record<string, PlanTab>>({});
 
@@ -90,9 +108,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [modelModalPlanId, setModelModalPlanId] = useState<string | null>(null);
   const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null);
   const [llmModelCatalog, setLlmModelCatalog] = useState<LlmModelCatalog>(FALLBACK_MODEL_CATALOG);
-  const [selectedModelForBatch, setSelectedModelForBatch] = useState({ provider: 'openai', model: 'gpt-4o' });
+  const [selectedModelForBatch, setSelectedModelForBatch] = useState({ provider: 'openai', model: 'gpt-5.4-2026-03-05' });
   const [phaseRerunModal, setPhaseRerunModal] = useState<{ sessionId: string; planId: string; phase: 1 | 2 | 3; modelUsed?: string } | null>(null);
-  const [selectedModelForPhaseRerun, setSelectedModelForPhaseRerun] = useState({ provider: 'openai', model: 'gpt-4o' });
+  const [selectedModelForPhaseRerun, setSelectedModelForPhaseRerun] = useState({ provider: 'openai', model: 'gpt-5.4-2026-03-05' });
 
   // Clipboard copy state (key: unique id, value: true = just copied)
   const [copiedKey, setCopiedKey] = useState<Record<string, boolean>>({});
@@ -129,6 +147,45 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         <><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>コピー済</>
       ) : (
         <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>コピー</>
+      )}
+    </button>
+  );
+
+  const closeActionMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const details = event.currentTarget.closest('details') as HTMLDetailsElement | null;
+    if (details) {
+      details.removeAttribute('open');
+    }
+  };
+
+  const IconCopyButton: React.FC<{ text: string; copyKey: string }> = ({ text, copyKey }) => (
+    <button
+      onClick={() => handleCopyToClipboard(text, copyKey)}
+      title="クリップボードにコピー"
+      aria-label="クリップボードにコピー"
+      style={{
+        width: '32px',
+        height: '32px',
+        borderRadius: '8px',
+        border: '1px solid var(--border-color)',
+        background: copiedKey[copyKey] ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-secondary)',
+        color: copiedKey[copyKey] ? '#10b981' : 'var(--text-secondary)',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'all 0.2s ease',
+      }}
+    >
+      {copiedKey[copyKey] ? (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8.5L6.5 12L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
       )}
     </button>
   );
@@ -175,6 +232,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   // Polling: auto-refresh when any session is in a processing state
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const manualToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutoProcessingSessionIdRef = useRef<string | null>(null);
 
   // Check if session is still being processed (not yet in a terminal state)
   const isSessionProcessing = (status: string) => {
@@ -186,8 +246,15 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     const hasInProgressSession = supportPlans.some(plan =>
       plan.sessions?.some(s => s.status && isSessionProcessing(s.status))
     );
+    const processingPlan = supportPlans.find(plan =>
+      plan.sessions?.some(s => s.status && isSessionProcessing(s.status))
+    );
+    const processingSessionId = processingPlan?.sessions?.find(s => s.status && isSessionProcessing(s.status))?.id || null;
 
     if (hasInProgressSession) {
+      if (processingSessionId) {
+        lastAutoProcessingSessionIdRef.current = processingSessionId;
+      }
       // Start polling every 5 seconds
       if (!pollingRef.current) {
         pollingRef.current = setInterval(async () => {
@@ -203,6 +270,19 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
+      }
+      if (lastAutoProcessingSessionIdRef.current) {
+        const sessionId = lastAutoProcessingSessionIdRef.current;
+        const finishedSession = supportPlans.flatMap(p => p.sessions || []).find(s => s.id === sessionId) || null;
+        if (finishedSession) {
+          const status = String(finishedSession.status || '');
+          if (status === 'completed') {
+            showManualToast({ kind: 'success', message: '処理完了' }, 2500);
+          } else if (status === 'error' || status === 'failed') {
+            showManualToast({ kind: 'error', message: '処理に失敗しました' }, 4000);
+          }
+        }
+        lastAutoProcessingSessionIdRef.current = null;
       }
     }
 
@@ -265,6 +345,48 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       setFocusedPlanId(supportPlans[0].id);
     }
   }, [supportPlans, focusedPlanId]);
+
+  useEffect(() => {
+    if (!focusedPlanId) return;
+    if (getActiveTab(focusedPlanId) !== 'assessment') return;
+    const plan = supportPlans.find(p => p.id === focusedPlanId);
+    const sessionId = plan?.sessions?.[0]?.id;
+    if (!sessionId) return;
+    if (!plan?.sessions?.[0]?.s3_audio_path) return; // No audio stored for this session
+    if (sessionAudioSrc[sessionId] || sessionAudioLoading[sessionId]) return;
+    if (sessionAudioError[sessionId]) return; // Avoid looping on missing audio/errors
+    void fetchSessionAudioBlob(sessionId);
+  }, [focusedPlanId, supportPlans, activeTabByPlan, sessionAudioSrc, sessionAudioLoading, sessionAudioError]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(sessionAudioSrcRef.current).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  useEffect(() => {
+    const facilityId = profile?.facility_id || null;
+    if (!facilityId) {
+      setUsersById({});
+      return;
+    }
+    let isMounted = true;
+    api.getUsers(facilityId)
+      .then((res) => {
+        if (!isMounted) return;
+        const map: Record<string, User> = {};
+        res.users.forEach((u) => {
+          if (u.id) map[u.id] = u;
+        });
+        setUsersById(map);
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch users list:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [profile?.facility_id]);
 
   // ===== 2-column structure helpers and handlers =====
 
@@ -363,25 +485,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
   }, [supportPlans, selectedPlan?.id]);
 
-  // Sync from assessment API handler
-  const handleSyncFromAssessment = useCallback(async (planId: string) => {
-    try {
-      const result = await api.syncFromAssessment(planId);
-      if (result.success) {
-        // Refresh plan data
-        const updated = await api.getSupportPlan(planId);
-        setSupportPlans(prev => prev.map(p => p.id === updated.id ? updated : p));
-        if (selectedPlan?.id === updated.id) {
-          setSelectedPlan(updated);
-        }
-        alert(`${result.synced_fields.length}件のフィールドを同期しました`);
-      }
-    } catch (err) {
-      console.error('Sync from assessment failed:', err);
-      alert('AI分析結果の同期に失敗しました');
-    }
-  }, [selectedPlan?.id]);
-
   // ===== Transcription editing handlers =====
   const handleTranscriptionChange = (sessionId: string, value: string) => {
     setEditingTranscription(prev => ({ ...prev, [sessionId]: value }));
@@ -474,6 +577,20 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     throw new Error(`Timeout waiting for ${field}`);
   };
 
+  const showManualToast = (toast: { message: string; kind: 'loading' | 'success' | 'error' }, ttlMs?: number | null) => {
+    setManualProcessingToast(toast);
+    if (manualToastTimerRef.current) {
+      clearTimeout(manualToastTimerRef.current);
+      manualToastTimerRef.current = null;
+    }
+    if (ttlMs && ttlMs > 0) {
+      manualToastTimerRef.current = setTimeout(() => {
+        setManualProcessingToast(null);
+        manualToastTimerRef.current = null;
+      }, ttlMs);
+    }
+  };
+
   const handleBatchAnalyze = async (sessionId: string, planId: string, modelConfig: { provider: string; model: string }) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
     setPhaseResult(prev => ({ ...prev, [sessionId]: null }));
@@ -487,7 +604,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const previousPhase1Value = (currentSession as unknown as Record<string, unknown>).fact_extraction_result_v1;
 
       // Phase 1: Fact Extraction
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 1 実行中... (${modelLabel})` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実抽出中' }));
+      showManualToast({ kind: 'loading', message: '事実抽出中' }, null);
       await api.triggerPhase1(sessionId, false, modelConfig.provider, modelConfig.model, undefined, false);
       await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousPhase1Value);
 
@@ -497,7 +615,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const previousPhase2Value = (afterPhase1 as unknown as Record<string, unknown>).fact_structuring_result_v1;
 
       // Phase 2: Fact Structuring
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 2 実行中... (${modelLabel})` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実整理中' }));
+      showManualToast({ kind: 'loading', message: '事実整理中' }, null);
       await api.triggerPhase2(sessionId, false, modelConfig.provider, modelConfig.model);
       await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousPhase2Value);
 
@@ -507,7 +626,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const previousPhase3Value = (afterPhase2 as unknown as Record<string, unknown>).assessment_result_v1;
 
       // Phase 3: Assessment
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 3 実行中... (${modelLabel})` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '個別支援計画生成中' }));
+      showManualToast({ kind: 'loading', message: '個別支援計画生成中' }, null);
       await api.triggerPhase3(sessionId, false, modelConfig.provider, modelConfig.model);
       await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousPhase3Value);
 
@@ -515,6 +635,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'success', message: `全Phase完了 (${modelLabel}, ${elapsed}秒)` } }));
+      showManualToast({ kind: 'success', message: '分析完了' }, 2500);
       await fetchPlanDetails(planId);
     } catch (err) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -523,6 +644,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const errorMsg = normalizeErrorMessage(errorMsgRaw);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `エラー: ${errorMsg} (${elapsed}秒)` } }));
+      showManualToast({ kind: 'error', message: `エラー: ${errorMsg}` }, 4000);
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
       setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
@@ -565,9 +687,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     setPhaseResult(prev => ({ ...prev, [sessionId]: null }));
     const startTime = Date.now();
     const modelLabel = `${modelConfig.provider}/${modelConfig.model}`;
+    const phaseLabel = phase === 1 ? '事実抽出' : phase === 2 ? '事実整理' : '個別支援計画生成';
 
     try {
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase ${phase} 実行中... (${modelLabel})` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `${phaseLabel}中` }));
+      showManualToast({ kind: 'loading', message: `${phaseLabel}中` }, null);
 
       // Ensure currently edited prompt is persisted before running with use_custom_prompt=true
       const phaseKey = `phase${phase}`;
@@ -611,6 +735,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'success', message: `Phase ${phase} 完了 (${modelLabel}, ${elapsed}秒)` } }));
+      showManualToast({ kind: 'success', message: `${phaseLabel}完了` }, 2500);
       await fetchPlanDetails(planId);
     } catch (err) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -619,6 +744,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const errorMsg = normalizeErrorMessage(errorMsgRaw);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `Phase ${phase} エラー: ${errorMsg} (${elapsed}秒)` } }));
+      showManualToast({ kind: 'error', message: `エラー: ${errorMsg}` }, 4000);
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
       setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
@@ -661,7 +787,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   const handleGeneratePhase2Prompt = async (sessionId: string, planId: string) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
-    setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2プロンプト生成中...' }));
+    setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実整理プロンプト生成中...' }));
 
     try {
       const result = await api.generatePhase2Prompt(sessionId);
@@ -692,7 +818,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   const handleGeneratePhase3Prompt = async (sessionId: string, planId: string) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
-    setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3プロンプト生成中...' }));
+    setReanalysisPhase(prev => ({ ...prev, [sessionId]: '個別支援計画プロンプト生成中...' }));
 
     try {
       const result = await api.generatePhase3Prompt(sessionId);
@@ -828,6 +954,109 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const formatDuration = (seconds?: number | null) => {
+    if (seconds == null || Number.isNaN(seconds)) return '---';
+    const total = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${minutes}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const getAttendeeLabel = (session?: InterviewSession | null) => {
+    const attendees = session?.attendees;
+    if (!attendees || typeof attendees !== 'object') return '未登録';
+    const labels: string[] = [];
+    if (attendees.parent_father) labels.push('保護者(父)');
+    if (attendees.parent_mother) labels.push('保護者(母)');
+    if (attendees.subject) labels.push('支援対象者');
+    if (attendees.other) labels.push('その他');
+    return labels.length > 0 ? labels.join('、') : '未登録';
+  };
+
+  const getSpeakerCount = (session?: InterviewSession | null) => {
+    const metadata = getTranscriptionMetadata(session);
+    const count = metadata?.speaker_count;
+    return typeof count === 'number' ? `${count}名` : '---';
+  };
+
+  const fetchSessionAudioBlob = async (sessionId: string) => {
+    if (!sessionId) return;
+    // Clear previous error to allow manual retries.
+    setSessionAudioError(prev => {
+      if (!prev[sessionId]) return prev;
+      const next = { ...prev };
+      delete next[sessionId];
+      return next;
+    });
+    setSessionAudioLoading(prev => ({ ...prev, [sessionId]: true }));
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8052';
+      const apiToken = import.meta.env.VITE_API_TOKEN || 'watchme-b2b-poc-2025';
+      const response = await fetch(`${apiBaseUrl}/api/sessions/${sessionId}/audio`, {
+        headers: { 'X-API-Token': apiToken }
+      });
+      if (!response.ok) {
+        if (response.status === 404) {
+          setSessionAudioError(prev => ({ ...prev, [sessionId]: { kind: 'not_found', message: '録音データがありません。' } }));
+          return;
+        }
+        throw new Error(`Failed to fetch audio (status=${response.status})`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      setSessionAudioSrc(prev => {
+        if (prev[sessionId]) {
+          URL.revokeObjectURL(prev[sessionId]);
+        }
+        const next = { ...prev, [sessionId]: objectUrl };
+        sessionAudioSrcRef.current = next;
+        return next;
+      });
+    } catch (err) {
+      console.warn('Failed to fetch audio blob:', err);
+      setSessionAudioError(prev => ({ ...prev, [sessionId]: { kind: 'error', message: '録音データを取得できませんでした。' } }));
+    } finally {
+      setSessionAudioLoading(prev => ({ ...prev, [sessionId]: false }));
+    }
+  };
+
+  const downloadSessionAudio = async (sessionId: string) => {
+    if (!sessionId) return;
+    setSessionAudioDownloading(prev => ({ ...prev, [sessionId]: true }));
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8052';
+      const apiToken = import.meta.env.VITE_API_TOKEN || 'watchme-b2b-poc-2025';
+      const response = await fetch(`${apiBaseUrl}/api/sessions/${sessionId}/audio?download=1`, {
+        headers: { 'X-API-Token': apiToken }
+      });
+      if (!response.ok) {
+        if (response.status === 404) {
+          setSessionAudioError(prev => ({ ...prev, [sessionId]: { kind: 'not_found', message: '録音データがありません。' } }));
+          return;
+        }
+        throw new Error(`Failed to download audio (status=${response.status})`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `session-${sessionId}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      console.warn('Failed to download audio blob:', err);
+      setSessionAudioError(prev => ({ ...prev, [sessionId]: { kind: 'error', message: '録音データをダウンロードできませんでした。' } }));
+    } finally {
+      setSessionAudioDownloading(prev => ({ ...prev, [sessionId]: false }));
+    }
   };
 
   const formatDateOnly = (dateString: string | null | undefined) => {
@@ -1057,17 +1286,52 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     return null;
   };
 
-  const handleRecordingStart = (childName: string) => {
+  const showRecordingCompletionToast = (message: string) => {
+    setRecordingCompletionToastMessage(message);
+    if (recordingToastTimerRef.current) {
+      clearTimeout(recordingToastTimerRef.current);
+    }
+    recordingToastTimerRef.current = setTimeout(() => {
+      setRecordingCompletionToastMessage(null);
+      recordingToastTimerRef.current = null;
+    }, 8000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recordingToastTimerRef.current) {
+        clearTimeout(recordingToastTimerRef.current);
+        recordingToastTimerRef.current = null;
+      }
+      if (manualToastTimerRef.current) {
+        clearTimeout(manualToastTimerRef.current);
+        manualToastTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleRecordingStart = (childName: string, attendees: RecordingAttendees) => {
     setSelectedChild(childName);
+    setRecordingAttendees(attendees);
     setRecordingMode('recording');
   };
 
-  const handleRecordingStop = async (sessionId?: string) => {
+  const handleRecordingClose = () => {
     setRecordingMode('none');
+    setRecordingAttendees(null);
+    setRecordingSubjectDetail(null);
+    showRecordingCompletionToast('面談が終了しました。文字起こしが完了するまで少々お待ちください。');
+  };
 
+  const handleRecordingUploadComplete = async (sessionId?: string) => {
     try {
+      if (!sessionId) {
+        showRecordingCompletionToast('面談は終了しましたが、録音データの保存に失敗しました。再度お試しください。');
+        return;
+      }
+
       // If we were in the "new plan via assessment" flow, create the plan now
-      if (pendingPlanTitle && sessionId) {
+      if (pendingPlanTitle) {
         setCreating(true);
         const newPlan = await api.createSupportPlan({
           subject_id: initialSubjectId || '',
@@ -1104,6 +1368,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const handleRecordingCancel = () => {
     setRecordingMode('none');
     setPendingPlanTitle(null); // Clear any pending plan title
+    setRecordingAttendees(null);
+    setRecordingSubjectDetail(null);
   };
 
   const handleCreatePlan = () => {
@@ -1158,8 +1424,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         setSelectedChild(subjectData.subject.name);
         setPendingSubjectName(subjectData.subject.name);
         setPendingSubjectAvatar(subjectData.subject.avatar_url || null);
+        setRecordingSubjectDetail(subjectData.subject);
       } catch (e) {
         console.warn('Failed to fetch subject info for recording:', e);
+        setRecordingSubjectDetail(null);
       }
     }
 
@@ -1249,7 +1517,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         childAvatar={pendingSubjectAvatar || undefined}
         subjectId={selectedPlan?.subject_id || initialSubjectId || ''}
         supportPlanId={selectedPlan?.id}
-        onStop={handleRecordingStop}
+        attendees={recordingAttendees}
+        subjectDetail={recordingSubjectDetail}
+        onClose={handleRecordingClose}
+        onUploadComplete={handleRecordingUploadComplete}
       />
     );
   }
@@ -1295,33 +1566,56 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           </div>
         )}
 
-        {getGlobalProcessingToastMessage() && (
-          <div
-            style={{
-              position: 'fixed',
-              left: '20px',
-              bottom: '20px',
-              zIndex: 1000,
-              background: 'rgba(17, 24, 39, 0.92)',
-              color: '#fff',
-              padding: '10px 14px',
-              borderRadius: '10px',
-              fontSize: '12px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              maxWidth: '320px'
-            }}
-          >
-            <svg width="14" height="14" className="spinning" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
-              <path d="M8 2C4.69 2 2 4.69 2 8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <span>{getGlobalProcessingToastMessage()}</span>
-            {isPollingRefresh && <span style={{ opacity: 0.65 }}>更新中...</span>}
-          </div>
-        )}
+        {(() => {
+          const globalMessage = getGlobalProcessingToastMessage();
+          const message = manualProcessingToast?.message || recordingCompletionToastMessage || globalMessage;
+          if (!message) return null;
+          const kind = manualProcessingToast?.kind || (recordingCompletionToastMessage ? 'success' : 'loading');
+          const showRefresh = !manualProcessingToast && !recordingCompletionToastMessage;
+
+          return (
+            <div
+              style={{
+                position: 'fixed',
+                left: '24px',
+                bottom: '24px',
+                zIndex: 1000,
+                background: '#ffffff',
+                color: '#111827',
+                border: '1px solid #E5E7EB',
+                padding: '14px 16px',
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontWeight: 500,
+                boxShadow: '0 10px 28px rgba(15, 23, 42, 0.16)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                maxWidth: '420px'
+              }}
+            >
+              {kind === 'success' ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6.25" stroke="#10B981" strokeWidth="1.5" />
+                  <path d="M5 8L7 10L11 6" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : kind === 'error' ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1.5L15 14.5H1L8 1.5Z" stroke="#EF4444" strokeWidth="1.5" />
+                  <path d="M8 6V9.5" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="8" cy="12" r="0.75" fill="#EF4444" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" className="spinning" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6" stroke="#D1D5DB" strokeWidth="1.5" />
+                  <path d="M8 2C4.69 2 2 4.69 2 8" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              )}
+              <span>{message}</span>
+              {showRefresh && isPollingRefresh && <span style={{ color: '#6B7280' }}>更新中...</span>}
+            </div>
+          );
+        })()}
 
         {supportPlans.length > 0 && (
           <div className="plan-selector-grid">
@@ -1363,7 +1657,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             >
               <div className="plan-summary-create-icon">+</div>
               <div className="plan-summary-title">{creating ? '作成中...' : '新しい個別支援計画'}</div>
-              <div className="plan-summary-meta">カードを作成して下に詳細表示</div>
+              <div className="plan-summary-meta">面談の記録と計画書の自動起票</div>
             </button>
           </div>
         )}
@@ -1403,47 +1697,72 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   </span>
                 </div>
               </div>
-              <div className="session-actions">
-                <button
-                  className="action-button"
-                  title="AI分析結果を反映"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSyncFromAssessment(plan.id);
-                  }}
-                  style={{ background: 'rgba(124, 77, 255, 0.1)', color: '#7c4dff', borderColor: 'rgba(124, 77, 255, 0.2)' }}
+              <details className="session-actions">
+                <summary
+                  className="session-actions-trigger"
+                  aria-label="プラン操作メニュー"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
+                    <circle cx="5" cy="12" r="1.5" />
+                    <circle cx="12" cy="12" r="1.5" />
+                    <circle cx="19" cy="12" r="1.5" />
                   </svg>
-                </button>
-                <button
-                  className="action-button"
-                  title="Excelダウンロード"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDownloadExcel(plan);
-                  }}
-                  style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#16a34a', borderColor: 'rgba(34, 197, 94, 0.2)' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-                    <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-                <button
-                  className="action-button"
-                  title="削除"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeletePlan(plan);
-                  }}
-                  style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              </div>
+                </summary>
+                <div className="session-actions-menu" role="menu">
+                  <button
+                    className="session-actions-item"
+                    role="menuitem"
+                    disabled={!plan.sessions?.[0]?.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!plan.sessions?.[0]?.id) return;
+                      closeActionMenu(e);
+                      setModelModalPlanId(plan.id);
+                      setModelModalSessionId(plan.sessions[0].id);
+                      setShowModelModal(true);
+                    }}
+                  >
+                    <span className="session-actions-icon" style={{ color: 'var(--accent-primary)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 0 0-14.9-3M4 16a8 8 0 0 0 14.9 3" />
+                      </svg>
+                    </span>
+                    このセッションの分析をやり直す
+                  </button>
+                  <button
+                    className="session-actions-item"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeActionMenu(e);
+                      handleDownloadExcel(plan);
+                    }}
+                  >
+                    <span className="session-actions-icon" style={{ color: '#16a34a' }}>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    Excelダウンロード
+                  </button>
+                  <button
+                    className="session-actions-item"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeActionMenu(e);
+                      handleDeletePlan(plan);
+                    }}
+                  >
+                    <span className="session-actions-icon" style={{ color: '#EF4444' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    削除
+                  </button>
+                </div>
+              </details>
             </div>
 
             {/* Tab Navigation */}
@@ -1455,7 +1774,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                <span className="plan-tab-label">0: アセスメント</span>
+                <span className="plan-tab-label">0: 発話内容</span>
                 <span className={`tab-status-badge ${getTabStatusMeta(plan, 'assessment').className}`}>
                   {getTabStatusMeta(plan, 'assessment').label}
                 </span>
@@ -1918,10 +2237,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
             {/* Assessment Tab Content */}
             {getActiveTab(plan.id) === 'assessment' && (
-              <div className="tab-content-assessment" style={{ display: 'grid', gap: '16px' }}>
+              <div className="tab-content-assessment">
                 <div className="phase-section">
                   <p className="phase-description">
-                    保護者との面談の内容を表示します。
+                    発話内容を表示します。
                   </p>
 
                   {plan.sessions?.[0] && getTranscriptionModelLabel(plan.sessions[0]) && (
@@ -1933,39 +2252,198 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
                   {plan.sessions && plan.sessions.length > 0 ? (
                     <>
-                    {/* Session Info Section */}
-                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
-                      <h5 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ width: '4px', height: '16px', background: 'var(--accent-primary)', borderRadius: '2px' }}></span>
-                        セッション情報
-                      </h5>
-                      <div style={{ display: 'grid', gap: '8px', fontSize: '13px' }}>
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>セッションID:</span>
-                          <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '12px' }}>{plan.sessions[0].id}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>実施日時:</span>
-                          <span style={{ color: 'var(--text-primary)' }}>{formatDate(plan.sessions[0].recorded_at)}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                          <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>ステータス:</span>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
-                            {getStatusIcon(plan.sessions[0].status)}
-                            {getStatusLabel(plan.sessions[0].status)}
-                          </span>
+                    <div className="assessment-section-list">
+                      {/* Session Info Section */}
+                      <div className="assessment-section-card">
+                        <h5 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ width: '4px', height: '16px', background: 'var(--accent-primary)', borderRadius: '2px' }}></span>
+                          セッション情報
+                        </h5>
+                        <div style={{ display: 'grid', gap: '8px', fontSize: '13px' }}>
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>セッションID:</span>
+                            <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '12px' }}>{plan.sessions[0].id}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>実施日時:</span>
+                            <span style={{ color: 'var(--text-primary)' }}>{formatDate(plan.sessions[0].recorded_at)}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>参加者:</span>
+                            <span style={{ color: 'var(--text-primary)' }}>{getAttendeeLabel(plan.sessions[0])}</span>
+                          </div>
+                          {plan.sessions[0].session_type && (
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                              <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>セッション種別:</span>
+                              <span style={{ color: 'var(--text-primary)' }}>{plan.sessions[0].session_type}</span>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>録音時間:</span>
+                            <span style={{ color: 'var(--text-primary)' }}>{formatDuration(plan.sessions[0].duration_seconds)}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>話者数:</span>
+                            <span style={{ color: 'var(--text-primary)' }}>{getSpeakerCount(plan.sessions[0])}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>ステータス:</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
+                              {getStatusIcon(plan.sessions[0].status)}
+                              {getStatusLabel(plan.sessions[0].status)}
+                            </span>
+                          </div>
+                          {plan.sessions[0].staff_id && (() => {
+                            const staff = usersById[plan.sessions[0].staff_id];
+                            const staffName = staff?.display_name || (profile?.user_id === plan.sessions[0].staff_id ? profile?.name : null);
+                            const label = staffName ? `${staffName} (${plan.sessions[0].staff_id})` : plan.sessions[0].staff_id;
+                            return (
+                              <div style={{ display: 'flex', gap: '12px' }}>
+                                <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>担当スタッフ:</span>
+                                <span style={{ color: 'var(--text-primary)', fontFamily: staffName ? 'inherit' : 'monospace', fontSize: staffName ? '13px' : '12px' }}>{label}</span>
+                              </div>
+                            );
+                          })()}
+                          {plan.sessions[0].s3_audio_path && (
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                              <span style={{ fontWeight: '600', color: 'var(--text-secondary)', minWidth: '100px' }}>音声ファイル:</span>
+                              <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '12px', wordBreak: 'break-all' }}>
+                                {plan.sessions[0].s3_audio_path}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
+
+                      {/* Audio Playback Section */}
+                      <div className="assessment-section-card">
+                        <h5 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ width: '4px', height: '16px', background: 'var(--accent-success)', borderRadius: '2px' }}></span>
+                          録音ファイル
+                        </h5>
+                      {(() => {
+                        const sessionId = plan.sessions![0].id;
+                        const hasAudioPath = !!plan.sessions?.[0]?.s3_audio_path;
+                        const audioError = sessionAudioError[sessionId];
+
+                        if (sessionAudioSrc[sessionId]) {
+                          return <audio controls src={sessionAudioSrc[sessionId]} style={{ width: '100%' }} />;
+                        }
+
+                        if (!hasAudioPath) {
+                          return (
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              録音データはありません。
+                            </div>
+                          );
+                        }
+
+                        if (audioError) {
+                          const color = audioError.kind === 'error' ? 'var(--accent-danger, #ef4444)' : 'var(--text-secondary)';
+                          return (
+                            <div style={{ fontSize: '12px', color }}>
+                              {audioError.message}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            録音データを読み込むと、ここで音声を再生できます。
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        const session = plan.sessions?.[0];
+                        if (!session?.s3_audio_path) return null;
+                        return (
+                          <div className="prompt-actions assessment-section-footer">
+                            <button
+                              className="prompt-success-btn"
+                              onClick={() => fetchSessionAudioBlob(session.id)}
+                              disabled={sessionAudioLoading[session.id]}
+                            >
+                              {sessionAudioLoading[session.id] ? '読み込み中...' : '再読み込み'}
+                            </button>
+                            <button
+                              className="prompt-rerun-btn"
+                              onClick={() => downloadSessionAudio(session.id)}
+                              disabled={sessionAudioDownloading[session.id] || sessionAudioError[session.id]?.kind === 'not_found'}
+                            >
+                              {sessionAudioDownloading[session.id] ? '取得中...' : 'ダウンロード'}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
 
-                    {/* Transcription Section */}
-                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <h5 style={{ fontSize: '14px', fontWeight: '600', margin: '0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ width: '4px', height: '16px', background: 'var(--accent-info, #2196f3)', borderRadius: '2px' }}></span>
-                          面談記録
-                        </h5>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {/* Transcription Section */}
+                      <div className="assessment-section-card">
+                        <div className="assessment-section-header">
+                          <h5 style={{ fontSize: '14px', fontWeight: '600', margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ width: '4px', height: '16px', background: 'var(--accent-info, #2196f3)', borderRadius: '2px' }}></span>
+                            発話内容
+                          </h5>
+                          <IconCopyButton
+                            text={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription ?? ''}
+                            copyKey={`transcription_${plan.sessions[0].id}`}
+                          />
+                        </div>
+                        <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', borderLeft: `4px solid ${isTranscriptionInProgress(plan.sessions[0].status) ? 'var(--accent-warning, #f59e0b)' : 'var(--accent-primary)'}`, position: 'relative' }}>
+                          {isTranscriptionInProgress(plan.sessions[0].status) && (
+                            <div style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '48px 16px',
+                              gap: '16px',
+                            }}>
+                              <svg width="32" height="32" className="spinning" viewBox="0 0 32 32" fill="none">
+                                <circle cx="16" cy="16" r="12" stroke="var(--text-muted)" strokeWidth="2" opacity="0.3" />
+                                <path d="M16 4C9.37 4 4 9.37 4 16" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" />
+                              </svg>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '600', margin: 0 }}>
+                                {plan.sessions[0].status === 'uploaded' ? '音声をアップロード中です...' : '文字起こし中です...'}
+                              </p>
+                              <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: 0 }}>
+                                完了するまでしばらくお待ちください。自動的に反映されます。
+                              </p>
+                            </div>
+                          )}
+                          {!isTranscriptionInProgress(plan.sessions[0].status) && (
+                            <textarea
+                              ref={(el) => {
+                                if (el) {
+                                  el.style.height = 'auto';
+                                  el.style.height = `${el.scrollHeight}px`;
+                                }
+                              }}
+                              value={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription ?? ''}
+                              onChange={(e) => {
+                                e.target.style.height = 'auto';
+                                e.target.style.height = `${e.target.scrollHeight}px`;
+                                plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value);
+                              }}
+                              style={{
+                                width: '100%',
+                                minHeight: '400px',
+                                padding: '16px',
+                                fontFamily: 'inherit',
+                                fontSize: '13px',
+                                lineHeight: '1.7',
+                                border: 'none',
+                                background: 'transparent',
+                                resize: 'none',
+                                overflow: 'hidden',
+                                outline: 'none',
+                                color: 'var(--text-primary)',
+                              }}
+                              placeholder="発話内容のテキストを入力してください"
+                            />
+                          )}
+                        </div>
+                        <div className="prompt-actions assessment-section-footer">
                           {saveFeedback[plan.sessions?.[0]?.id || ''] === 'success' && (
                             <span style={{ color: 'var(--accent-success)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -1976,135 +2454,33 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                             <span style={{ color: 'var(--accent-danger)', fontSize: '13px' }}>保存失敗</span>
                           )}
                           <button
+                            className="prompt-save-btn"
                             onClick={() => plan.sessions?.[0]?.id && handleSaveTranscription(plan.sessions[0].id)}
                             disabled={savingTranscription[plan.sessions?.[0]?.id || ''] || !editingTranscription[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)}
-                            style={{
-                              padding: '8px 20px',
-                              borderRadius: '6px',
-                              border: '1px solid rgba(16, 185, 129, 0.4)',
-                              background: '#10b981',
-                              color: 'white',
-                              fontSize: '13px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                              opacity: (!editingTranscription[plan.sessions?.[0]?.id || ''] || savingTranscription[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)) ? 0.4 : 1,
-                              transition: 'all 0.2s ease',
-                            }}
                           >
                             {savingTranscription[plan.sessions?.[0]?.id || ''] ? '保存中...' : '保存'}
                           </button>
                           <button
+                            className="prompt-rerun-btn"
                             onClick={() => {
                               if (plan.sessions?.[0]?.id) {
                                 handleGeneratePhase1Prompt(plan.sessions[0].id, plan.id);
                               }
                             }}
                             disabled={reanalyzing[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)}
-                            style={{
-                              padding: '8px 20px',
-                              borderRadius: '6px',
-                              border: '1px solid rgba(59, 130, 246, 0.4)',
-                              background: '#3b82f6',
-                              color: 'white',
-                              fontSize: '13px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                              opacity: (reanalyzing[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)) ? 0.4 : 1,
-                              transition: 'all 0.2s ease',
-                            }}
                           >
                             {reanalyzing[plan.sessions[0].id]
                               ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '事実抽出プロンプト生成中...')
                               : '事実抽出プロンプト生成'}
                           </button>
-                          <button
-                            onClick={() => {
-                              if (plan.sessions?.[0]?.id) {
-                                setModelModalPlanId(plan.id);
-                                setModelModalSessionId(plan.sessions[0].id);
-                                setShowModelModal(true);
-                              }
-                            }}
-                            disabled={reanalyzing[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)}
-                            style={{
-                              padding: '8px 20px',
-                              borderRadius: '6px',
-                              border: '1px solid rgba(124, 77, 255, 0.4)',
-                              background: 'var(--accent-primary)',
-                              color: 'white',
-                              fontSize: '13px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                              opacity: (reanalyzing[plan.sessions?.[0]?.id || ''] || isTranscriptionInProgress(plan.sessions[0].status)) ? 0.4 : 1,
-                              transition: 'all 0.2s ease',
-                            }}
-                          >
-                            {reanalyzing[plan.sessions[0].id]
-                              ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '分析中...')
-                              : '全Phase実行'}
-                          </button>
                         </div>
-                      </div>
-                      <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', borderLeft: `4px solid ${isTranscriptionInProgress(plan.sessions[0].status) ? 'var(--accent-warning, #f59e0b)' : 'var(--accent-primary)'}`, position: 'relative' }}>
-                        {isTranscriptionInProgress(plan.sessions[0].status) && (
-                          <div style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '48px 16px',
-                            gap: '16px',
-                          }}>
-                            <svg width="32" height="32" className="spinning" viewBox="0 0 32 32" fill="none">
-                              <circle cx="16" cy="16" r="12" stroke="var(--text-muted)" strokeWidth="2" opacity="0.3" />
-                              <path d="M16 4C9.37 4 4 9.37 4 16" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" />
-                            </svg>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '600', margin: 0 }}>
-                              {plan.sessions[0].status === 'uploaded' ? '音声をアップロード中です...' : '文字起こし中です...'}
-                            </p>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: 0 }}>
-                              完了するまでしばらくお待ちください。自動的に反映されます。
-                            </p>
-                          </div>
-                        )}
-                        {!isTranscriptionInProgress(plan.sessions[0].status) && (
-                          <textarea
-                            ref={(el) => {
-                              if (el) {
-                                el.style.height = 'auto';
-                                el.style.height = `${el.scrollHeight}px`;
-                              }
-                            }}
-                            value={editingTranscription[plan.sessions?.[0]?.id || ''] ?? plan.sessions[0].transcription ?? ''}
-                            onChange={(e) => {
-                              e.target.style.height = 'auto';
-                              e.target.style.height = `${e.target.scrollHeight}px`;
-                              plan.sessions?.[0]?.id && handleTranscriptionChange(plan.sessions[0].id, e.target.value);
-                            }}
-                            style={{
-                              width: '100%',
-                              minHeight: '400px',
-                              padding: '16px',
-                              fontFamily: 'inherit',
-                              fontSize: '13px',
-                              lineHeight: '1.7',
-                              border: 'none',
-                              background: 'transparent',
-                              resize: 'none',
-                              overflow: 'hidden',
-                              outline: 'none',
-                              color: 'var(--text-primary)',
-                            }}
-                            placeholder="面談記録のテキストを入力してください"
-                          />
-                        )}
                       </div>
                     </div>
                     </>
                   ) : (
                     <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '32px', textAlign: 'center' }}>
                       <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
-                        アセスメントデータが紐付けられていません
+                        発話内容が紐付けられていません
                       </p>
                       <button
                         className="action-button"
@@ -2172,7 +2548,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
-                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : '事実抽出を再実行'}
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '事実抽出中') : '事実抽出を実行'}
                               </button>
                             </div>
                             {phaseResult[session.id] && (
@@ -2222,7 +2598,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      Phase 1 の処理結果がありません
+                      事実抽出の処理結果がありません
                     </div>
                   )}
                 </div>
@@ -2276,7 +2652,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
-                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 2 のみ再実行'}
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '事実整理中') : '事実整理を実行'}
                               </button>
                             </div>
                             {phaseResult[session.id] && (
@@ -2306,39 +2682,27 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           <CopyButton text={JSON.stringify(plan.sessions[0].fact_structuring_result_v1, null, 2)} copyKey={`output_phase2_${plan.sessions[0].id}`} />
                         </div>
                         <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_structuring_result_v1, null, 2)}</pre>
+                        <div className="prompt-actions">
+                          <button
+                            className="prompt-rerun-btn"
+                            onClick={() => {
+                              if (plan.sessions?.[0]?.id) {
+                                handleGeneratePhase3Prompt(plan.sessions[0].id, plan.id);
+                              }
+                            }}
+                            disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                          >
+                            {reanalyzing[plan.sessions[0].id]
+                              ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '個別支援計画プロンプト生成中...')
+                              : '個別支援計画プロンプト生成'}
+                          </button>
+                        </div>
                       </details>
                       <Phase2Display data={plan.sessions[0].fact_structuring_result_v1 as any} />
-                      {/* Phase 3 prompt generation button */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', padding: '16px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                        <button
-                          onClick={() => {
-                            if (plan.sessions?.[0]?.id) {
-                              handleGeneratePhase3Prompt(plan.sessions[0].id, plan.id);
-                            }
-                          }}
-                          disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
-                          style={{
-                            padding: '8px 20px',
-                            borderRadius: '6px',
-                            border: '1px solid rgba(59, 130, 246, 0.4)',
-                            background: '#3b82f6',
-                            color: 'white',
-                            fontSize: '13px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
-                            transition: 'all 0.2s ease',
-                          }}
-                        >
-                          {reanalyzing[plan.sessions[0].id]
-                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 3プロンプト生成中...')
-                            : 'Phase 3 プロンプト生成'}
-                        </button>
-                      </div>
                     </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      Phase 2 の処理結果がありません
+                      事実整理の処理結果がありません
                     </div>
                   )}
                 </div>
@@ -2392,7 +2756,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
-                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 3 のみ再実行'}
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '個別支援計画生成中') : '個別支援計画を実行'}
                               </button>
                             </div>
                             {phaseResult[session.id] && (
@@ -2494,7 +2858,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       {phaseRerunModal && (
         <div className="modal-overlay" onClick={() => setPhaseRerunModal(null)}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <h3>{phaseRerunModal.phase === 1 ? '事実抽出を再実行' : `Phase ${phaseRerunModal.phase} を再実行`}</h3>
+            <h3>{phaseRerunModal.phase === 1 ? '事実抽出を実行' : phaseRerunModal.phase === 2 ? '事実整理を実行' : '個別支援計画を実行'}</h3>
             {phaseRerunModal.modelUsed && (
               <div className="current-model-badge" style={{ marginBottom: '12px' }}>
                 前回使用: {phaseRerunModal.modelUsed}
@@ -2547,7 +2911,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           <div className="creation-modal-container" onClick={(e) => e.stopPropagation()}>
             <h2 className="creation-modal-title">個別支援計画の作成</h2>
             <p className="creation-modal-description">
-              作成方法を選択してください。アセスメント機能を使うと、ヒアリング内容から最適な計画をAIが自動生成します。
+              作成方法を選択してください。ヒアリングから作成を選択すると、録音画面が立ち上がります。 ヒアリングの内容をもとに、AIが自動的に個別支援計画書を作成します。
             </p>
 
             <div className="creation-options">
@@ -2562,9 +2926,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   </svg>
                 </div>
                 <div className="creation-option-content">
-                  <div className="creation-option-title">AIアセスメントで作成</div>
+                  <div className="creation-option-title">ヒアリングから作成</div>
                   <div className="creation-option-subtitle">
-                    対話内容を記録・分析し、支援計画を自動生成します
+                    保護者との面談内容から自動的に個別支援計画書の草案が作成されます。
                   </div>
                 </div>
               </button>

@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8052';
+// Default to IPv4 loopback to avoid environments where `localhost` resolves to ::1
+// and the backend isn't reachable on IPv6.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8052';
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || 'watchme-b2b-poc-2025';
 
 export interface InterviewSession {
@@ -6,10 +8,12 @@ export interface InterviewSession {
   facility_id: string;
   subject_id: string;
   staff_id?: string | null;
-  s3_audio_path: string;
+  s3_audio_path?: string | null;
   transcription?: string | null;
   status: 'uploaded' | 'transcribing' | 'transcribed' | 'analyzing' | 'completed' | 'error' | 'failed';
   duration_seconds?: number | null;
+  session_type?: string | null;
+  session_number?: number | null;
   recorded_at: string;
   created_at: string;
   updated_at: string;
@@ -21,6 +25,7 @@ export interface InterviewSession {
   assessment_result_v1?: object | string | null;
   error_message?: string | null;
   transcription_metadata?: string | Record<string, unknown> | null;
+  attendees?: Record<string, boolean> | null;
   model_used_phase1?: string | null;
   model_used_phase2?: string | null;
   model_used_phase3?: string | null;
@@ -29,6 +34,11 @@ export interface InterviewSession {
 export interface SessionsResponse {
   sessions: InterviewSession[];
   count: number;
+}
+
+export interface AudioUrlResponse {
+  url: string;
+  expires_in: number;
 }
 
 export interface LlmModelCatalog {
@@ -160,14 +170,6 @@ export interface SupportItem {
   staff: string;
   notes: string;
   priority: number;
-}
-
-// Response from sync-from-assessment API
-export interface SyncFromAssessmentResponse {
-  success: boolean;
-  plan_id: string;
-  synced_fields: string[];
-  message: string;
 }
 
 export interface SupportPlanCreate {
@@ -324,6 +326,9 @@ export const api = {
   getSession: (sessionId: string) =>
     apiRequest<InterviewSession>(`/api/sessions/${sessionId}`),
 
+  getSessionAudioUrl: (sessionId: string, download = false) =>
+    apiRequest<AudioUrlResponse>(`/api/sessions/${sessionId}/audio-url?download=${download ? '1' : '0'}`),
+
   updateSession: (sessionId: string, data: { support_plan_id?: string; status?: string; subject_id?: string }) =>
     apiRequest<InterviewSession>(`/api/sessions/${sessionId}`, {
       method: 'PUT',
@@ -352,12 +357,6 @@ export const api = {
   deleteSupportPlan: (planId: string) =>
     apiRequest<void>(`/api/support-plans/${planId}`, {
       method: 'DELETE',
-    }),
-
-  // Sync assessment_v1 data to support plan xxx_ai_generated columns
-  syncFromAssessment: (planId: string) =>
-    apiRequest<SyncFromAssessmentResponse>(`/api/support-plans/${planId}/sync-from-assessment`, {
-      method: 'POST',
     }),
 
   // Subjects API

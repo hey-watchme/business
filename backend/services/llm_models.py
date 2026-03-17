@@ -8,6 +8,8 @@ SUPPORTED_LLM_MODELS: Dict[str, List[str]] = {
         "gpt-4o",
         "gpt-4o-mini",
         "gpt-5.2-2025-12-11",
+        "gpt-5.4",
+        "gpt-5.4-2026-03-05",
     ],
     "gemini": [
         "gemini-3.1-pro-preview",
@@ -19,7 +21,7 @@ SUPPORTED_LLM_MODELS: Dict[str, List[str]] = {
 }
 
 DEFAULT_MODEL_BY_PROVIDER: Dict[str, str] = {
-    "openai": "gpt-4o",
+    "openai": "gpt-5.4-2026-03-05",
     "gemini": "gemini-3.1-pro-preview",
 }
 

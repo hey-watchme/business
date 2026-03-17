@@ -107,6 +107,24 @@ ASR_PROVIDER=deepgram
    - `.github/workflows/deploy-to-ecr.yml` の env セクションに追加
    - docker-compose.prod.yml に環境変数を追加
 
+### ⚡ 録音画面の準リアルタイム文字起こし（UX向け）
+
+録音中の体験向上のため、録音画面では軽量な準リアルタイム文字起こしを利用できます。
+（最終的な正式文字起こしは従来どおりバッチ処理）
+
+**エンドポイント**:
+- `POST /api/transcribe/realtime`
+
+**必要な環境変数**:
+```env
+# OpenAI APIキー（必須）
+OPENAI_API_KEY=sk-...
+
+# 準リアルタイム文字起こしモデル（任意）
+# デフォルト: gpt-4o-mini-transcribe
+REALTIME_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+```
+
 ### 🎤 録音形式
 
 **フロントエンド録音形式**: `audio/webm`
