@@ -10,6 +10,8 @@ export interface InterviewSession {
   transcription?: string | null;
   status: 'uploaded' | 'transcribing' | 'transcribed' | 'analyzing' | 'completed' | 'error' | 'failed';
   duration_seconds?: number | null;
+  session_type?: string | null;
+  session_number?: number | null;
   recorded_at: string;
   created_at: string;
   updated_at: string;
@@ -21,6 +23,7 @@ export interface InterviewSession {
   assessment_result_v1?: object | string | null;
   error_message?: string | null;
   transcription_metadata?: string | Record<string, unknown> | null;
+  attendees?: Record<string, boolean> | null;
   model_used_phase1?: string | null;
   model_used_phase2?: string | null;
   model_used_phase3?: string | null;
@@ -29,6 +32,11 @@ export interface InterviewSession {
 export interface SessionsResponse {
   sessions: InterviewSession[];
   count: number;
+}
+
+export interface AudioUrlResponse {
+  url: string;
+  expires_in: number;
 }
 
 export interface LlmModelCatalog {
@@ -323,6 +331,9 @@ export const api = {
 
   getSession: (sessionId: string) =>
     apiRequest<InterviewSession>(`/api/sessions/${sessionId}`),
+
+  getSessionAudioUrl: (sessionId: string, download = false) =>
+    apiRequest<AudioUrlResponse>(`/api/sessions/${sessionId}/audio-url?download=${download ? '1' : '0'}`),
 
   updateSession: (sessionId: string, data: { support_plan_id?: string; status?: string; subject_id?: string }) =>
     apiRequest<InterviewSession>(`/api/sessions/${sessionId}`, {

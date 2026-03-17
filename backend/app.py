@@ -1,14 +1,16 @@
 import os
+import json
 import uuid
 import io
 import asyncio
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import boto3
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Response, Query
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -256,6 +258,8 @@ async def upload_audio(
     subject_id: str = Form(...),
     support_plan_id: Optional[str] = Form(None),
     staff_id: Optional[str] = Form(None),
+    attendees: Optional[str] = Form(None),
+    duration_seconds: Optional[int] = Form(None),
     x_api_token: str = Header(None, alias="X-API-Token")
 ):
     # Validate token
@@ -291,8 +295,8 @@ async def upload_audio(
                 'subject_id': subject_id,
                 's3_audio_path': s3_path,
                 'status': 'uploaded',
-                'duration_seconds': 0,
-                'recorded_at': datetime.now().isoformat()
+                'duration_seconds': duration_seconds or 0,
+                'recorded_at': datetime.now(timezone.utc).isoformat()
             }
 
             # Add support_plan_id if provided
@@ -302,6 +306,13 @@ async def upload_audio(
             # Add staff_id if provided (from authenticated user)
             if staff_id:
                 session_data['staff_id'] = staff_id
+
+            # Add attendees if provided (JSON string)
+            if attendees:
+                try:
+                    session_data['attendees'] = json.loads(attendees)
+                except json.JSONDecodeError:
+                    raise HTTPException(status_code=400, detail="Invalid attendees JSON")
 
             supabase.table('business_interview_sessions').insert(session_data).execute()
 
@@ -785,6 +796,137 @@ async def get_session(
 
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Session not found: {str(e)}")
+
+@app.get("/api/sessions/{session_id}/audio-url")
+async def get_session_audio_url(
+    session_id: str,
+    download: bool = False,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        result = supabase.table('business_interview_sessions')\
+            .select('s3_audio_path')\
+            .eq('id', session_id)\
+            .single()\
+            .execute()
+
+        session = result.data or {}
+        s3_audio_path = session.get('s3_audio_path')
+        if not s3_audio_path:
+            raise HTTPException(status_code=404, detail="Audio path not found")
+
+        filename = s3_audio_path.split('/')[-1] or f"{session_id}.webm"
+        params = {
+            "Bucket": S3_BUCKET,
+            "Key": s3_audio_path,
+        }
+        if download:
+            params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
+
+        url = s3_client.generate_presigned_url(
+            "get_object",
+            Params=params,
+            ExpiresIn=3600
+        )
+
+        return {"url": url, "expires_in": 3600}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate audio URL: {str(e)}")
+
+@app.get("/api/sessions/{session_id}/audio")
+async def stream_session_audio(
+    session_id: str,
+    download: bool = Query(False),
+    range_header: Optional[str] = Header(None, alias="Range"),
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    # Validate token
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        result = supabase.table('business_interview_sessions')\
+            .select('s3_audio_path')\
+            .eq('id', session_id)\
+            .single()\
+            .execute()
+
+        session = result.data or {}
+        s3_audio_path = session.get('s3_audio_path')
+        if not s3_audio_path:
+            raise HTTPException(status_code=404, detail="Audio path not found")
+
+        head = s3_client.head_object(Bucket=S3_BUCKET, Key=s3_audio_path)
+        file_size = head.get('ContentLength')
+        content_type = head.get('ContentType') or 'audio/webm'
+        filename = s3_audio_path.split('/')[-1] or f"{session_id}.webm"
+
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "no-store"
+        }
+        if download:
+            headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        if range_header:
+            if not range_header.startswith("bytes="):
+                raise HTTPException(status_code=416, detail="Invalid range header")
+            range_spec = range_header.replace("bytes=", "")
+            start_str, end_str = range_spec.split("-", 1)
+            if start_str == "" and end_str == "":
+                raise HTTPException(status_code=416, detail="Invalid range header")
+
+            if start_str == "":
+                # suffix range: last N bytes
+                length = int(end_str)
+                start = max(file_size - length, 0)
+                end = file_size - 1
+            else:
+                start = int(start_str)
+                end = int(end_str) if end_str else file_size - 1
+
+            if start > end or start < 0 or end >= file_size:
+                raise HTTPException(status_code=416, detail="Requested range not satisfiable")
+
+            s3_range = f"bytes={start}-{end}"
+            obj = s3_client.get_object(Bucket=S3_BUCKET, Key=s3_audio_path, Range=s3_range)
+            content_length = end - start + 1
+            headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            headers["Content-Length"] = str(content_length)
+
+            return StreamingResponse(
+                obj["Body"].iter_chunks(1024 * 1024),
+                status_code=206,
+                headers=headers,
+                media_type=content_type
+            )
+
+        obj = s3_client.get_object(Bucket=S3_BUCKET, Key=s3_audio_path)
+        headers["Content-Length"] = str(file_size)
+
+        return StreamingResponse(
+            obj["Body"].iter_chunks(1024 * 1024),
+            headers=headers,
+            media_type=content_type
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stream audio: {str(e)}")
 
 class SessionUpdate(BaseModel):
     support_plan_id: Optional[str] = None

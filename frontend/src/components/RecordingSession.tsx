@@ -1,12 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './RecordingSession.css';
 import { useAuth } from '../contexts/AuthContext';
+import AudioBars from './AudioBars';
+import type { Subject } from '../api/client';
 
 interface RecordingSessionProps {
   childName: string;
   childAvatar?: string;
   subjectId: string;
   supportPlanId?: string;
+  attendees?: {
+    parent_father: boolean;
+    parent_mother: boolean;
+    subject: boolean;
+    other: boolean;
+  } | null;
+  subjectDetail?: Subject | null;
   onClose: () => void;
   onUploadComplete: (sessionId?: string) => void;
 }
@@ -25,7 +34,7 @@ const SENTENCE_END_PATTERN = /[。！？!?]$/;
 const MIN_MEANINGFUL_TEXT_LENGTH = 3;
 const DUPLICATE_CHUNK_DISTANCE = 3;
 
-const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAvatar, subjectId, supportPlanId, onClose, onUploadComplete }) => {
+const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAvatar, subjectId, supportPlanId, attendees, subjectDetail, onClose, onUploadComplete }) => {
   const { profile } = useAuth();
   const [recordingTime, setRecordingTime] = useState(0);
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
@@ -33,6 +42,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
   const [isRealtimeTranscribing, setIsRealtimeTranscribing] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const recordingTimeRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -64,12 +74,19 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
     if (realtimeRecorderRef.current && realtimeRecorderRef.current.state !== 'inactive') {
       realtimeRecorderRef.current.stop();
     }
+    if (realtimeRecorderRef.current?.stream) {
+      realtimeRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
     realtimeRecorderRef.current = null;
 
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
+    if (mediaRecorderRef.current?.stream) {
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+    mediaRecorderRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -214,7 +231,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
       const message: TranscriptMessage = {
         id: newMessageId,
         speaker: 'staff',
-        name: 'リアルタイムASR',
+        name: '参加者の発言',
         text: trimmed,
         timestamp
       };
@@ -421,7 +438,11 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
 
     // Start timer
     const timer = setInterval(() => {
-      setRecordingTime(prev => prev + 1);
+      setRecordingTime(prev => {
+        const next = prev + 1;
+        recordingTimeRef.current = next;
+        return next;
+      });
     }, 1000);
 
     return () => {
@@ -446,8 +467,12 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
     formData.append('audio', blob, 'recording.webm');
     formData.append('facility_id', profile?.facility_id || '00000000-0000-0000-0000-000000000001');
     formData.append('subject_id', subjectId);
+    formData.append('duration_seconds', String(recordingTimeRef.current));
     if (supportPlanId) {
       formData.append('support_plan_id', supportPlanId);
+    }
+    if (attendees) {
+      formData.append('attendees', JSON.stringify(attendees));
     }
     // Add staff_id from authenticated user
     if (profile?.user_id) {
@@ -494,6 +519,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       setIsRealtimeTranscribing(false);
+      stopMediaResources();
       onClose();
     } else {
       stopMediaResources();
@@ -510,13 +536,66 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
     }
   };
 
+  const participantItems = [
+    {
+      key: 'staff',
+      label: profile?.name || '支援者',
+      avatarUrl: profile?.avatar_url,
+      fallback: profile?.name?.charAt(0) || '支',
+    },
+    ...(attendees?.parent_father ? [{
+      key: 'parent_father',
+      label: '保護者(父)',
+      avatarUrl: undefined,
+      fallback: '父',
+    }] : []),
+    ...(attendees?.parent_mother ? [{
+      key: 'parent_mother',
+      label: '保護者(母)',
+      avatarUrl: undefined,
+      fallback: '母',
+    }] : []),
+    ...(attendees?.subject ? [{
+      key: 'subject',
+      label: '支援対象者',
+      avatarUrl: childAvatar,
+      fallback: childName.charAt(0),
+    }] : []),
+    ...(attendees?.other ? [{
+      key: 'other',
+      label: 'その他',
+      avatarUrl: undefined,
+      fallback: '他',
+    }] : []),
+  ];
+
+  const genderLabel = (value?: string | null) => {
+    if (!value) return null;
+    if (value === 'male') return '男';
+    if (value === 'female') return '女';
+    if (value === 'other') return 'その他';
+    return value;
+  };
+
+  const detailItems = subjectDetail ? [
+    { label: '年齢', value: subjectDetail.age != null ? `${subjectDetail.age}歳` : null },
+    { label: '性別', value: genderLabel(subjectDetail.gender) },
+    { label: '生年月日', value: subjectDetail.birth_date || null },
+    { label: '地域', value: [subjectDetail.prefecture, subjectDetail.city].filter(Boolean).join(' ') || null },
+    { label: '学校名', value: subjectDetail.school_name || null },
+    { label: '学校種別', value: subjectDetail.school_type || null },
+    { label: '診断', value: subjectDetail.diagnosis?.length ? subjectDetail.diagnosis.join('、') : null },
+    { label: '認知タイプ', value: subjectDetail.cognitive_type || null },
+    { label: 'メモ', value: subjectDetail.notes || null, full: true },
+  ] : [];
+
   return (
     <div className="recording-session-overlay">
       <div className="recording-session-container">
         {/* Header */}
         <div className="session-header">
           <div className="session-info">
-            <h2 className="session-title">アセスメント - 録音中</h2>
+            <h2 className="session-title">ヒアリング中</h2>
             <div className="session-meta">
               <span className="child-name">{childName}</span>
               <span className="separator">•</span>
@@ -527,7 +606,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <rect x="4" y="4" width="12" height="12" rx="2" fill="currentColor" />
             </svg>
-            {isStopping ? '終了処理中...' : '録音を終了'}
+            {isStopping ? '終了処理中...' : 'ヒアリングを終了'}
           </button>
         </div>
 
@@ -535,52 +614,56 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
         <div className="session-content">
           {/* Left: Video/Avatar Area */}
           <div className="session-main">
-            <div className="participants-grid">
-              <div className="participant-card main">
-                <div className="participant-avatar">
-                  <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                    <circle cx="30" cy="20" r="10" fill="currentColor" opacity="0.5" />
-                    <path d="M10 50C10 40 19 32 30 32C41 32 50 40 50 50" fill="currentColor" opacity="0.5" />
-                  </svg>
+            <div className="subject-card">
+              {childAvatar ? (
+                <img src={childAvatar} alt={childName} className="subject-avatar img" />
+              ) : (
+                <div className="subject-avatar">
+                  {childName.charAt(0)}
                 </div>
-                <div className="participant-info">
-                  <span className="participant-name">保護者</span>
-                  <div className="audio-bars">
-                    {[...Array(20)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="audio-bar"
-                        style={{
-                          height: `${Math.min(100, audioLevel * 2 + Math.random() * 20)}%`,
-                          animationDelay: `${i * 0.05}s`
-                        }}
-                      />
-                    ))}
+              )}
+              <div className="subject-info">
+                <span className="subject-label">支援対象者</span>
+                <span className="subject-name">{childName}</span>
+              </div>
+              <AudioBars level={audioLevel} className="audio-bars-compact" />
+            </div>
+
+            <div className="participants-section">
+              <div className="participants-title">参加者</div>
+              <div className="participants-list">
+                {participantItems.map(participant => (
+                  <div key={participant.key} className="participant-tile">
+                    {participant.avatarUrl ? (
+                      <img src={participant.avatarUrl} alt={participant.label} className="participant-avatar-small img" />
+                    ) : (
+                      <div className="participant-avatar-small">
+                        {participant.fallback}
+                      </div>
+                    )}
+                    <span className="participant-name-small">{participant.label}</span>
                   </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="subject-details">
+              <div className="subject-details-title">支援対象者情報</div>
+              {detailItems.length > 0 ? (
+                <div className="subject-details-grid">
+                  {detailItems.map(item => (
+                    <div
+                      key={item.label}
+                      className={`subject-detail-item${item.full ? ' full' : ''}`}
+                    >
+                      <span className="detail-label">{item.label}</span>
+                      <span className="detail-value">{item.value || '未登録'}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-
-              <div className="participant-card">
-                {childAvatar ? (
-                  <img src={childAvatar} alt={childName} className="participant-avatar small img" />
-                ) : (
-                  <div className="participant-avatar small">
-                    {childName.charAt(0)}
-                  </div>
-                )}
-                <span className="participant-name">{childName}</span>
-              </div>
-
-              <div className="participant-card">
-                {profile?.avatar_url ? (
-                  <img src={profile.avatar_url} alt={profile.name || ''} className="participant-avatar small img" />
-                ) : (
-                  <div className="participant-avatar small">
-                    {profile?.name?.charAt(0) || '職'}
-                  </div>
-                )}
-                <span className="participant-name">{profile?.name || '職員'}</span>
-              </div>
+              ) : (
+                <div className="subject-details-empty">詳細情報がありません</div>
+              )}
             </div>
 
             {/* Recording Indicator */}

@@ -1,0 +1,21 @@
+.audio-bars-shared {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 56px;
+  margin-bottom: 12px;
+  overflow: visible;
+}
+
+.audio-bars-compact {
+  margin-bottom: 0;
+}
+
+.audio-bar-shared {
+  width: 4px;
+  background: linear-gradient(to top, var(--accent-success), rgba(76, 175, 80, 0.2));
+  border-radius: 2px;
+  transition: height 0.05s ease;
+  min-height: 4px;
+}

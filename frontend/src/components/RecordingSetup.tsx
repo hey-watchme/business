@@ -1,19 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import AudioBars from './AudioBars';
 import './RecordingSetup.css';
 
 interface RecordingSetupProps {
-  onStart: (childName: string) => void;
+  onStart: (childName: string, attendees: RecordingAttendees) => void;
   onCancel: () => void;
   subjectName?: string;
   subjectAvatar?: string;
 }
+
+type RecordingAttendees = {
+  parent_father: boolean;
+  parent_mother: boolean;
+  subject: boolean;
+  other: boolean;
+};
 
 const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subjectName, subjectAvatar }) => {
   const { profile } = useAuth();
   const [micPermission, setMicPermission] = useState<'checking' | 'granted' | 'denied'>('checking');
   const [selectedChild, setSelectedChild] = useState(subjectName || '未選択');
   const [audioLevel, setAudioLevel] = useState(0);
+  const [attendees, setAttendees] = useState<RecordingAttendees>({
+    parent_father: false,
+    parent_mother: false,
+    subject: false,
+    other: false,
+  });
   const activeStreamRef = React.useRef<MediaStream | null>(null);
   const audioContextRef = React.useRef<AudioContext | null>(null);
   const animationFrameRef = React.useRef<number | null>(null);
@@ -39,6 +53,10 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
       setSelectedChild(subjectName);
     }
   }, [subjectName]);
+
+  const toggleAttendee = (key: keyof RecordingAttendees) => {
+    setAttendees(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   useEffect(() => {
     let isUnmounted = false;
@@ -118,18 +136,7 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
               </div>
 
               <div className="audio-indicator">
-                <div className="audio-bars">
-                  {[...Array(20)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="audio-bar"
-                      style={{
-                        height: `${Math.min(100, audioLevel * 2 + Math.random() * 20)}%`,
-                        animationDelay: `${i * 0.05}s`
-                      }}
-                    />
-                  ))}
-                </div>
+              <AudioBars level={audioLevel} />
                 <span className="audio-label" style={{
                   color: micPermission === 'granted' ? 'var(--accent-success)' :
                     micPermission === 'denied' ? 'var(--accent-danger)' :
@@ -150,7 +157,11 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
                     <line x1="8" y1="23" x2="16" y2="23"></line>
                   </svg>
                 </button>
-                <button className="control-button camera-button disabled" title="カメラ: オフ">
+                <button
+                  className="control-button camera-button disabled"
+                  data-tooltip="ヒアリングでは動画撮影はオフとなっています。"
+                  aria-label="ヒアリングでは動画撮影はオフとなっています。"
+                >
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M16 16.29V7a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2z"></path>
                     <path d="M24 8l-8 5 8 5V8z"></path>
@@ -162,7 +173,7 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
           </div>
 
           <div className="setup-right">
-            <h1 className="setup-title">アセスメントの準備</h1>
+            <h1 className="setup-title">ヒアリングの準備</h1>
             <p className="setup-subtitle">録音を開始する前に、以下の設定を確認してください</p>
 
             <div className="setup-section">
@@ -182,6 +193,43 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
               </div>
             </div>
 
+            <div className="setup-section">
+              <h3 className="setup-section-title">参加者</h3>
+              <div className="attendees-grid">
+                <label className="attendee-option">
+                  <input
+                    type="checkbox"
+                    checked={attendees.parent_father}
+                    onChange={() => toggleAttendee('parent_father')}
+                  />
+                  <span>保護者(父)</span>
+                </label>
+                <label className="attendee-option">
+                  <input
+                    type="checkbox"
+                    checked={attendees.parent_mother}
+                    onChange={() => toggleAttendee('parent_mother')}
+                  />
+                  <span>保護者(母)</span>
+                </label>
+                <label className="attendee-option">
+                  <input
+                    type="checkbox"
+                    checked={attendees.subject}
+                    onChange={() => toggleAttendee('subject')}
+                  />
+                  <span>支援対象者</span>
+                </label>
+                <label className="attendee-option">
+                  <input
+                    type="checkbox"
+                    checked={attendees.other}
+                    onChange={() => toggleAttendee('other')}
+                  />
+                  <span>その他</span>
+                </label>
+              </div>
+            </div>
 
             <div className="setup-section">
               <h3 className="setup-section-title">録音時の注意事項</h3>
@@ -203,7 +251,7 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
                 className="start-button"
                 onClick={() => {
                   stopMicPreview();
-                  onStart(selectedChild);
+                  onStart(selectedChild, attendees);
                 }}
                 disabled={micPermission !== 'granted' || !selectedChild}
               >
@@ -211,7 +259,7 @@ const RecordingSetup: React.FC<RecordingSetupProps> = ({ onStart, onCancel, subj
                   <circle cx="10" cy="10" r="8" fill="currentColor" />
                   <circle cx="10" cy="10" r="4" fill="white" />
                 </svg>
-                録音を開始
+                ヒアリングを開始する
               </button>
             </div>
           </div>
