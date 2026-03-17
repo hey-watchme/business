@@ -307,7 +307,28 @@ async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    // Surface backend error details (FastAPI typically returns {detail: "..."}).
+    let detail = '';
+    try {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await response.json().catch(() => null) as any;
+        if (data) {
+          detail = typeof data.detail === 'string'
+            ? data.detail
+            : typeof data.message === 'string'
+              ? data.message
+              : JSON.stringify(data);
+        }
+      } else {
+        detail = (await response.text().catch(() => '')) || '';
+      }
+    } catch {
+      // ignore
+    }
+
+    const tail = detail ? ` - ${detail}` : '';
+    throw new Error(`API Error: ${response.status} ${response.statusText}${tail}`);
   }
 
   return response.json();

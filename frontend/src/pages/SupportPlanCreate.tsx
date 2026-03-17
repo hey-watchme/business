@@ -199,11 +199,41 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   };
 
   const getProviderDefaultModel = (provider: string): string => {
-    return llmModelCatalog.providers?.[provider]?.default_model || 'gpt-4o';
+    // Keep a safe fallback even when the catalog couldn't be loaded.
+    if (llmModelCatalog.providers?.[provider]?.default_model) {
+      return llmModelCatalog.providers[provider].default_model;
+    }
+    return provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-5.4-2026-03-05';
   };
 
   const getProviderModels = (provider: string): string[] => {
     return llmModelCatalog.providers?.[provider]?.models || [];
+  };
+
+  const parseProviderModel = (modelUsed?: string | null): { provider: string; model: string } | null => {
+    if (!modelUsed) return null;
+    if (modelUsed.includes('/')) {
+      const [providerRaw, ...rest] = modelUsed.split('/');
+      const model = rest.join('/').trim();
+      const provider = providerRaw.trim();
+      if (provider && model) return { provider, model };
+    }
+    return { provider: 'openai', model: modelUsed };
+  };
+
+  const getPhaseModelUsed = (session: any, phase: 1 | 2 | 3): string | null => {
+    if (phase === 1) return session?.model_used_phase1 ?? null;
+    if (phase === 2) return session?.model_used_phase2 ?? null;
+    return session?.model_used_phase3 ?? null;
+  };
+
+  const prefillPhaseRerunModel = (session: any, phase: 1 | 2 | 3) => {
+    const parsed = parseProviderModel(getPhaseModelUsed(session, phase));
+    const provider = parsed?.provider === 'gemini' || parsed?.provider === 'openai' ? parsed.provider : 'openai';
+    const defaultModel = getProviderDefaultModel(provider);
+    const models = getProviderModels(provider);
+    const model = parsed?.model && (models.length === 0 || models.includes(parsed.model)) ? parsed.model : defaultModel;
+    setSelectedModelForPhaseRerun({ provider, model });
   };
 
   useEffect(() => {
@@ -706,7 +736,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           : sessionInPlan?.assessment_prompt_v1;
 
       if (editedPrompt !== undefined && editedPrompt !== (storedPrompt ?? '')) {
-        setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase ${phase} プロンプト保存中...` }));
+        setReanalysisPhase(prev => ({ ...prev, [sessionId]: `${phaseLabel}プロンプト保存中...` }));
         await api.updatePrompt(sessionId, phaseKey, editedPrompt);
       }
 
@@ -734,7 +764,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
-      setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'success', message: `Phase ${phase} 完了 (${modelLabel}, ${elapsed}秒)` } }));
+      setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'success', message: `${phaseLabel}完了 (${modelLabel}, ${elapsed}秒)` } }));
       showManualToast({ kind: 'success', message: `${phaseLabel}完了` }, 2500);
       await fetchPlanDetails(planId);
     } catch (err) {
@@ -743,7 +773,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const errorMsgRaw = err instanceof Error ? err.message : '不明';
       const errorMsg = normalizeErrorMessage(errorMsgRaw);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
-      setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `Phase ${phase} エラー: ${errorMsg} (${elapsed}秒)` } }));
+      setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `${phaseLabel}エラー: ${errorMsg} (${elapsed}秒)` } }));
       showManualToast({ kind: 'error', message: `エラー: ${errorMsg}` }, 4000);
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
@@ -2543,7 +2573,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               <button
                                 className="prompt-rerun-btn"
                                 onClick={() => {
-                                  setSelectedModelForPhaseRerun({ provider: 'openai', model: 'gpt-4o' });
+                                  prefillPhaseRerunModel(session, 1);
                                   setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 1, modelUsed: session.model_used_phase1 || undefined });
                                 }}
                                 disabled={reanalyzing[session.id]}
@@ -2647,7 +2677,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               <button
                                 className="prompt-rerun-btn"
                                 onClick={() => {
-                                  setSelectedModelForPhaseRerun({ provider: 'openai', model: 'gpt-4o' });
+                                  prefillPhaseRerunModel(session, 2);
                                   setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 2, modelUsed: session.model_used_phase2 || undefined });
                                 }}
                                 disabled={reanalyzing[session.id]}
@@ -2751,7 +2781,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               <button
                                 className="prompt-rerun-btn"
                                 onClick={() => {
-                                  setSelectedModelForPhaseRerun({ provider: 'openai', model: 'gpt-4o' });
+                                  prefillPhaseRerunModel(session, 3);
                                   setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 3, modelUsed: session.model_used_phase3 || undefined });
                                 }}
                                 disabled={reanalyzing[session.id]}

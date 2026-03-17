@@ -827,6 +827,10 @@
   }
 }
 
+.spinning {
+  animation: spin 0.9s linear infinite;
+}
+
 /* ==========================================
    Support Details Table (Page 2)
    ========================================== */
