@@ -42,6 +42,7 @@ export interface AudioUrlResponse {
 }
 
 export interface LlmModelCatalog {
+  default_provider?: string;
   providers: Record<string, {
     default_model: string;
     models: string[];

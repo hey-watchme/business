@@ -25,21 +25,6 @@ interface SupportPlanCreateProps {
   hideHeader?: boolean;
 }
 
-const FALLBACK_MODEL_CATALOG: LlmModelCatalog = {
-  providers: {
-    openai: {
-      default_model: 'gpt-5.4-2026-03-05',
-      models: ['gpt-4o', 'gpt-4o-mini', 'gpt-5.2-2025-12-11', 'gpt-5.4', 'gpt-5.4-2026-03-05'],
-      aliases: {},
-    },
-    gemini: {
-      default_model: 'gemini-3.1-pro-preview',
-      models: ['gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
-      aliases: {},
-    },
-  },
-};
-
 const MODEL_LABELS: Record<string, string> = {
   'gpt-4o': 'GPT-4o',
   'gpt-4o-mini': 'GPT-4o Mini (low cost)',
@@ -107,10 +92,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [showModelModal, setShowModelModal] = useState(false);
   const [modelModalPlanId, setModelModalPlanId] = useState<string | null>(null);
   const [modelModalSessionId, setModelModalSessionId] = useState<string | null>(null);
-  const [llmModelCatalog, setLlmModelCatalog] = useState<LlmModelCatalog>(FALLBACK_MODEL_CATALOG);
-  const [selectedModelForBatch, setSelectedModelForBatch] = useState({ provider: 'openai', model: 'gpt-5.4-2026-03-05' });
+  const [llmModelCatalog, setLlmModelCatalog] = useState<LlmModelCatalog | null>(null);
+  const [llmModelCatalogError, setLlmModelCatalogError] = useState<string | null>(null);
+  const [selectedModelForBatch, setSelectedModelForBatch] = useState<{ provider: string; model: string } | null>(null);
   const [phaseRerunModal, setPhaseRerunModal] = useState<{ sessionId: string; planId: string; phase: 1 | 2 | 3; modelUsed?: string } | null>(null);
-  const [selectedModelForPhaseRerun, setSelectedModelForPhaseRerun] = useState({ provider: 'openai', model: 'gpt-5.4-2026-03-05' });
+  const [selectedModelForPhaseRerun, setSelectedModelForPhaseRerun] = useState<{ provider: string; model: string } | null>(null);
 
   // Clipboard copy state (key: unique id, value: true = just copied)
   const [copiedKey, setCopiedKey] = useState<Record<string, boolean>>({});
@@ -198,16 +184,29 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     setActiveTabByPlan(prev => ({ ...prev, [planId]: tab }));
   };
 
-  const getProviderDefaultModel = (provider: string): string => {
-    // Keep a safe fallback even when the catalog couldn't be loaded.
-    if (llmModelCatalog.providers?.[provider]?.default_model) {
-      return llmModelCatalog.providers[provider].default_model;
+  const requireCatalog = (): LlmModelCatalog => {
+    if (!llmModelCatalog?.providers) {
+      throw new Error('モデル一覧が取得できていません。ページを再読み込みしてください。');
     }
-    return provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-5.4-2026-03-05';
+    return llmModelCatalog;
+  };
+
+  const getProviderDefaultModel = (provider: string): string => {
+    const catalog = requireCatalog();
+    const prov = catalog.providers?.[provider];
+    if (!prov?.default_model) {
+      throw new Error(`モデル一覧にプロバイダー '${provider}' の default_model がありません。`);
+    }
+    return prov.default_model;
   };
 
   const getProviderModels = (provider: string): string[] => {
-    return llmModelCatalog.providers?.[provider]?.models || [];
+    const catalog = requireCatalog();
+    const prov = catalog.providers?.[provider];
+    if (!prov?.models?.length) {
+      throw new Error(`モデル一覧にプロバイダー '${provider}' の models がありません。`);
+    }
+    return prov.models;
   };
 
   const parseProviderModel = (modelUsed?: string | null): { provider: string; model: string } | null => {
@@ -228,11 +227,23 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   };
 
   const prefillPhaseRerunModel = (session: any, phase: 1 | 2 | 3) => {
+    const catalog = requireCatalog();
     const parsed = parseProviderModel(getPhaseModelUsed(session, phase));
-    const provider = parsed?.provider === 'gemini' || parsed?.provider === 'openai' ? parsed.provider : 'openai';
-    const defaultModel = getProviderDefaultModel(provider);
+
+    const provider = parsed?.provider ?? catalog.default_provider;
+    if (!provider) {
+      throw new Error('モデル一覧に default_provider がありません。');
+    }
+    if (!catalog.providers?.[provider]) {
+      throw new Error(`モデル一覧にプロバイダー '${provider}' がありません。`);
+    }
+
     const models = getProviderModels(provider);
-    const model = parsed?.model && (models.length === 0 || models.includes(parsed.model)) ? parsed.model : defaultModel;
+    const model = parsed?.model ?? getProviderDefaultModel(provider);
+    if (!models.includes(model)) {
+      throw new Error(`モデル一覧に '${provider}/${model}' がありません。`);
+    }
+
     setSelectedModelForPhaseRerun({ provider, model });
   };
 
@@ -244,10 +255,28 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     const loadLlmModels = async () => {
       try {
         const catalog = await api.getLlmModels();
-        if (!catalog?.providers) return;
+        if (!catalog?.providers) {
+          throw new Error('モデル一覧の形式が不正です。');
+        }
         setLlmModelCatalog(catalog);
+        setLlmModelCatalogError(null);
+
+        // Initialize selections from the server-defined defaults.
+        if (!catalog.default_provider) {
+          throw new Error('モデル一覧に default_provider がありません。');
+        }
+        const defaultProvider = catalog.default_provider;
+        const defaultModel = catalog.providers?.[defaultProvider]?.default_model;
+        if (!defaultModel) {
+          throw new Error(`モデル一覧に '${defaultProvider}' の default_model がありません。`);
+        }
+        setSelectedModelForBatch({ provider: defaultProvider, model: defaultModel });
+        setSelectedModelForPhaseRerun({ provider: defaultProvider, model: defaultModel });
       } catch (err) {
-        console.warn('Failed to fetch llm model catalog, fallback models are used:', err);
+        const msg = err instanceof Error ? err.message : '不明';
+        setLlmModelCatalog(null);
+        setLlmModelCatalogError(msg);
+        console.warn('Failed to fetch llm model catalog:', err);
       }
     };
 
@@ -1555,6 +1584,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     );
   }
 
+  const isModelCatalogReady = !!llmModelCatalog?.providers && !llmModelCatalogError;
+  const providerOptions = isModelCatalogReady ? Object.keys(llmModelCatalog!.providers) : [];
+
   return (
     <div className="support-plan-create">
       {!hideHeader && (
@@ -1747,6 +1779,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                       e.stopPropagation();
                       if (!plan.sessions?.[0]?.id) return;
                       closeActionMenu(e);
+                      if (!llmModelCatalog?.providers || llmModelCatalogError) {
+                        const msg = llmModelCatalogError || 'モデル一覧が取得できていません。ページを再読み込みしてください。';
+                        showManualToast({ kind: 'error', message: `エラー: ${msg}` }, 4000);
+                        return;
+                      }
                       setModelModalPlanId(plan.id);
                       setModelModalSessionId(plan.sessions[0].id);
                       setShowModelModal(true);
@@ -2573,8 +2610,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               <button
                                 className="prompt-rerun-btn"
                                 onClick={() => {
-                                  prefillPhaseRerunModel(session, 1);
-                                  setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 1, modelUsed: session.model_used_phase1 || undefined });
+                                  try {
+                                    prefillPhaseRerunModel(session, 1);
+                                    setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 1, modelUsed: session.model_used_phase1 || undefined });
+                                  } catch (err) {
+                                    const msg = err instanceof Error ? err.message : '不明';
+                                    showManualToast({ kind: 'error', message: `エラー: ${msg}` }, 4000);
+                                  }
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
@@ -2677,8 +2719,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               <button
                                 className="prompt-rerun-btn"
                                 onClick={() => {
-                                  prefillPhaseRerunModel(session, 2);
-                                  setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 2, modelUsed: session.model_used_phase2 || undefined });
+                                  try {
+                                    prefillPhaseRerunModel(session, 2);
+                                    setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 2, modelUsed: session.model_used_phase2 || undefined });
+                                  } catch (err) {
+                                    const msg = err instanceof Error ? err.message : '不明';
+                                    showManualToast({ kind: 'error', message: `エラー: ${msg}` }, 4000);
+                                  }
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
@@ -2781,8 +2828,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                               <button
                                 className="prompt-rerun-btn"
                                 onClick={() => {
-                                  prefillPhaseRerunModel(session, 3);
-                                  setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 3, modelUsed: session.model_used_phase3 || undefined });
+                                  try {
+                                    prefillPhaseRerunModel(session, 3);
+                                    setPhaseRerunModal({ sessionId: session.id, planId: plan.id, phase: 3, modelUsed: session.model_used_phase3 || undefined });
+                                  } catch (err) {
+                                    const msg = err instanceof Error ? err.message : '不明';
+                                    showManualToast({ kind: 'error', message: `エラー: ${msg}` }, 4000);
+                                  }
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
@@ -2844,26 +2896,45 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         <div className="modal-overlay" onClick={() => setShowModelModal(false)}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
             <h3>使用するLLMモデルを選択</h3>
+            {!isModelCatalogReady && (
+              <div style={{ marginTop: '8px', marginBottom: '12px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#b91c1c', fontSize: '13px' }}>
+                モデル一覧が取得できていません。{llmModelCatalogError ? ` (${llmModelCatalogError})` : ''} ページを再読み込みしてください。
+              </div>
+            )}
             <div className="modal-field">
               <label>プロバイダー:</label>
               <select
-                value={selectedModelForBatch.provider}
-                onChange={(e) => setSelectedModelForBatch({
-                  provider: e.target.value,
-                  model: getProviderDefaultModel(e.target.value)
-                })}
+                value={selectedModelForBatch?.provider ?? ''}
+                onChange={(e) => {
+                  if (!isModelCatalogReady) return;
+                  const provider = e.target.value;
+                  const defaultModel = llmModelCatalog!.providers?.[provider]?.default_model;
+                  if (!defaultModel) {
+                    showManualToast({ kind: 'error', message: `エラー: モデル一覧に '${provider}' の default_model がありません。` }, 4000);
+                    return;
+                  }
+                  setSelectedModelForBatch({ provider, model: defaultModel });
+                }}
+                disabled={!isModelCatalogReady}
               >
-                <option value="openai">OpenAI</option>
-                <option value="gemini">Google Gemini</option>
+                <option value="" disabled>選択してください</option>
+                {providerOptions.map((p) => (
+                  <option key={p} value={p}>{p === 'openai' ? 'OpenAI' : p === 'gemini' ? 'Google Gemini' : p}</option>
+                ))}
               </select>
             </div>
             <div className="modal-field">
               <label>モデル:</label>
               <select
-                value={selectedModelForBatch.model}
-                onChange={(e) => setSelectedModelForBatch(prev => ({ ...prev, model: e.target.value }))}
+                value={selectedModelForBatch?.model ?? ''}
+                onChange={(e) => {
+                  if (!selectedModelForBatch) return;
+                  setSelectedModelForBatch(prev => (prev ? ({ ...prev, model: e.target.value }) : prev));
+                }}
+                disabled={!isModelCatalogReady || !selectedModelForBatch?.provider}
               >
-                {getProviderModels(selectedModelForBatch.provider).map((model) => (
+                <option value="" disabled>選択してください</option>
+                {isModelCatalogReady && selectedModelForBatch?.provider && (llmModelCatalog!.providers[selectedModelForBatch.provider]?.models || []).map((model) => (
                   <option key={model} value={model}>{MODEL_LABELS[model] || model}</option>
                 ))}
               </select>
@@ -2873,9 +2944,25 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
               <button
                 className="primary-button"
                 onClick={() => {
+                  if (!selectedModelForBatch) {
+                    showManualToast({ kind: 'error', message: 'エラー: モデルが選択されていません。' }, 4000);
+                    return;
+                  }
+                  // Validate selection exists in catalog (no implicit fallback)
+                  try {
+                    const models = getProviderModels(selectedModelForBatch.provider);
+                    if (!models.includes(selectedModelForBatch.model)) {
+                      throw new Error(`モデル一覧に '${selectedModelForBatch.provider}/${selectedModelForBatch.model}' がありません。`);
+                    }
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : '不明';
+                    showManualToast({ kind: 'error', message: `エラー: ${msg}` }, 4000);
+                    return;
+                  }
                   setShowModelModal(false);
                   handleBatchAnalyze(modelModalSessionId!, modelModalPlanId!, selectedModelForBatch);
                 }}
+                disabled={!isModelCatalogReady || !selectedModelForBatch?.provider || !selectedModelForBatch?.model}
               >
                 全Phase一括実行
               </button>
@@ -2897,23 +2984,37 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
             <div className="modal-field">
               <label>プロバイダー:</label>
               <select
-                value={selectedModelForPhaseRerun.provider}
-                onChange={(e) => setSelectedModelForPhaseRerun({
-                  provider: e.target.value,
-                  model: getProviderDefaultModel(e.target.value)
-                })}
+                value={selectedModelForPhaseRerun?.provider ?? ''}
+                onChange={(e) => {
+                  if (!isModelCatalogReady) return;
+                  const provider = e.target.value;
+                  const defaultModel = llmModelCatalog!.providers?.[provider]?.default_model;
+                  if (!defaultModel) {
+                    showManualToast({ kind: 'error', message: `エラー: モデル一覧に '${provider}' の default_model がありません。` }, 4000);
+                    return;
+                  }
+                  setSelectedModelForPhaseRerun({ provider, model: defaultModel });
+                }}
+                disabled={!isModelCatalogReady}
               >
-                <option value="openai">OpenAI</option>
-                <option value="gemini">Google Gemini</option>
+                <option value="" disabled>選択してください</option>
+                {providerOptions.map((p) => (
+                  <option key={p} value={p}>{p === 'openai' ? 'OpenAI' : p === 'gemini' ? 'Google Gemini' : p}</option>
+                ))}
               </select>
             </div>
             <div className="modal-field">
               <label>モデル:</label>
               <select
-                value={selectedModelForPhaseRerun.model}
-                onChange={(e) => setSelectedModelForPhaseRerun(prev => ({ ...prev, model: e.target.value }))}
+                value={selectedModelForPhaseRerun?.model ?? ''}
+                onChange={(e) => {
+                  if (!selectedModelForPhaseRerun) return;
+                  setSelectedModelForPhaseRerun(prev => (prev ? ({ ...prev, model: e.target.value }) : prev));
+                }}
+                disabled={!isModelCatalogReady || !selectedModelForPhaseRerun?.provider}
               >
-                {getProviderModels(selectedModelForPhaseRerun.provider).map((model) => (
+                <option value="" disabled>選択してください</option>
+                {isModelCatalogReady && selectedModelForPhaseRerun?.provider && (llmModelCatalog!.providers[selectedModelForPhaseRerun.provider]?.models || []).map((model) => (
                   <option key={model} value={model}>{MODEL_LABELS[model] || model}</option>
                 ))}
               </select>
@@ -2924,9 +3025,24 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                 className="primary-button"
                 onClick={() => {
                   const { sessionId, planId, phase } = phaseRerunModal;
+                  if (!selectedModelForPhaseRerun) {
+                    showManualToast({ kind: 'error', message: 'エラー: モデルが選択されていません。' }, 4000);
+                    return;
+                  }
+                  try {
+                    const models = getProviderModels(selectedModelForPhaseRerun.provider);
+                    if (!models.includes(selectedModelForPhaseRerun.model)) {
+                      throw new Error(`モデル一覧に '${selectedModelForPhaseRerun.provider}/${selectedModelForPhaseRerun.model}' がありません。`);
+                    }
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : '不明';
+                    showManualToast({ kind: 'error', message: `エラー: ${msg}` }, 4000);
+                    return;
+                  }
                   setPhaseRerunModal(null);
                   handlePhaseOnlyReanalyze(sessionId, planId, phase, selectedModelForPhaseRerun);
                 }}
+                disabled={!isModelCatalogReady || !selectedModelForPhaseRerun?.provider || !selectedModelForPhaseRerun?.model}
               >
                 実行
               </button>

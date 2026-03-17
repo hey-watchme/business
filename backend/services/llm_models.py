@@ -25,6 +25,8 @@ DEFAULT_MODEL_BY_PROVIDER: Dict[str, str] = {
     "gemini": "gemini-3.1-pro-preview",
 }
 
+DEFAULT_PROVIDER: str = "openai"
+
 MODEL_ALIASES: Dict[str, Dict[str, str]] = {
     "openai": {},
     "gemini": {},
@@ -55,8 +57,9 @@ def normalize_model(provider: str, model: str) -> str:
     return normalized_model
 
 
-def get_model_catalog() -> Dict[str, Dict[str, object]]:
+def get_model_catalog() -> Dict[str, object]:
     return {
+        "default_provider": DEFAULT_PROVIDER,
         "providers": {
             provider: {
                 "default_model": DEFAULT_MODEL_BY_PROVIDER[provider],
