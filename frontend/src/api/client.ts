@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8052';
+// Default to IPv4 loopback to avoid environments where `localhost` resolves to ::1
+// and the backend isn't reachable on IPv6.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8052';
 const API_TOKEN = import.meta.env.VITE_API_TOKEN || 'watchme-b2b-poc-2025';
 
 export interface InterviewSession {

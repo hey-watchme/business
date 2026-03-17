@@ -32,9 +32,14 @@ main() {
     return 0
   fi
 
-  echo "[run] Starting backend with: $PYTHON_BIN app.py"
+  # NOTE: Binding to 0.0.0.0 / ::1 can fail with EPERM depending on the local environment.
+  # Default to IPv4 loopback to keep local dev stable.
+  local HOST="${HOST:-127.0.0.1}"
+  local PORT="${PORT:-8052}"
+
+  echo "[run] Starting backend with: $PYTHON_BIN -m uvicorn app:app --host $HOST --port $PORT --reload"
   cd "$SCRIPT_DIR"
-  exec "$PYTHON_BIN" app.py
+  exec "$PYTHON_BIN" -m uvicorn app:app --host "$HOST" --port "$PORT" --reload
 }
 
 main "$@"
