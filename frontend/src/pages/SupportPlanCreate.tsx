@@ -74,8 +74,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   const [sessionAudioSrc, setSessionAudioSrc] = useState<Record<string, string>>({});
   const [sessionAudioLoading, setSessionAudioLoading] = useState<Record<string, boolean>>({});
   const [sessionAudioDownloading, setSessionAudioDownloading] = useState<Record<string, boolean>>({});
+  const [sessionAudioError, setSessionAudioError] = useState<Record<string, { kind: 'not_found' | 'error'; message: string }>>({});
   const sessionAudioSrcRef = useRef<Record<string, string>>({});
   const [recordingCompletionToastMessage, setRecordingCompletionToastMessage] = useState<string | null>(null);
+  const [manualProcessingToast, setManualProcessingToast] = useState<{ message: string; kind: 'loading' | 'success' | 'error' } | null>(null);
   // Tab state per plan (key: planId, value: active tab)
   const [activeTabByPlan, setActiveTabByPlan] = useState<Record<string, PlanTab>>({});
 
@@ -231,6 +233,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
   // Polling: auto-refresh when any session is in a processing state
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const manualToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutoProcessingSessionIdRef = useRef<string | null>(null);
 
   // Check if session is still being processed (not yet in a terminal state)
   const isSessionProcessing = (status: string) => {
@@ -242,8 +246,15 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     const hasInProgressSession = supportPlans.some(plan =>
       plan.sessions?.some(s => s.status && isSessionProcessing(s.status))
     );
+    const processingPlan = supportPlans.find(plan =>
+      plan.sessions?.some(s => s.status && isSessionProcessing(s.status))
+    );
+    const processingSessionId = processingPlan?.sessions?.find(s => s.status && isSessionProcessing(s.status))?.id || null;
 
     if (hasInProgressSession) {
+      if (processingSessionId) {
+        lastAutoProcessingSessionIdRef.current = processingSessionId;
+      }
       // Start polling every 5 seconds
       if (!pollingRef.current) {
         pollingRef.current = setInterval(async () => {
@@ -259,6 +270,19 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
+      }
+      if (lastAutoProcessingSessionIdRef.current) {
+        const sessionId = lastAutoProcessingSessionIdRef.current;
+        const finishedSession = supportPlans.flatMap(p => p.sessions || []).find(s => s.id === sessionId) || null;
+        if (finishedSession) {
+          const status = String(finishedSession.status || '');
+          if (status === 'completed') {
+            showManualToast({ kind: 'success', message: '処理完了' }, 2500);
+          } else if (status === 'error' || status === 'failed') {
+            showManualToast({ kind: 'error', message: '処理に失敗しました' }, 4000);
+          }
+        }
+        lastAutoProcessingSessionIdRef.current = null;
       }
     }
 
@@ -328,9 +352,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     const plan = supportPlans.find(p => p.id === focusedPlanId);
     const sessionId = plan?.sessions?.[0]?.id;
     if (!sessionId) return;
+    if (!plan?.sessions?.[0]?.s3_audio_path) return; // No audio stored for this session
     if (sessionAudioSrc[sessionId] || sessionAudioLoading[sessionId]) return;
+    if (sessionAudioError[sessionId]) return; // Avoid looping on missing audio/errors
     void fetchSessionAudioBlob(sessionId);
-  }, [focusedPlanId, supportPlans, activeTabByPlan, sessionAudioSrc, sessionAudioLoading]);
+  }, [focusedPlanId, supportPlans, activeTabByPlan, sessionAudioSrc, sessionAudioLoading, sessionAudioError]);
 
   useEffect(() => {
     return () => {
@@ -459,25 +485,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
   }, [supportPlans, selectedPlan?.id]);
 
-  // Sync from assessment API handler
-  const handleSyncFromAssessment = useCallback(async (planId: string) => {
-    try {
-      const result = await api.syncFromAssessment(planId);
-      if (result.success) {
-        // Refresh plan data
-        const updated = await api.getSupportPlan(planId);
-        setSupportPlans(prev => prev.map(p => p.id === updated.id ? updated : p));
-        if (selectedPlan?.id === updated.id) {
-          setSelectedPlan(updated);
-        }
-        alert(`${result.synced_fields.length}件のフィールドを同期しました`);
-      }
-    } catch (err) {
-      console.error('Sync from assessment failed:', err);
-      alert('AI分析結果の同期に失敗しました');
-    }
-  }, [selectedPlan?.id]);
-
   // ===== Transcription editing handlers =====
   const handleTranscriptionChange = (sessionId: string, value: string) => {
     setEditingTranscription(prev => ({ ...prev, [sessionId]: value }));
@@ -570,6 +577,20 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     throw new Error(`Timeout waiting for ${field}`);
   };
 
+  const showManualToast = (toast: { message: string; kind: 'loading' | 'success' | 'error' }, ttlMs?: number | null) => {
+    setManualProcessingToast(toast);
+    if (manualToastTimerRef.current) {
+      clearTimeout(manualToastTimerRef.current);
+      manualToastTimerRef.current = null;
+    }
+    if (ttlMs && ttlMs > 0) {
+      manualToastTimerRef.current = setTimeout(() => {
+        setManualProcessingToast(null);
+        manualToastTimerRef.current = null;
+      }, ttlMs);
+    }
+  };
+
   const handleBatchAnalyze = async (sessionId: string, planId: string, modelConfig: { provider: string; model: string }) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
     setPhaseResult(prev => ({ ...prev, [sessionId]: null }));
@@ -583,7 +604,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const previousPhase1Value = (currentSession as unknown as Record<string, unknown>).fact_extraction_result_v1;
 
       // Phase 1: Fact Extraction
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 1 実行中... (${modelLabel})` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実抽出中' }));
+      showManualToast({ kind: 'loading', message: '事実抽出中' }, null);
       await api.triggerPhase1(sessionId, false, modelConfig.provider, modelConfig.model, undefined, false);
       await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousPhase1Value);
 
@@ -593,7 +615,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const previousPhase2Value = (afterPhase1 as unknown as Record<string, unknown>).fact_structuring_result_v1;
 
       // Phase 2: Fact Structuring
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 2 実行中... (${modelLabel})` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実整理中' }));
+      showManualToast({ kind: 'loading', message: '事実整理中' }, null);
       await api.triggerPhase2(sessionId, false, modelConfig.provider, modelConfig.model);
       await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousPhase2Value);
 
@@ -603,7 +626,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const previousPhase3Value = (afterPhase2 as unknown as Record<string, unknown>).assessment_result_v1;
 
       // Phase 3: Assessment
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase 3 実行中... (${modelLabel})` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: '個別支援計画生成中' }));
+      showManualToast({ kind: 'loading', message: '個別支援計画生成中' }, null);
       await api.triggerPhase3(sessionId, false, modelConfig.provider, modelConfig.model);
       await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousPhase3Value);
 
@@ -611,6 +635,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'success', message: `全Phase完了 (${modelLabel}, ${elapsed}秒)` } }));
+      showManualToast({ kind: 'success', message: '分析完了' }, 2500);
       await fetchPlanDetails(planId);
     } catch (err) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -619,6 +644,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const errorMsg = normalizeErrorMessage(errorMsgRaw);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `エラー: ${errorMsg} (${elapsed}秒)` } }));
+      showManualToast({ kind: 'error', message: `エラー: ${errorMsg}` }, 4000);
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
       setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
@@ -661,9 +687,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     setPhaseResult(prev => ({ ...prev, [sessionId]: null }));
     const startTime = Date.now();
     const modelLabel = `${modelConfig.provider}/${modelConfig.model}`;
+    const phaseLabel = phase === 1 ? '事実抽出' : phase === 2 ? '事実整理' : '個別支援計画生成';
 
     try {
-      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `Phase ${phase} 実行中... (${modelLabel})` }));
+      setReanalysisPhase(prev => ({ ...prev, [sessionId]: `${phaseLabel}中` }));
+      showManualToast({ kind: 'loading', message: `${phaseLabel}中` }, null);
 
       // Ensure currently edited prompt is persisted before running with use_custom_prompt=true
       const phaseKey = `phase${phase}`;
@@ -707,6 +735,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '完了' }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'success', message: `Phase ${phase} 完了 (${modelLabel}, ${elapsed}秒)` } }));
+      showManualToast({ kind: 'success', message: `${phaseLabel}完了` }, 2500);
       await fetchPlanDetails(planId);
     } catch (err) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -715,6 +744,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       const errorMsg = normalizeErrorMessage(errorMsgRaw);
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: `エラー: ${errorMsg}` }));
       setPhaseResult(prev => ({ ...prev, [sessionId]: { status: 'error', message: `Phase ${phase} エラー: ${errorMsg} (${elapsed}秒)` } }));
+      showManualToast({ kind: 'error', message: `エラー: ${errorMsg}` }, 4000);
       await new Promise(resolve => setTimeout(resolve, 3000));
     } finally {
       setReanalyzing(prev => ({ ...prev, [sessionId]: false }));
@@ -757,7 +787,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   const handleGeneratePhase2Prompt = async (sessionId: string, planId: string) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
-    setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 2プロンプト生成中...' }));
+    setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実整理プロンプト生成中...' }));
 
     try {
       const result = await api.generatePhase2Prompt(sessionId);
@@ -788,7 +818,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   const handleGeneratePhase3Prompt = async (sessionId: string, planId: string) => {
     setReanalyzing(prev => ({ ...prev, [sessionId]: true }));
-    setReanalysisPhase(prev => ({ ...prev, [sessionId]: 'Phase 3プロンプト生成中...' }));
+    setReanalysisPhase(prev => ({ ...prev, [sessionId]: '個別支援計画プロンプト生成中...' }));
 
     try {
       const result = await api.generatePhase3Prompt(sessionId);
@@ -957,6 +987,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
   const fetchSessionAudioBlob = async (sessionId: string) => {
     if (!sessionId) return;
+    // Clear previous error to allow manual retries.
+    setSessionAudioError(prev => {
+      if (!prev[sessionId]) return prev;
+      const next = { ...prev };
+      delete next[sessionId];
+      return next;
+    });
     setSessionAudioLoading(prev => ({ ...prev, [sessionId]: true }));
     try {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8052';
@@ -965,7 +1002,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         headers: { 'X-API-Token': apiToken }
       });
       if (!response.ok) {
-        throw new Error('Failed to fetch audio');
+        if (response.status === 404) {
+          setSessionAudioError(prev => ({ ...prev, [sessionId]: { kind: 'not_found', message: '録音データがありません。' } }));
+          return;
+        }
+        throw new Error(`Failed to fetch audio (status=${response.status})`);
       }
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -979,7 +1020,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       });
     } catch (err) {
       console.warn('Failed to fetch audio blob:', err);
-      alert('録音データの取得に失敗しました。');
+      setSessionAudioError(prev => ({ ...prev, [sessionId]: { kind: 'error', message: '録音データを取得できませんでした。' } }));
     } finally {
       setSessionAudioLoading(prev => ({ ...prev, [sessionId]: false }));
     }
@@ -995,7 +1036,11 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         headers: { 'X-API-Token': apiToken }
       });
       if (!response.ok) {
-        throw new Error('Failed to download audio');
+        if (response.status === 404) {
+          setSessionAudioError(prev => ({ ...prev, [sessionId]: { kind: 'not_found', message: '録音データがありません。' } }));
+          return;
+        }
+        throw new Error(`Failed to download audio (status=${response.status})`);
       }
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -1008,7 +1053,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       URL.revokeObjectURL(objectUrl);
     } catch (err) {
       console.warn('Failed to download audio blob:', err);
-      alert('録音データのダウンロードに失敗しました。');
+      setSessionAudioError(prev => ({ ...prev, [sessionId]: { kind: 'error', message: '録音データをダウンロードできませんでした。' } }));
     } finally {
       setSessionAudioDownloading(prev => ({ ...prev, [sessionId]: false }));
     }
@@ -1257,6 +1302,10 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       if (recordingToastTimerRef.current) {
         clearTimeout(recordingToastTimerRef.current);
         recordingToastTimerRef.current = null;
+      }
+      if (manualToastTimerRef.current) {
+        clearTimeout(manualToastTimerRef.current);
+        manualToastTimerRef.current = null;
       }
     };
   }, []);
@@ -1517,42 +1566,56 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           </div>
         )}
 
-        {(recordingCompletionToastMessage || getGlobalProcessingToastMessage()) && (
-          <div
-            style={{
-              position: 'fixed',
-              left: '24px',
-              bottom: '24px',
-              zIndex: 1000,
-              background: '#ffffff',
-              color: '#111827',
-              border: '1px solid #E5E7EB',
-              padding: '14px 16px',
-              borderRadius: '12px',
-              fontSize: '14px',
-              fontWeight: 500,
-              boxShadow: '0 10px 28px rgba(15, 23, 42, 0.16)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              maxWidth: '420px'
-            }}
-          >
-            {recordingCompletionToastMessage ? (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6.25" stroke="#10B981" strokeWidth="1.5" />
-                <path d="M5 8L7 10L11 6" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : (
-              <svg width="14" height="14" className="spinning" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="#D1D5DB" strokeWidth="1.5" />
-                <path d="M8 2C4.69 2 2 4.69 2 8" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            )}
-            <span>{recordingCompletionToastMessage || getGlobalProcessingToastMessage()}</span>
-            {!recordingCompletionToastMessage && isPollingRefresh && <span style={{ color: '#6B7280' }}>更新中...</span>}
-          </div>
-        )}
+        {(() => {
+          const globalMessage = getGlobalProcessingToastMessage();
+          const message = manualProcessingToast?.message || recordingCompletionToastMessage || globalMessage;
+          if (!message) return null;
+          const kind = manualProcessingToast?.kind || (recordingCompletionToastMessage ? 'success' : 'loading');
+          const showRefresh = !manualProcessingToast && !recordingCompletionToastMessage;
+
+          return (
+            <div
+              style={{
+                position: 'fixed',
+                left: '24px',
+                bottom: '24px',
+                zIndex: 1000,
+                background: '#ffffff',
+                color: '#111827',
+                border: '1px solid #E5E7EB',
+                padding: '14px 16px',
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontWeight: 500,
+                boxShadow: '0 10px 28px rgba(15, 23, 42, 0.16)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                maxWidth: '420px'
+              }}
+            >
+              {kind === 'success' ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6.25" stroke="#10B981" strokeWidth="1.5" />
+                  <path d="M5 8L7 10L11 6" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : kind === 'error' ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1.5L15 14.5H1L8 1.5Z" stroke="#EF4444" strokeWidth="1.5" />
+                  <path d="M8 6V9.5" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="8" cy="12" r="0.75" fill="#EF4444" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" className="spinning" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6" stroke="#D1D5DB" strokeWidth="1.5" />
+                  <path d="M8 2C4.69 2 2 4.69 2 8" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              )}
+              <span>{message}</span>
+              {showRefresh && isPollingRefresh && <span style={{ color: '#6B7280' }}>更新中...</span>}
+            </div>
+          );
+        })()}
 
         {supportPlans.length > 0 && (
           <div className="plan-selector-grid">
@@ -2258,29 +2321,60 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           <span style={{ width: '4px', height: '16px', background: 'var(--accent-success)', borderRadius: '2px' }}></span>
                           録音ファイル
                         </h5>
-                      {sessionAudioSrc[plan.sessions[0].id] ? (
-                        <audio controls src={sessionAudioSrc[plan.sessions[0].id]} style={{ width: '100%' }} />
-                      ) : (
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          録音データを読み込むと、ここで音声を再生できます。
-                        </div>
-                      )}
-                      <div className="prompt-actions assessment-section-footer">
-                        <button
-                          className="prompt-success-btn"
-                          onClick={() => fetchSessionAudioBlob(plan.sessions[0].id)}
-                          disabled={sessionAudioLoading[plan.sessions[0].id]}
-                        >
-                          {sessionAudioLoading[plan.sessions[0].id] ? '読み込み中...' : '再読み込み'}
-                        </button>
-                        <button
-                          className="prompt-rerun-btn"
-                          onClick={() => downloadSessionAudio(plan.sessions[0].id)}
-                          disabled={sessionAudioDownloading[plan.sessions[0].id]}
-                        >
-                          {sessionAudioDownloading[plan.sessions[0].id] ? '取得中...' : 'ダウンロード'}
-                        </button>
-                      </div>
+                      {(() => {
+                        const sessionId = plan.sessions![0].id;
+                        const hasAudioPath = !!plan.sessions?.[0]?.s3_audio_path;
+                        const audioError = sessionAudioError[sessionId];
+
+                        if (sessionAudioSrc[sessionId]) {
+                          return <audio controls src={sessionAudioSrc[sessionId]} style={{ width: '100%' }} />;
+                        }
+
+                        if (!hasAudioPath) {
+                          return (
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              録音データはありません。
+                            </div>
+                          );
+                        }
+
+                        if (audioError) {
+                          const color = audioError.kind === 'error' ? 'var(--accent-danger, #ef4444)' : 'var(--text-secondary)';
+                          return (
+                            <div style={{ fontSize: '12px', color }}>
+                              {audioError.message}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            録音データを読み込むと、ここで音声を再生できます。
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        const session = plan.sessions?.[0];
+                        if (!session?.s3_audio_path) return null;
+                        return (
+                          <div className="prompt-actions assessment-section-footer">
+                            <button
+                              className="prompt-success-btn"
+                              onClick={() => fetchSessionAudioBlob(session.id)}
+                              disabled={sessionAudioLoading[session.id]}
+                            >
+                              {sessionAudioLoading[session.id] ? '読み込み中...' : '再読み込み'}
+                            </button>
+                            <button
+                              className="prompt-rerun-btn"
+                              onClick={() => downloadSessionAudio(session.id)}
+                              disabled={sessionAudioDownloading[session.id] || sessionAudioError[session.id]?.kind === 'not_found'}
+                            >
+                              {sessionAudioDownloading[session.id] ? '取得中...' : 'ダウンロード'}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                       {/* Transcription Section */}
@@ -2454,7 +2548,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
-                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : '事実抽出を再実行'}
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '事実抽出中') : '事実抽出を実行'}
                               </button>
                             </div>
                             {phaseResult[session.id] && (
@@ -2504,7 +2598,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      Phase 1 の処理結果がありません
+                      事実抽出の処理結果がありません
                     </div>
                   )}
                 </div>
@@ -2558,7 +2652,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
-                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 2 のみ再実行'}
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '事実整理中') : '事実整理を実行'}
                               </button>
                             </div>
                             {phaseResult[session.id] && (
@@ -2588,39 +2682,27 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           <CopyButton text={JSON.stringify(plan.sessions[0].fact_structuring_result_v1, null, 2)} copyKey={`output_phase2_${plan.sessions[0].id}`} />
                         </div>
                         <pre className="prompt-content">{JSON.stringify(plan.sessions[0].fact_structuring_result_v1, null, 2)}</pre>
+                        <div className="prompt-actions">
+                          <button
+                            className="prompt-rerun-btn"
+                            onClick={() => {
+                              if (plan.sessions?.[0]?.id) {
+                                handleGeneratePhase3Prompt(plan.sessions[0].id, plan.id);
+                              }
+                            }}
+                            disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
+                          >
+                            {reanalyzing[plan.sessions[0].id]
+                              ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || '個別支援計画プロンプト生成中...')
+                              : '個別支援計画プロンプト生成'}
+                          </button>
+                        </div>
                       </details>
                       <Phase2Display data={plan.sessions[0].fact_structuring_result_v1 as any} />
-                      {/* Phase 3 prompt generation button */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', padding: '16px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                        <button
-                          onClick={() => {
-                            if (plan.sessions?.[0]?.id) {
-                              handleGeneratePhase3Prompt(plan.sessions[0].id, plan.id);
-                            }
-                          }}
-                          disabled={reanalyzing[plan.sessions?.[0]?.id || '']}
-                          style={{
-                            padding: '8px 20px',
-                            borderRadius: '6px',
-                            border: '1px solid rgba(59, 130, 246, 0.4)',
-                            background: '#3b82f6',
-                            color: 'white',
-                            fontSize: '13px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            opacity: reanalyzing[plan.sessions?.[0]?.id || ''] ? 0.6 : 1,
-                            transition: 'all 0.2s ease',
-                          }}
-                        >
-                          {reanalyzing[plan.sessions[0].id]
-                            ? (reanalysisPhase[plan.sessions?.[0]?.id || ''] || 'Phase 3プロンプト生成中...')
-                            : 'Phase 3 プロンプト生成'}
-                        </button>
-                      </div>
                     </>
                   ) : (
                     <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      Phase 2 の処理結果がありません
+                      事実整理の処理結果がありません
                     </div>
                   )}
                 </div>
@@ -2674,7 +2756,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                                 }}
                                 disabled={reanalyzing[session.id]}
                               >
-                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '実行中...') : 'Phase 3 のみ再実行'}
+                                {reanalyzing[session.id] ? (reanalysisPhase[session.id] || '個別支援計画生成中') : '個別支援計画を実行'}
                               </button>
                             </div>
                             {phaseResult[session.id] && (
@@ -2776,7 +2858,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       {phaseRerunModal && (
         <div className="modal-overlay" onClick={() => setPhaseRerunModal(null)}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <h3>{phaseRerunModal.phase === 1 ? '事実抽出を再実行' : `Phase ${phaseRerunModal.phase} を再実行`}</h3>
+            <h3>{phaseRerunModal.phase === 1 ? '事実抽出を実行' : phaseRerunModal.phase === 2 ? '事実整理を実行' : '個別支援計画を実行'}</h3>
             {phaseRerunModal.modelUsed && (
               <div className="current-model-badge" style={{ marginBottom: '12px' }}>
                 前回使用: {phaseRerunModal.modelUsed}

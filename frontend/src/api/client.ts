@@ -6,7 +6,7 @@ export interface InterviewSession {
   facility_id: string;
   subject_id: string;
   staff_id?: string | null;
-  s3_audio_path: string;
+  s3_audio_path?: string | null;
   transcription?: string | null;
   status: 'uploaded' | 'transcribing' | 'transcribed' | 'analyzing' | 'completed' | 'error' | 'failed';
   duration_seconds?: number | null;
@@ -168,14 +168,6 @@ export interface SupportItem {
   staff: string;
   notes: string;
   priority: number;
-}
-
-// Response from sync-from-assessment API
-export interface SyncFromAssessmentResponse {
-  success: boolean;
-  plan_id: string;
-  synced_fields: string[];
-  message: string;
 }
 
 export interface SupportPlanCreate {
@@ -363,12 +355,6 @@ export const api = {
   deleteSupportPlan: (planId: string) =>
     apiRequest<void>(`/api/support-plans/${planId}`, {
       method: 'DELETE',
-    }),
-
-  // Sync assessment_v1 data to support plan xxx_ai_generated columns
-  syncFromAssessment: (planId: string) =>
-    apiRequest<SyncFromAssessmentResponse>(`/api/support-plans/${planId}/sync-from-assessment`, {
-      method: 'POST',
     }),
 
   // Subjects API

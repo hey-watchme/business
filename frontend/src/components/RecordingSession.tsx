@@ -429,7 +429,7 @@ const RecordingSession: React.FC<RecordingSessionProps> = ({ childName, childAva
         setIsRecording(true);
       } catch (error) {
         console.error('Error starting recording:', error);
-        alert('録音の開始に失敗しました');
+        // Avoid blocking alert loops; just close the overlay.
         onClose();
       }
     };
