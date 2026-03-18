@@ -665,7 +665,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実抽出中' }));
       showManualToast({ kind: 'loading', message: '事実抽出中' }, null);
       await api.triggerPhase1(sessionId, false, modelConfig.provider, modelConfig.model, undefined, false);
-      await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousPhase1Value, { timeoutMs: 120_000, label: '事実抽出' });
+      await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousPhase1Value, { timeoutMs: 180_000, label: '事実抽出' });
 
       // Update previousUpdatedAt for Phase 2
       const afterPhase1 = await api.getSession(sessionId);
@@ -687,7 +687,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '個別支援計画生成中' }));
       showManualToast({ kind: 'loading', message: '個別支援計画生成中' }, null);
       await api.triggerPhase3(sessionId, false, modelConfig.provider, modelConfig.model);
-      await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousPhase3Value, { timeoutMs: 300_000, label: '個別支援計画生成' });
+      await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousPhase3Value, { timeoutMs: 180_000, label: '個別支援計画生成' });
 
       // Refresh plan data
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -781,13 +781,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
       if (phase === 1) {
         await api.triggerPhase1(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution, false);
-        await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousFieldValue, { timeoutMs: 120_000, label: '事実抽出' });
+        await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousFieldValue, { timeoutMs: 180_000, label: '事実抽出' });
       } else if (phase === 2) {
         await api.triggerPhase2(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution);
         await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousFieldValue, { timeoutMs: 180_000, label: '事実整理' });
       } else if (phase === 3) {
         await api.triggerPhase3(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution);
-        await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousFieldValue, { timeoutMs: 300_000, label: '個別支援計画生成' });
+        await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousFieldValue, { timeoutMs: 180_000, label: '個別支援計画生成' });
       }
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
