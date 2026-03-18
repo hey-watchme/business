@@ -1528,6 +1528,81 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     }
   };
 
+  const handleDownloadPipelineTrace = (plan: SupportPlan) => {
+    const session = plan.sessions?.[0];
+    if (!session) {
+      showManualToast({ kind: 'error', message: 'エラー: セッションが見つかりません。' }, 4000);
+      return;
+    }
+
+    const safeTitle = (plan.title || '').trim() || plan.id.slice(0, 8);
+    const safeFileTitle = safeTitle.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/g, '_').slice(0, 40);
+    const filename = `pipeline_${safeFileTitle}_${session.id.slice(0, 8)}.txt`;
+
+    const tryParseJson = (text: string) => {
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    };
+
+    const extractFencedJson = (text: string) => {
+      const m = text.match(/```json\s*([\s\S]*?)```/i);
+      if (!m) return null;
+      const jsonText = (m[1] || '').trim();
+      if (!jsonText) return null;
+      return tryParseJson(jsonText);
+    };
+
+    const stringifyForReport = (value: unknown) => {
+      if (value === null || value === undefined) return '(なし)';
+      if (typeof value === 'string') {
+        const direct = tryParseJson(value);
+        if (direct) return JSON.stringify(direct, null, 2);
+        const fenced = extractFencedJson(value);
+        if (fenced) return JSON.stringify(fenced, null, 2);
+        return value;
+      }
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch {
+        return String(value);
+      }
+    };
+
+    const sections: string[] = [];
+    sections.push(`# パイプライン出力（プロンプト + JSON）`);
+    sections.push(`- プラン: ${plan.title || '(無題)'} (${plan.id})`);
+    sections.push(`- セッションID: ${session.id}`);
+    sections.push(`- 実施日時: ${formatDate(session.recorded_at)}`);
+    sections.push('');
+
+    const addPhase = (title: string, prompt: unknown, result: unknown) => {
+      sections.push(`\n---\n## ${title}\n`);
+      sections.push(`### 1) プロンプト\n`);
+      sections.push(stringifyForReport(prompt));
+      sections.push(`\n### 2) 結果（JSON）\n`);
+      sections.push(stringifyForReport(result));
+      sections.push('');
+    };
+
+    addPhase('Phase 1: 事実抽出', session.fact_extraction_prompt_v1, session.fact_extraction_result_v1);
+    addPhase('Phase 2: 事実整理', session.fact_structuring_prompt_v1, session.fact_structuring_result_v1);
+    addPhase('Phase 3: 個別支援計画生成', session.assessment_prompt_v1, session.assessment_result_v1);
+
+    const content = sections.join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
   const handleDeletePlan = async (plan: SupportPlan) => {
     // Confirmation dialog
     const sessionCount = plan.sessions?.length || 0;
@@ -1796,27 +1871,47 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                     </span>
                     このセッションの分析をやり直す
                   </button>
-                  <button
-                    className="session-actions-item"
-                    role="menuitem"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeActionMenu(e);
-                      handleDownloadExcel(plan);
-                    }}
-                  >
+	                  <button
+	                    className="session-actions-item"
+	                    role="menuitem"
+	                    onClick={(e) => {
+	                      e.stopPropagation();
+	                      closeActionMenu(e);
+	                      handleDownloadExcel(plan);
+	                    }}
+	                  >
                     <span className="session-actions-icon" style={{ color: '#16a34a' }}>
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                         <path d="M12 10V12H4V10M8 3V9M8 9L11 6M8 9L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </span>
-                    Excelダウンロード
-                  </button>
-                  <button
-                    className="session-actions-item"
-                    role="menuitem"
-                    onClick={(e) => {
-                      e.stopPropagation();
+	                    Excelダウンロード
+	                  </button>
+	                  <button
+	                    className="session-actions-item"
+	                    role="menuitem"
+	                    disabled={!plan.sessions?.[0]?.id}
+	                    onClick={(e) => {
+	                      e.stopPropagation();
+	                      closeActionMenu(e);
+	                      handleDownloadPipelineTrace(plan);
+	                    }}
+	                  >
+	                    <span className="session-actions-icon" style={{ color: 'var(--text-secondary)' }}>
+	                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+	                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+	                        <path d="M14 2v6h6" />
+	                        <path d="M12 18v-6" />
+	                        <path d="M9 15l3 3 3-3" />
+	                      </svg>
+	                    </span>
+	                    プロンプト・JSONダウンロード
+	                  </button>
+	                  <button
+	                    className="session-actions-item"
+	                    role="menuitem"
+	                    onClick={(e) => {
+	                      e.stopPropagation();
                       closeActionMenu(e);
                       handleDeletePlan(plan);
                     }}
