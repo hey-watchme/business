@@ -576,10 +576,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
     sessionId: string,
     field: string,
     previousUpdatedAt?: string,
-    previousFieldValue?: unknown
+    previousFieldValue?: unknown,
+    options?: { timeoutMs?: number; intervalMs?: number; label?: string }
   ): Promise<boolean> => {
-    const maxAttempts = 60;
-    let attempts = 0;
+    const timeoutMs = options?.timeoutMs ?? 60_000;
+    const intervalMs = options?.intervalMs ?? 1_000;
+    const label = options?.label ?? field;
+    const startedAt = Date.now();
 
     const stringifyValue = (value: unknown): string | null => {
       if (value === null || value === undefined) return null;
@@ -593,8 +596,8 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
     const previousFieldSerialized = stringifyValue(previousFieldValue);
 
-    while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    while (Date.now() - startedAt < timeoutMs) {
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
 
       try {
         const session = await api.getSession(sessionId);
@@ -610,7 +613,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           // If we have a previous updated_at, wait until it actually changes
           if (previousUpdatedAt && session.updated_at === previousUpdatedAt) {
             // Data exists but hasn't been updated yet - keep waiting
-            attempts++;
             continue;
           }
 
@@ -618,7 +620,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
           if (previousFieldSerialized !== null) {
             const currentFieldSerialized = stringifyValue(value);
             if (currentFieldSerialized === previousFieldSerialized) {
-              attempts++;
               continue;
             }
           }
@@ -629,11 +630,9 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
         if (err instanceof Error && err.message.includes('failed')) throw err;
         console.error('Polling error:', err);
       }
-
-      attempts++;
     }
 
-    throw new Error(`Timeout waiting for ${field}`);
+    throw new Error(`Timeout waiting for ${label}`);
   };
 
   const showManualToast = (toast: { message: string; kind: 'loading' | 'success' | 'error' }, ttlMs?: number | null) => {
@@ -666,7 +665,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実抽出中' }));
       showManualToast({ kind: 'loading', message: '事実抽出中' }, null);
       await api.triggerPhase1(sessionId, false, modelConfig.provider, modelConfig.model, undefined, false);
-      await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousPhase1Value);
+      await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousPhase1Value, { timeoutMs: 120_000, label: '事実抽出' });
 
       // Update previousUpdatedAt for Phase 2
       const afterPhase1 = await api.getSession(sessionId);
@@ -677,7 +676,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '事実整理中' }));
       showManualToast({ kind: 'loading', message: '事実整理中' }, null);
       await api.triggerPhase2(sessionId, false, modelConfig.provider, modelConfig.model);
-      await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousPhase2Value);
+      await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousPhase2Value, { timeoutMs: 180_000, label: '事実整理' });
 
       // Update previousUpdatedAt for Phase 3
       const afterPhase2 = await api.getSession(sessionId);
@@ -688,7 +687,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
       setReanalysisPhase(prev => ({ ...prev, [sessionId]: '個別支援計画生成中' }));
       showManualToast({ kind: 'loading', message: '個別支援計画生成中' }, null);
       await api.triggerPhase3(sessionId, false, modelConfig.provider, modelConfig.model);
-      await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousPhase3Value);
+      await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousPhase3Value, { timeoutMs: 300_000, label: '個別支援計画生成' });
 
       // Refresh plan data
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -782,13 +781,13 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
 
       if (phase === 1) {
         await api.triggerPhase1(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution, false);
-        await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousFieldValue);
+        await pollSessionField(sessionId, 'fact_extraction_result_v1', previousUpdatedAt, previousFieldValue, { timeoutMs: 120_000, label: '事実抽出' });
       } else if (phase === 2) {
         await api.triggerPhase2(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution);
-        await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousFieldValue);
+        await pollSessionField(sessionId, 'fact_structuring_result_v1', previousUpdatedAt, previousFieldValue, { timeoutMs: 180_000, label: '事実整理' });
       } else if (phase === 3) {
         await api.triggerPhase3(sessionId, true, modelConfig.provider, modelConfig.model, promptForExecution);
-        await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousFieldValue);
+        await pollSessionField(sessionId, 'assessment_result_v1', previousUpdatedAt, previousFieldValue, { timeoutMs: 300_000, label: '個別支援計画生成' });
       }
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
