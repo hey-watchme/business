@@ -477,25 +477,42 @@
 /* Official Document Header */
 .official-document-header {
   padding: 40px;
-  background: white;
-  border-bottom: 2px solid #333;
-  color: #1a1a1a;
+  background: #f5f5f0;
+  color: #222;
   font-family: 'Inter', 'Noto Sans JP', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  border-radius: 6px;
+  margin: 16px 0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+
+  /* Override dark-theme CSS vars for document area */
+  --bg-primary: #f5f5f0;
+  --bg-secondary: #ebe9e4;
+  --bg-tertiary: #e2e0da;
+  --bg-hover: #e8e6e0;
+  --text-primary: #222;
+  --text-secondary: #555;
+  --text-muted: #888;
+  --border-color: #999;
+  --border-primary: #999;
+  --accent-primary: #5a3dbf;
+  --accent-secondary: #4a2eaf;
 }
 
 .doc-main-title {
   text-align: center;
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  margin: 0 0 32px 0;
-  color: #000;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  margin: 0 0 28px 0;
+  color: #222;
   text-decoration: underline;
-  text-underline-offset: 8px;
+  text-underline-offset: 6px;
 }
 
 .doc-info-table {
-  border: 1px solid #000;
+  border: 1px solid #999;
   margin-bottom: 24px;
   display: flex;
   flex-direction: column;
@@ -503,7 +520,7 @@
 
 .doc-row {
   display: flex;
-  border-bottom: 1px solid #000;
+  border-bottom: 1px solid #999;
 }
 
 .doc-row:last-child {
@@ -518,11 +535,11 @@
 
 .doc-cell.label {
   width: 140px;
-  background: #f9f9f9;
+  background: #ebe9e4;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
   color: #444;
-  border-right: 1px solid #000;
+  border-right: 1px solid #999;
   flex-shrink: 0;
 }
 
@@ -532,14 +549,15 @@
 
 .doc-cell.value {
   flex: 1;
-  font-size: 14px;
-  font-weight: 700;
-  color: #000;
+  font-size: 13px;
+  font-weight: 500;
+  color: #222;
   padding: 12px 16px;
 }
 
 .doc-cell.value.name {
-  font-size: 18px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .doc-row-split {
@@ -553,7 +571,7 @@
 }
 
 .doc-half:not(:last-child) {
-  border-right: 1px solid #000;
+  border-right: 1px solid #999;
 }
 
 /* Nested Table for Needs */
@@ -566,7 +584,7 @@
 
 .nested-info-row {
   display: flex;
-  border-bottom: 1px solid #000;
+  border-bottom: 1px solid #999;
 }
 
 .nested-info-row:last-child {
@@ -575,11 +593,12 @@
 
 .nested-label {
   width: 100px;
-  background: #f9f9f9;
+  background: #ebe9e4;
   font-size: 12px;
   font-weight: 600;
+  color: #444;
   padding: 12px;
-  border-right: 1px solid #000;
+  border-right: 1px solid #999;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -590,8 +609,9 @@
   flex: 1;
   padding: 12px 16px;
   font-size: 13px;
-  line-height: 1.5;
-  font-weight: 500;
+  line-height: 1.6;
+  font-weight: 400;
+  color: #222;
 }
 
 /* Service Time List */
@@ -626,7 +646,7 @@
 
 .page-indicator {
   font-size: 13px;
-  color: #666;
+  color: #888;
   font-weight: 500;
 }
 
@@ -839,29 +859,32 @@
   border-collapse: collapse;
   margin: 24px 0;
   font-size: 13px;
-  border: 1px solid #000;
+  border: 1px solid #999;
 }
 
 .support-details-table thead {
-  background: #f9f9f9;
+  background: #ebe9e4;
 }
 
 .support-details-table th {
-  padding: 12px 10px;
-  border: 1px solid #000;
+  padding: 10px 8px;
+  border: 1px solid #999;
   font-weight: 600;
+  font-size: 12px;
   text-align: center;
   vertical-align: middle;
   line-height: 1.4;
-  color: #000;
+  color: #444;
 }
 
 .support-details-table td {
-  padding: 12px 10px;
-  border: 1px solid #000;
+  padding: 10px 8px;
+  border: 1px solid #999;
   vertical-align: top;
+  font-size: 13px;
+  font-weight: 400;
   line-height: 1.6;
-  color: #1a1a1a;
+  color: #222;
 }
 
 .support-details-table td.center {
@@ -869,7 +892,7 @@
 }
 
 .support-details-table tbody tr:hover {
-  background: #fafafa;
+  background: #eeeee8;
 }
 
 /* Column widths */

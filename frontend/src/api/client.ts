@@ -160,6 +160,20 @@ export interface SupportPlan {
     timeline?: string;
     notes?: string;
   } | null;
+
+  // Display rows (computed by backend from plan_rules)
+  display_rows?: DisplayRow[] | null;
+}
+
+export interface DisplayRow {
+  row_label: string;        // "本人支援" | "家族支援" | "移行支援\n地域支援"
+  target: string;
+  methods_text: string;     // Bulleted text
+  domain_category: string;
+  timeline_months: number;  // Duration in months (e.g. 6)
+  staff: string;
+  notes: string;
+  priority: string;
 }
 
 export interface SupportItem {
@@ -238,6 +252,8 @@ export interface Subject {
   school_name?: string | null;
   school_type?: string | null;
   guardians?: any | null;
+  recipient_certificate_number?: string | null;
+  attending_facilities?: string[] | null;
 
   created_at: string;
   updated_at: string;
@@ -399,6 +415,29 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  updateSubject: (subjectId: string, data: {
+    name?: string;
+    age?: number | null;
+    gender?: string;
+    notes?: string;
+    birth_date?: string;
+    prefecture?: string;
+    city?: string;
+    school_name?: string;
+    school_type?: string;
+    diagnosis?: string[];
+    guardians?: Record<string, { name: string; relationship: string }>;
+    recipient_certificate_number?: string;
+    attending_facilities?: string[];
+  }) =>
+    apiRequest<Subject>(`/api/subjects/${subjectId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+
+  deleteSubject: (subjectId: string) =>
+    apiRequest<{ success: boolean }>(`/api/subjects/${subjectId}`, { method: 'DELETE' }),
 
   linkSubject: (subjectId: string, facilityId: string) =>
     apiRequest<{ success: boolean; message: string }>(`/api/subjects/${subjectId}/link`, {

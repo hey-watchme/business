@@ -36,6 +36,7 @@ def get_asr_provider():
 
 from services.llm_providers import get_current_llm, LLMFactory, CURRENT_PROVIDER, CURRENT_MODEL
 from services.llm_models import get_model_catalog
+from services.plan_rules import build_display_rows
 
 # Load environment variables
 load_dotenv()
@@ -1510,16 +1511,12 @@ async def get_support_plan(
         raise HTTPException(status_code=500, detail="Database not configured")
 
     try:
-        # Get support plan with subject info
+        # Get support plan with subject info (include school_name for display_rows)
         plan_result = supabase.table('business_support_plans')\
-            .select('*, subjects!inner(name, age, birth_date)')\
+            .select('*, subjects!inner(name, age, birth_date, school_name)')\
             .eq('id', plan_id)\
             .single()\
             .execute()
-
-
-
-
 
         if not plan_result.data:
             raise HTTPException(status_code=404, detail="Support plan not found")
@@ -1531,10 +1528,24 @@ async def get_support_plan(
             .order('recorded_at', desc=True)\
             .execute()
 
+        # Build display_rows from the latest session's assessment_v1
+        display_rows = []
+        if sessions_result.data:
+            assessment_result = sessions_result.data[0].get('assessment_result_v1')
+            if assessment_result:
+                from services.excel_generator import extract_assessment_v1
+                assessment_v1 = extract_assessment_v1(
+                    assessment_result if isinstance(assessment_result, dict) else {}
+                )
+                school_name = (plan_result.data.get('subjects') or {}).get('school_name', '')
+                session_data = {'subject_school_name': school_name}
+                display_rows = build_display_rows(assessment_v1, session_data)
+
         return {
             **plan_result.data,
             'sessions': sessions_result.data,
-            'session_count': len(sessions_result.data)
+            'session_count': len(sessions_result.data),
+            'display_rows': display_rows,
         }
 
     except HTTPException:
@@ -1898,7 +1909,7 @@ async def get_subjects(
         # Query subjects using business_facility_subjects for filtering if facility_id is provided
         if facility_id:
             # We use business_facility_subjects!inner to only return subjects linked to this facility
-            query = supabase.table('subjects').select('subject_id, name, age, gender, avatar_url, notes, prefecture, city, cognitive_type, birth_date, diagnosis, school_name, school_type, created_at, updated_at, business_facility_subjects!inner(facility_id)')
+            query = supabase.table('subjects').select('subject_id, name, age, gender, avatar_url, notes, prefecture, city, cognitive_type, birth_date, diagnosis, school_name, school_type, guardians, recipient_certificate_number, attending_facilities, created_at, updated_at, business_facility_subjects!inner(facility_id)')
 
             query = query.eq('business_facility_subjects.facility_id', facility_id)
         else:
@@ -2025,6 +2036,78 @@ async def create_subject(
 
     except Exception as e:
         print(f"Error creating subject: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SubjectUpdate(BaseModel):
+    name: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    notes: Optional[str] = None
+    birth_date: Optional[str] = None
+    prefecture: Optional[str] = None
+    city: Optional[str] = None
+    school_name: Optional[str] = None
+    school_type: Optional[str] = None
+    diagnosis: Optional[list] = None
+    guardians: Optional[dict] = None
+    recipient_certificate_number: Optional[str] = None
+    attending_facilities: Optional[list] = None
+
+
+@app.patch("/api/subjects/{subject_id}")
+async def update_subject(
+    subject_id: str,
+    update: SubjectUpdate,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        result = supabase.table('subjects').update(update_data).eq('subject_id', subject_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Subject not found")
+
+        return result.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating subject: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/subjects/{subject_id}")
+async def delete_subject(
+    subject_id: str,
+    x_api_token: str = Header(None, alias="X-API-Token")
+):
+    if x_api_token != API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    try:
+        # Remove facility links first
+        supabase.table('business_facility_subjects').delete().eq('subject_id', subject_id).execute()
+        # Delete subject
+        result = supabase.table('subjects').delete().eq('subject_id', subject_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting subject: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2182,7 +2265,7 @@ async def download_support_plan_excel(
         if subject_id:
             try:
                 subject_result = supabase.table('subjects')\
-                    .select('subject_id, name, age')\
+                    .select('subject_id, name, age, school_name')\
                     .eq('subject_id', subject_id)\
                     .single()\
                     .execute()
@@ -2191,6 +2274,7 @@ async def download_support_plan_excel(
                     # Add subject info to session_data
                     session_data['subject_name'] = subject_result.data.get('name')
                     session_data['subject_age'] = subject_result.data.get('age')
+                    session_data['subject_school_name'] = subject_result.data.get('school_name', '')
             except Exception as e:
                 print(f"Failed to fetch subject info: {str(e)}")
                 # Continue without subject info

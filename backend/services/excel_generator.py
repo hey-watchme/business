@@ -10,6 +10,21 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 
+# ── Import shared constants from plan_rules ──────────────────────
+from services.plan_rules import (
+    FACILITY_STAFF,
+    DEFAULT_TIMELINE_MONTHS,
+    NOTES_DEFAULT,
+    NOTES_FAMILY,
+    NOTES_TRANSITION,
+    build_display_rows,
+    format_timeline,
+)
+
+# Text form for Excel cells
+DEFAULT_TIMELINE = format_timeline(DEFAULT_TIMELINE_MONTHS)
+# ────────────────────────────────────────────────────────────────────
+
 
 def generate_support_plan_excel(
     session_data: dict,
@@ -311,11 +326,11 @@ def generate_main_support_plan(
     if not isinstance(support_items, list):
         support_items = []
 
-    for item in support_items:
+    for idx, item in enumerate(support_items, start=1):
         start_row = current_row
 
-        # Category
-        ws[f'A{current_row}'] = item.get('category', '')
+        # Category → fixed label "本人支援"
+        ws[f'A{current_row}'] = '本人支援'
         ws[f'A{current_row}'].font = small_font
         ws[f'A{current_row}'].alignment = center_align
         ws[f'A{current_row}'].border = thin_border
@@ -334,20 +349,20 @@ def generate_main_support_plan(
         ws[f'C{current_row}'].alignment = left_align
         ws[f'C{current_row}'].border = thin_border
 
-        # Timeline
-        ws[f'D{current_row}'] = item.get('timeline', '')
+        # Timeline (rule-based: fixed value)
+        ws[f'D{current_row}'] = DEFAULT_TIMELINE
         ws[f'D{current_row}'].font = small_font
         ws[f'D{current_row}'].alignment = center_align
         ws[f'D{current_row}'].border = thin_border
 
-        # Staff
-        ws[f'E{current_row}'] = item.get('staff', '')
+        # Staff (rule-based: fixed value)
+        ws[f'E{current_row}'] = FACILITY_STAFF
         ws[f'E{current_row}'].font = small_font
         ws[f'E{current_row}'].alignment = left_align
         ws[f'E{current_row}'].border = thin_border
 
-        # Priority
-        ws[f'F{current_row}'] = item.get('priority', '')
+        # Priority (rule-based: sequential index)
+        ws[f'F{current_row}'] = idx
         ws[f'F{current_row}'].font = small_font
         ws[f'F{current_row}'].alignment = center_align
         ws[f'F{current_row}'].border = thin_border
@@ -386,12 +401,12 @@ def generate_main_support_plan(
         ws[f'C{current_row}'].alignment = left_align
         ws[f'C{current_row}'].border = thin_border
 
-        ws[f'D{current_row}'] = family_support.get('timeline', '')
+        ws[f'D{current_row}'] = DEFAULT_TIMELINE
         ws[f'D{current_row}'].font = small_font
         ws[f'D{current_row}'].alignment = center_align
         ws[f'D{current_row}'].border = thin_border
 
-        ws[f'E{current_row}'] = '心理担当職員\n保護者'
+        ws[f'E{current_row}'] = f'{FACILITY_STAFF}\n保護者'
         ws[f'E{current_row}'].font = small_font
         ws[f'E{current_row}'].alignment = left_align
         ws[f'E{current_row}'].border = thin_border
@@ -433,13 +448,47 @@ def generate_main_support_plan(
         ws[f'C{current_row}'].alignment = left_align
         ws[f'C{current_row}'].border = thin_border
 
-        ws[f'D{current_row}'] = transition_support.get('timeline', '')
+        ws[f'D{current_row}'] = DEFAULT_TIMELINE
         ws[f'D{current_row}'].font = small_font
         ws[f'D{current_row}'].alignment = center_align
         ws[f'D{current_row}'].border = thin_border
 
-        partner = transition_support.get('partner_organization', '')
-        ws[f'E{current_row}'] = f'児童発達支援管理責任者\n{partner}'
+        school_name = session_data.get('subject_school_name', '') if session_data else ''
+        transition_staff_lines = [school_name, FACILITY_STAFF, '保護者']
+        transition_staff = '\n'.join([l for l in transition_staff_lines if l])
+        ws[f'E{current_row}'] = transition_staff
+        ws[f'E{current_row}'].font = small_font
+        ws[f'E{current_row}'].alignment = left_align
+        ws[f'E{current_row}'].border = thin_border
+
+        ws[f'F{current_row}'] = ''
+        ws[f'F{current_row}'].border = thin_border
+
+        ws.row_dimensions[current_row].height = 50
+        current_row += 1
+
+        # 地域支援 row (empty — for manual entry)
+        ws[f'A{current_row}'] = '地域支援'
+        ws[f'A{current_row}'].font = small_font
+        ws[f'A{current_row}'].alignment = center_align
+        ws[f'A{current_row}'].border = thin_border
+
+        ws[f'B{current_row}'] = ''
+        ws[f'B{current_row}'].font = small_font
+        ws[f'B{current_row}'].alignment = left_align
+        ws[f'B{current_row}'].border = thin_border
+
+        ws[f'C{current_row}'] = ''
+        ws[f'C{current_row}'].font = small_font
+        ws[f'C{current_row}'].alignment = left_align
+        ws[f'C{current_row}'].border = thin_border
+
+        ws[f'D{current_row}'] = DEFAULT_TIMELINE
+        ws[f'D{current_row}'].font = small_font
+        ws[f'D{current_row}'].alignment = center_align
+        ws[f'D{current_row}'].border = thin_border
+
+        ws[f'E{current_row}'] = transition_staff
         ws[f'E{current_row}'].font = small_font
         ws[f'E{current_row}'].alignment = left_align
         ws[f'E{current_row}'].border = thin_border
@@ -486,14 +535,15 @@ def generate_support_details_page2(
         plan_data: Optional business_support_plans record (2-column structure)
     """
 
-    # Set column widths
+    # Set column widths (8 columns: A-H)
     ws.column_dimensions['A'].width = 12   # 項目
-    ws.column_dimensions['B'].width = 35   # 具体的な到達目標
-    ws.column_dimensions['C'].width = 45   # 具体的な支援内容・5領域との関係性等
-    ws.column_dimensions['D'].width = 12   # 達成時期
-    ws.column_dimensions['E'].width = 25   # 提供期間
-    ws.column_dimensions['F'].width = 30   # 留意事項
-    ws.column_dimensions['G'].width = 10   # 優先順位
+    ws.column_dimensions['B'].width = 30   # 具体的な到達目標
+    ws.column_dimensions['C'].width = 38   # 具体的な支援内容
+    ws.column_dimensions['D'].width = 14   # 5領域との関係性
+    ws.column_dimensions['E'].width = 10   # 達成時期
+    ws.column_dimensions['F'].width = 22   # 提供期間
+    ws.column_dimensions['G'].width = 28   # 留意事項
+    ws.column_dimensions['H'].width = 8    # 優先順位
 
     # Styles
     header_font = Font(name='Meiryo UI', size=14, bold=True)
@@ -516,7 +566,7 @@ def generate_support_details_page2(
     current_row = 1
 
     # Title
-    ws.merge_cells(f'A{current_row}:G{current_row}')
+    ws.merge_cells(f'A{current_row}:H{current_row}')
     cell = ws[f'A{current_row}']
     cell.value = '個別支援計画書（2/2ページ）'
     cell.font = header_font
@@ -537,105 +587,73 @@ def generate_support_details_page2(
     ws[f'A{current_row}'].font = normal_font
     ws[f'A{current_row}'].alignment = left_align
 
-    ws.merge_cells(f'E{current_row}:G{current_row}')
+    ws.merge_cells(f'E{current_row}:H{current_row}')
     ws[f'E{current_row}'] = f'作成日：{datetime.now().strftime("%Y年%m月%d日")}'
     ws[f'E{current_row}'].font = normal_font
     ws[f'E{current_row}'].alignment = Alignment(horizontal='right', vertical='center')
     current_row += 2
 
-    # Table headers (7 columns)
-    headers = [
-        '項目',
-        '具体的な到達目標',
-        '具体的な支援内容・5領域との関係性等',
-        '達成時期',
-        '提供期間',
-        '留意事項',
-        '優先順位'
-    ]
-
-    for col_idx, header_text in enumerate(headers, start=1):
-        cell = ws.cell(row=current_row, column=col_idx)
+    # Table headers (8 columns; C+D share one merged header)
+    for col_letter, header_text in [('A', '項目'), ('B', '具体的な到達目標'),
+                                     ('E', '達成時期'), ('F', '提供期間'),
+                                     ('G', '留意事項'), ('H', '優先順位')]:
+        cell = ws[f'{col_letter}{current_row}']
         cell.value = header_text
         cell.font = header_cell_font
         cell.alignment = center_align
         cell.fill = header_fill
         cell.border = thin_border
 
+    ws.merge_cells(f'C{current_row}:D{current_row}')
+    ws[f'C{current_row}'].value = '具体的な支援内容・5領域との関係性等'
+    ws[f'C{current_row}'].font = header_cell_font
+    ws[f'C{current_row}'].alignment = center_align
+    ws[f'C{current_row}'].fill = header_fill
+    ws[f'C{current_row}'].border = thin_border
+    ws[f'D{current_row}'].border = thin_border
+
     ws.row_dimensions[current_row].height = 40
     current_row += 1
 
-    # Data rows - Extract support items with 2-column priority logic
+    # Build effective assessment data (plan_data overrides assessment_v1)
     if plan_data:
-        support_items_raw = get_field_value(
-            plan_data,
-            'support_items',
-            assessment_v1.get('support_items', [])
-        )
+        effective_assessment = {
+            'support_items': get_field_value(plan_data, 'support_items', assessment_v1.get('support_items', [])),
+            'family_support': get_field_value(plan_data, 'family_support', assessment_v1.get('family_support', {})),
+            'transition_support': get_field_value(plan_data, 'transition_support', assessment_v1.get('transition_support', {})),
+        }
     else:
-        support_items_raw = assessment_v1.get('support_items', [])
+        effective_assessment = {
+            'support_items': assessment_v1.get('support_items', []),
+            'family_support': assessment_v1.get('family_support', {}),
+            'transition_support': assessment_v1.get('transition_support', {}),
+        }
 
-    if not isinstance(support_items_raw, list):
-        support_items_raw = []
+    display_rows = build_display_rows(effective_assessment, session_data)
 
-    # Convert to 7-column table structure
-    support_items = []
-    for idx, item in enumerate(support_items_raw, start=1):
-        # Extract methods array and join with line breaks
-        methods = item.get('methods', [])
-        if isinstance(methods, list):
-            methods_text = '\n'.join([f"• {method}" for method in methods])
-        else:
-            methods_text = str(methods) if methods else ''
-
-        support_items.append({
-            '項目': item.get('category', '本人支援'),
-            '具体的な到達目標': item.get('target', ''),
-            '具体的な支援内容・5領域との関係性等': methods_text,
-            '達成時期': item.get('timeline', '6ヶ月'),
-            '提供期間': item.get('staff', '児童発達支援管理責任者、全職員'),
-            '留意事項': item.get('notes', ''),
-            '優先順位': str(item.get('priority', idx))
-        })
-
-    # If no support items, add empty rows for manual entry
-    if not support_items:
-        support_items = [
-            {
-                '項目': '',
-                '具体的な到達目標': '',
-                '具体的な支援内容・5領域との関係性等': '',
-                '達成時期': '',
-                '提供期間': '',
-                '留意事項': '',
-                '優先順位': ''
-            }
-            for _ in range(5)
+    def _write_s2_row(row, dr):
+        methods_text = dr['methods_text']
+        row_height = max(60, len(methods_text) // 25 * 15)
+        data = [
+            ('A', dr['row_label'],       center_align),
+            ('B', dr['target'],          left_align),
+            ('C', methods_text,          left_align),
+            ('D', dr['domain_category'], center_align),
+            ('E', format_timeline(dr['timeline_months']), center_align),
+            ('F', dr['staff'],           left_align),
+            ('G', dr['notes'],           left_align),
+            ('H', dr['priority'],        center_align),
         ]
-
-    # Write data rows
-    for item in support_items:
-        row_height = max(60, len(item['具体的な支援内容・5領域との関係性等']) // 20 * 15)
-
-        for col_idx, header in enumerate(headers, start=1):
-            cell = ws.cell(row=current_row, column=col_idx)
-            cell.value = item.get(header, '')
+        for col, val, align in data:
+            cell = ws[f'{col}{row}']
+            cell.value = val
             cell.font = normal_font
-            cell.alignment = left_align if col_idx in [2, 3, 6] else center_align
+            cell.alignment = align
             cell.border = thin_border
+        ws.row_dimensions[row].height = row_height
 
-        ws.row_dimensions[current_row].height = row_height
-        current_row += 1
-
-    # Add empty rows for manual entry
-    for _ in range(5):
-        for col_idx in range(1, 8):
-            cell = ws.cell(row=current_row, column=col_idx)
-            cell.value = ''
-            cell.border = thin_border
-            cell.alignment = left_align
-
-        ws.row_dimensions[current_row].height = 60
+    for dr in display_rows:
+        _write_s2_row(current_row, dr)
         current_row += 1
 
 
@@ -1096,14 +1114,15 @@ def generate_support_details_page2_from_plan(
     """
     Generate support details page (2/2) from plan_data only
     """
-    # Set column widths
+    # Set column widths (8 columns: A-H)
     ws.column_dimensions['A'].width = 12
-    ws.column_dimensions['B'].width = 35
-    ws.column_dimensions['C'].width = 45
-    ws.column_dimensions['D'].width = 12
-    ws.column_dimensions['E'].width = 25
-    ws.column_dimensions['F'].width = 30
-    ws.column_dimensions['G'].width = 10
+    ws.column_dimensions['B'].width = 30
+    ws.column_dimensions['C'].width = 38
+    ws.column_dimensions['D'].width = 14
+    ws.column_dimensions['E'].width = 10
+    ws.column_dimensions['F'].width = 22
+    ws.column_dimensions['G'].width = 28
+    ws.column_dimensions['H'].width = 8
 
     # Styles
     header_font = Font(name='Meiryo UI', size=14, bold=True)
@@ -1125,7 +1144,7 @@ def generate_support_details_page2_from_plan(
     current_row = 1
 
     # Title
-    ws.merge_cells(f'A{current_row}:G{current_row}')
+    ws.merge_cells(f'A{current_row}:H{current_row}')
     cell = ws[f'A{current_row}']
     cell.value = '個別支援計画書（2/2ページ）'
     cell.font = header_font
@@ -1140,72 +1159,102 @@ def generate_support_details_page2_from_plan(
     ws[f'A{current_row}'].font = normal_font
     ws[f'A{current_row}'].alignment = left_align
 
-    ws.merge_cells(f'E{current_row}:G{current_row}')
+    ws.merge_cells(f'E{current_row}:H{current_row}')
     ws[f'E{current_row}'] = f'作成日：{datetime.now().strftime("%Y年%m月%d日")}'
     ws[f'E{current_row}'].font = normal_font
     ws[f'E{current_row}'].alignment = Alignment(horizontal='right', vertical='center')
     current_row += 2
 
-    # Table headers
-    headers = ['項目', '具体的な到達目標', '具体的な支援内容・5領域との関係性等',
-               '達成時期', '提供期間', '留意事項', '優先順位']
-
-    for col_idx, header_text in enumerate(headers, start=1):
-        cell = ws.cell(row=current_row, column=col_idx)
+    # Table headers (8 columns; C+D share one merged header)
+    for col_letter, header_text in [('A', '項目'), ('B', '具体的な到達目標'),
+                                     ('E', '達成時期'), ('F', '提供期間'),
+                                     ('G', '留意事項'), ('H', '優先順位')]:
+        cell = ws[f'{col_letter}{current_row}']
         cell.value = header_text
         cell.font = header_cell_font
         cell.alignment = center_align
         cell.fill = header_fill
         cell.border = thin_border
 
+    ws.merge_cells(f'C{current_row}:D{current_row}')
+    ws[f'C{current_row}'].value = '具体的な支援内容・5領域との関係性等'
+    ws[f'C{current_row}'].font = header_cell_font
+    ws[f'C{current_row}'].alignment = center_align
+    ws[f'C{current_row}'].fill = header_fill
+    ws[f'C{current_row}'].border = thin_border
+    ws[f'D{current_row}'].border = thin_border
+
     ws.row_dimensions[current_row].height = 40
     current_row += 1
 
-    # Data rows
-    support_items = get_field_value(plan_data, 'support_items', [])
-    if not isinstance(support_items, list):
-        support_items = []
+    # Extract data
+    support_items_raw_fp = get_field_value(plan_data, 'support_items', [])
+    family_support_fp = get_field_value(plan_data, 'family_support', {})
+    transition_support_fp = get_field_value(plan_data, 'transition_support', {})
 
-    for idx, item in enumerate(support_items, start=1):
-        methods = item.get('methods', [])
-        if isinstance(methods, list):
-            methods_text = '\n'.join([f"• {method}" for method in methods])
-        else:
-            methods_text = str(methods) if methods else ''
+    if not isinstance(support_items_raw_fp, list):
+        support_items_raw_fp = []
+    if not isinstance(family_support_fp, dict):
+        family_support_fp = {}
+    if not isinstance(transition_support_fp, dict):
+        transition_support_fp = {}
 
-        row_data = {
-            '項目': item.get('category', '本人支援'),
-            '具体的な到達目標': item.get('target', ''),
-            '具体的な支援内容・5領域との関係性等': methods_text,
-            '達成時期': item.get('timeline', '6ヶ月'),
-            '提供期間': item.get('staff', '児童発達支援管理責任者、全職員'),
-            '留意事項': item.get('notes', ''),
-            '優先順位': str(item.get('priority', idx))
-        }
+    school_name_fp = subject_data.get('school_name', '') if subject_data else ''
+    transition_staff_fp = '\n'.join([l for l in [school_name_fp, FACILITY_STAFF, '保護者'] if l])
 
-        for col_idx, header in enumerate(headers, start=1):
-            cell = ws.cell(row=current_row, column=col_idx)
-            cell.value = row_data.get(header, '')
+    def _write_fp_row(row, label, target, methods_text, category, timeline, staff, notes, priority):
+        row_height = max(60, len(methods_text) // 25 * 15)
+        data = [
+            ('A', label,        center_align),
+            ('B', target,       left_align),
+            ('C', methods_text, left_align),
+            ('D', category,     center_align),
+            ('E', timeline,     center_align),
+            ('F', staff,        left_align),
+            ('G', notes,        left_align),
+            ('H', priority,     center_align),
+        ]
+        for col, val, align in data:
+            cell = ws[f'{col}{row}']
+            cell.value = val
             cell.font = normal_font
-            cell.alignment = left_align if col_idx in [2, 3, 6] else center_align
+            cell.alignment = align
             cell.border = thin_border
+        ws.row_dimensions[row].height = row_height
 
-        ws.row_dimensions[current_row].height = 60
+    # 本人支援 rows (first 4; pad if fewer)
+    personal_items_fp = support_items_raw_fp[:4]
+    for idx, item in enumerate(personal_items_fp, start=1):
+        methods = item.get('methods', [])
+        methods_text = '\n'.join([f"• {m}" for m in methods]) if isinstance(methods, list) else str(methods or '')
+        _write_fp_row(current_row, '本人支援', item.get('target', ''), methods_text,
+                      item.get('category', ''), DEFAULT_TIMELINE, FACILITY_STAFF, NOTES_DEFAULT, str(idx))
+        current_row += 1
+    for idx in range(len(personal_items_fp) + 1, 5):
+        _write_fp_row(current_row, '本人支援', '', '', '', DEFAULT_TIMELINE, FACILITY_STAFF, NOTES_DEFAULT, str(idx))
         current_row += 1
 
-    # Add empty rows for manual entry
-    for _ in range(5):
-        for col_idx in range(1, 8):
-            cell = ws.cell(row=current_row, column=col_idx)
-            cell.value = ''
-            cell.border = thin_border
-            cell.alignment = left_align
-        ws.row_dimensions[current_row].height = 60
-        current_row += 1
+    # 家族支援 row
+    fm_fp = family_support_fp.get('methods', [])
+    fm_fp_text = '\n'.join([f"• {m}" for m in fm_fp]) if isinstance(fm_fp, list) else ''
+    _write_fp_row(current_row, '家族支援', family_support_fp.get('goal', ''), fm_fp_text,
+                  '', DEFAULT_TIMELINE, f'{FACILITY_STAFF}\n保護者', NOTES_FAMILY, '')
+    current_row += 1
+
+    # 移行支援 row
+    tm_fp = transition_support_fp.get('methods', [])
+    tm_fp_text = '\n'.join([f"• {m}" for m in tm_fp]) if isinstance(tm_fp, list) else ''
+    _write_fp_row(current_row, '移行支援', transition_support_fp.get('goal', ''), tm_fp_text,
+                  '', DEFAULT_TIMELINE, transition_staff_fp, NOTES_TRANSITION, '')
+    current_row += 1
+
+    # 地域支援 row (empty — for manual entry)
+    _write_fp_row(current_row, '地域支援', '', '', '', DEFAULT_TIMELINE, transition_staff_fp, NOTES_TRANSITION, '')
+    current_row += 1
 
     # Footer (agreement / consent)
     current_row += 2
-    ws.merge_cells(f'A{current_row}:G{current_row}')
+    ws.merge_cells(f'A{current_row}:H{current_row}')
     ws[f'A{current_row}'] = '提供する支援内容について、本計画書に基づき説明を受け、内容に同意しました。'
     ws[f'A{current_row}'].font = normal_font
     current_row += 2
@@ -1214,13 +1263,13 @@ def generate_support_details_page2_from_plan(
     ws[f'A{current_row}'] = '説明者：'
     ws[f'A{current_row}'].font = normal_font
 
-    ws.merge_cells(f'E{current_row}:G{current_row}')
+    ws.merge_cells(f'E{current_row}:H{current_row}')
     ws[f'E{current_row}'] = f'説明・同意日：{datetime.now().strftime("%Y年%m月%d日")}'
     ws[f'E{current_row}'].font = normal_font
     ws[f'E{current_row}'].alignment = Alignment(horizontal='right', vertical='center')
     current_row += 1
 
-    ws.merge_cells(f'E{current_row}:G{current_row}')
+    ws.merge_cells(f'E{current_row}:H{current_row}')
     ws[f'E{current_row}'] = '保護者氏名：　　　　　　　（自署または捺印）'
     ws[f'E{current_row}'].font = normal_font
     ws[f'E{current_row}'].alignment = Alignment(horizontal='right', vertical='center')

@@ -5,10 +5,32 @@ import { useSubjects } from '../contexts/SubjectContext';
 import { calculateAge } from '../utils/date';
 import './ChildrenList.css';
 
+type EditForm = {
+  name: string;
+  birth_date: string;
+  gender: string;
+  diagnosis: string;
+  school_name: string;
+  school_type: string;
+  prefecture: string;
+  city: string;
+  recipient_certificate_number: string;
+  attending_facilities: string;
+  guardian_father_name: string;
+  guardian_mother_name: string;
+  notes: string;
+};
+
 const ChildrenList: React.FC = () => {
   const { subjects, analytics, loading, refreshSubjects } = useSubjects();
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const { profile } = useAuth();
+
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Registration Modal States
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -20,6 +42,109 @@ const ChildrenList: React.FC = () => {
     notes: '',
     birth_date: ''
   });
+
+  const handleEditStart = (subject: Subject) => {
+    const g = (() => {
+      if (!subject.guardians) return {};
+      try {
+        return typeof subject.guardians === 'string' ? JSON.parse(subject.guardians) : subject.guardians;
+      } catch { return {}; }
+    })();
+    setEditForm({
+      name: subject.name || '',
+      birth_date: subject.birth_date || '',
+      gender: subject.gender || '',
+      diagnosis: subject.diagnosis ? subject.diagnosis.join('、') : '',
+      school_name: subject.school_name || '',
+      school_type: subject.school_type || '',
+      prefecture: subject.prefecture || '',
+      city: subject.city || '',
+      recipient_certificate_number: subject.recipient_certificate_number || '',
+      attending_facilities: subject.attending_facilities ? subject.attending_facilities.join('、') : '',
+      guardian_father_name: g.father?.name || '',
+      guardian_mother_name: g.mother?.name || '',
+      notes: subject.notes || '',
+    });
+    setSaveError(null);
+    setIsEditMode(true);
+  };
+
+  const handleEditCancel = () => {
+    setIsEditMode(false);
+    setEditForm(null);
+    setSaveError(null);
+  };
+
+  const handleEditSave = async () => {
+    if (!selectedSubject || !editForm) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const guardians: Record<string, { name: string; relationship: string }> = {};
+      if (editForm.guardian_father_name.trim()) guardians.father = { name: editForm.guardian_father_name.trim(), relationship: '父' };
+      if (editForm.guardian_mother_name.trim()) guardians.mother = { name: editForm.guardian_mother_name.trim(), relationship: '母' };
+
+      await api.updateSubject(selectedSubject.id, {
+        name: editForm.name,
+        birth_date: editForm.birth_date || undefined,
+        gender: editForm.gender || undefined,
+        diagnosis: editForm.diagnosis ? editForm.diagnosis.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : [],
+        school_name: editForm.school_name || undefined,
+        school_type: editForm.school_type || undefined,
+        prefecture: editForm.prefecture || undefined,
+        city: editForm.city || undefined,
+        recipient_certificate_number: editForm.recipient_certificate_number || undefined,
+        attending_facilities: editForm.attending_facilities
+          ? editForm.attending_facilities.split(/[、,，]/).map(s => s.trim()).filter(Boolean)
+          : [],
+        guardians: Object.keys(guardians).length > 0 ? guardians : undefined,
+        notes: editForm.notes || undefined,
+      });
+
+      await refreshSubjects();
+      // Update selectedSubject with new data
+      setSelectedSubject(prev => prev ? {
+        ...prev,
+        name: editForm.name,
+        birth_date: editForm.birth_date || null,
+        gender: editForm.gender || null,
+        diagnosis: editForm.diagnosis ? editForm.diagnosis.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : [],
+        school_name: editForm.school_name || null,
+        school_type: editForm.school_type || null,
+        prefecture: editForm.prefecture || null,
+        city: editForm.city || null,
+        recipient_certificate_number: editForm.recipient_certificate_number || null,
+        attending_facilities: editForm.attending_facilities
+          ? editForm.attending_facilities.split(/[、,，]/).map(s => s.trim()).filter(Boolean)
+          : [],
+        guardians: Object.keys(guardians).length > 0 ? guardians : null,
+        notes: editForm.notes || null,
+      } : null);
+      setIsEditMode(false);
+      setEditForm(null);
+    } catch (e) {
+      setSaveError('保存に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setEditForm(prev => prev ? { ...prev, [name]: value } : null);
+  };
+
+  const handleDeleteSubject = async (subject: Subject) => {
+    if (!window.confirm(`「${subject.name}」の児童情報をすべて削除します。\nこの操作は取り消せません。よろしいですか？`)) return;
+    try {
+      await api.deleteSubject(subject.id);
+      setSelectedSubject(null);
+      setIsEditMode(false);
+      await refreshSubjects();
+    } catch (e) {
+      alert('削除に失敗しました。');
+    }
+  };
 
   const handleRegisterClick = () => {
     setFormData({
@@ -387,15 +512,113 @@ const ChildrenList: React.FC = () => {
           />
           <div className="drawer">
             <div className="drawer-header">
-              <h2>児童詳細</h2>
+              <h2>{isEditMode ? '児童情報を編集' : '児童詳細'}</h2>
               <button
                 className="close-button"
-                onClick={() => setSelectedSubject(null)}
+                onClick={() => { setSelectedSubject(null); setIsEditMode(false); setEditForm(null); }}
               >
                 ×
               </button>
             </div>
             <div className="drawer-content">
+              {isEditMode && editForm ? (
+                <div style={{ width: '100%' }}>
+                  <div className="drawer-edit-form">
+                    <p className="form-section-title">基本情報</p>
+                    <div className="form-group">
+                      <label>氏名</label>
+                      <input className="form-input" name="name" value={editForm.name} onChange={handleEditFormChange} />
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>生年月日</label>
+                        <input className="form-input" type="date" name="birth_date" value={editForm.birth_date} onChange={handleEditFormChange} />
+                      </div>
+                      <div className="form-group">
+                        <label>性別</label>
+                        <select className="form-select" name="gender" value={editForm.gender} onChange={handleEditFormChange}>
+                          <option value="">未指定</option>
+                          <option value="男性">男児</option>
+                          <option value="女性">女児</option>
+                          <option value="その他">その他</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>診断・特性（複数はカンマ区切り）</label>
+                      <input className="form-input" name="diagnosis" value={editForm.diagnosis} onChange={handleEditFormChange} placeholder="例: ASD、ADHD" />
+                    </div>
+
+                    <p className="form-section-title">支援・通所情報</p>
+                    <div className="form-group">
+                      <label>受給者証番号</label>
+                      <input className="form-input" name="recipient_certificate_number" value={editForm.recipient_certificate_number} onChange={handleEditFormChange} />
+                    </div>
+                    <div className="form-group">
+                      <label>通所支援利用事業所（複数はカンマ区切り）</label>
+                      <input className="form-input" name="attending_facilities" value={editForm.attending_facilities} onChange={handleEditFormChange} />
+                    </div>
+
+                    <p className="form-section-title">所属・居住地</p>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>学校・園名</label>
+                        <input className="form-input" name="school_name" value={editForm.school_name} onChange={handleEditFormChange} />
+                      </div>
+                      <div className="form-group">
+                        <label>学校種別</label>
+                        <select className="form-select" name="school_type" value={editForm.school_type} onChange={handleEditFormChange}>
+                          <option value="">未指定</option>
+                          <option value="kindergarten">幼稚園</option>
+                          <option value="nursery">保育園</option>
+                          <option value="elementary">小学校</option>
+                          <option value="junior_high">中学校</option>
+                          <option value="high_school">高等学校</option>
+                          <option value="special_needs">特別支援学校</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>都道府県</label>
+                        <input className="form-input" name="prefecture" value={editForm.prefecture} onChange={handleEditFormChange} placeholder="例: 神奈川県" />
+                      </div>
+                      <div className="form-group">
+                        <label>市区町村</label>
+                        <input className="form-input" name="city" value={editForm.city} onChange={handleEditFormChange} placeholder="例: 横浜市" />
+                      </div>
+                    </div>
+
+                    <p className="form-section-title">保護者</p>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>父・氏名</label>
+                        <input className="form-input" name="guardian_father_name" value={editForm.guardian_father_name} onChange={handleEditFormChange} />
+                      </div>
+                      <div className="form-group">
+                        <label>母・氏名</label>
+                        <input className="form-input" name="guardian_mother_name" value={editForm.guardian_mother_name} onChange={handleEditFormChange} />
+                      </div>
+                    </div>
+
+                    <p className="form-section-title">メモ・特性</p>
+                    <div className="form-group">
+                      <label>自由記述</label>
+                      <textarea className="form-textarea" name="notes" value={editForm.notes} onChange={handleEditFormChange} />
+                    </div>
+
+                    {saveError && <p className="drawer-save-error">{saveError}</p>}
+                  </div>
+                  <div className="drawer-edit-actions">
+                    <button className="primary-button" onClick={handleEditSave} disabled={isSaving}>
+                      {isSaving ? '保存中...' : '保存する'}
+                    </button>
+                    <button className="secondary-button" onClick={handleEditCancel} disabled={isSaving}>
+                      キャンセル
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div className="subject-detail">
                 <div className="detail-avatar" style={{ backgroundColor: getGenderColor(selectedSubject.gender) }}>
                   {selectedSubject.avatar_url ? (
@@ -407,6 +630,12 @@ const ChildrenList: React.FC = () => {
                 <h3 className="detail-name">{selectedSubject.name}</h3>
 
                 <div className="detail-info">
+                  {selectedSubject.birth_date && (
+                    <div className="detail-row">
+                      <span className="detail-label">生年月日</span>
+                      <span className="detail-value">{selectedSubject.birth_date}</span>
+                    </div>
+                  )}
                   <div className="detail-row">
                     <span className="detail-label">年齢</span>
                     <span className="detail-value">{getAgeLabel(selectedSubject)}</span>
@@ -415,6 +644,30 @@ const ChildrenList: React.FC = () => {
                     <span className="detail-label">性別</span>
                     <span className="detail-value">{getGenderLabel(selectedSubject.gender)}</span>
                   </div>
+                  {selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0 && (
+                    <div className="detail-row">
+                      <span className="detail-label">診断・特性</span>
+                      <span className="detail-value">{selectedSubject.diagnosis.join('、')}</span>
+                    </div>
+                  )}
+                  <div className="detail-row">
+                    <span className="detail-label">受給者証番号</span>
+                    <span className="detail-value">{selectedSubject.recipient_certificate_number || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>データなし</span>}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">通所支援利用事業所</span>
+                    <span className="detail-value">
+                      {selectedSubject.attending_facilities && selectedSubject.attending_facilities.length > 0
+                        ? selectedSubject.attending_facilities.join('、')
+                        : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>データなし</span>}
+                    </span>
+                  </div>
+                  {selectedSubject.school_name && (
+                    <div className="detail-row">
+                      <span className="detail-label">所属</span>
+                      <span className="detail-value">{selectedSubject.school_name}{selectedSubject.school_type && `（${selectedSubject.school_type}）`}</span>
+                    </div>
+                  )}
                   {selectedSubject.cognitive_type && (
                     <div className="detail-row">
                       <span className="detail-label">認知タイプ</span>
@@ -430,6 +683,18 @@ const ChildrenList: React.FC = () => {
                       </span>
                     </div>
                   )}
+                  {selectedSubject.guardians && (() => {
+                    const g = typeof selectedSubject.guardians === 'string'
+                      ? JSON.parse(selectedSubject.guardians)
+                      : selectedSubject.guardians;
+                    const entries = Object.values(g) as Array<{ name: string; relationship: string }>;
+                    return entries.length > 0 ? entries.map((e, i) => (
+                      <div key={i} className="detail-row">
+                        <span className="detail-label">保護者（{e.relationship}）</span>
+                        <span className="detail-value">{e.name}</span>
+                      </div>
+                    )) : null;
+                  })()}
                   {selectedSubject.notes && (
                     <div className="detail-notes">
                       <span className="detail-label">メモ</span>
@@ -439,20 +704,23 @@ const ChildrenList: React.FC = () => {
                 </div>
 
                 <div className="detail-actions">
-                  <button className="primary-button">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ marginRight: '8px' }}>
-                      <path d="M4 13L9 18L16 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    個別支援計画を作成
-                  </button>
-                  <button className="secondary-button">
+                  <button className="secondary-button" onClick={() => handleEditStart(selectedSubject)}>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ marginRight: '8px' }}>
                       <path d="M14.8 4.2L15.8 5.2L7 14H6V13L14.8 4.2Z" stroke="currentColor" strokeWidth="1.5" />
                     </svg>
                     編集
                   </button>
+                  {profile?.role === 'admin' && (
+                    <button
+                      className="delete-subject-link"
+                      onClick={() => handleDeleteSubject(selectedSubject)}
+                    >
+                      児童情報を削除する
+                    </button>
+                  )}
                 </div>
               </div>
+              )}
             </div>
           </div>
         </>

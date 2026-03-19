@@ -628,11 +628,7 @@ Phase 2でアノテーションされた事実（annotated_facts_v1）:
         "methods": [
           "Phase 2の strength_potential と background に基づく支援者アクション",
           "氷山モデルアプローチ：行動の制止ではなく背景ニーズへの対処"
-        ],
-        "staff": "担当職種",
-        "timeline": "達成期間",
-        "notes": "特記事項 または「特記事項なし」",
-        "priority": 1
+        ]
       }}}}
     ],
 
@@ -640,19 +636,14 @@ Phase 2でアノテーションされた事実（annotated_facts_v1）:
       "goal": "家族支援の目標",
       "methods": [
         "具体的な家族支援の方法"
-      ],
-      "timeline": "6か月後",
-      "notes": "補足事項"
+      ]
     }}}},
 
     "transition_support": {{{{
       "goal": "移行支援の目標",
       "methods": [
         "具体的な連携方法"
-      ],
-      "partner_organization": "連携先機関名",
-      "timeline": "6か月後",
-      "notes": "補足事項"
+      ]
     }}}}
   }}}}
 }}}}
@@ -668,8 +659,6 @@ Phase 2でアノテーションされた事実（annotated_facts_v1）:
 4. **氷山モデルに基づく支援**: 表面の行動ではなく背景ニーズに対処すること
 5. **情報が不足している場合**: 「ヒアリングからは情報が得られていません」と記載すること。特に：
    - family_child_intentions.child/parents: 本人・保護者の直接的な発言がない場合
-   - transition_support.partner_organization: 連携先の情報がない場合
-6. **notes フィールドは必須**: 全ての support_item に notes フィールドを含めること
 
 **出力ルール**:
 - 必ず上記のJSON形式**のみ**を出力してください

@@ -2167,7 +2167,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                   <div className="doc-info-table">
                     <div className="doc-row">
                       <div className="doc-cell label large">総合的な支援の方針</div>
-                      <div className="doc-cell value" style={{ fontWeight: 500, lineHeight: 1.8 }}>
+                      <div className="doc-cell value">
                         <EditableField
                           planId={plan.id}
                           field="general_policy_user_edited"
@@ -2268,7 +2268,7 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                         <tr>
                           <th>項目</th>
                           <th>具体的な到達目標</th>
-                          <th>
+                          <th colSpan={2}>
                             具体的な支援内容・5領域との関係性等
                             <br />
                             <span style={{ fontSize: '10px', fontWeight: 'normal' }}>
@@ -2279,11 +2279,53 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                           <th>担当者<br />提供期間</th>
                           <th>留意事項</th>
                           <th>優先順位</th>
-                          <th>操作</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(plan.support_items_user_edited ?? plan.support_items_ai_generated ?? []).map((item, index) => (
+                        {/* All 7 rows from display_rows (plan_rules template) */}
+                        {(plan.display_rows ?? []).map((row, idx) => (
+                          <tr key={`dr-${idx}`} className="support-table-row">
+                            <td className="cell-category">
+                              {row.row_label}
+                            </td>
+                            <td className="cell-target">{row.target || ''}</td>
+                            <td className="cell-methods">
+                              {row.methods_text ? (
+                                <ul className="methods-list">
+                                  {row.methods_text.split('\n').filter(Boolean).map((line, i) => (
+                                    <li key={i}>{line.replace(/^• /, '')}</li>
+                                  ))}
+                                </ul>
+                              ) : ''}
+                            </td>
+                            <td className="cell-domain">
+                              {row.domain_category || ''}
+                            </td>
+                            <td className="cell-timeline">
+                              <select
+                                defaultValue={row.timeline_months}
+                                style={{
+                                  border: '1px solid #999',
+                                  borderRadius: '4px',
+                                  padding: '4px 6px',
+                                  fontSize: '12px',
+                                  background: '#fff',
+                                  color: '#222',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {Array.from({ length: 24 }, (_, i) => i + 1).map(m => (
+                                  <option key={m} value={m}>{m}ヶ月</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="cell-staff" style={{ whiteSpace: 'pre-line' }}>{row.staff}</td>
+                            <td className="cell-notes">{row.notes}</td>
+                            <td className="cell-priority">{row.priority}</td>
+                          </tr>
+                        ))}
+                        {/* Fallback: old rendering when display_rows is not available */}
+                        {!plan.display_rows && (plan.support_items_user_edited ?? plan.support_items_ai_generated ?? []).map((item, index) => (
                           <EditableTableRow
                             key={index}
                             planId={plan.id}
@@ -2294,25 +2336,6 @@ const SupportPlanCreate: React.FC<SupportPlanCreateProps> = ({ initialSubjectId,
                             onDelete={(idx) => handleSupportItemDelete(plan.id, idx)}
                           />
                         ))}
-                        {/* Add new row button */}
-                        <tr>
-                          <td colSpan={8} style={{ textAlign: 'center', padding: '12px' }}>
-                            <button
-                              onClick={() => handleAddSupportItem(plan.id)}
-                              style={{
-                                background: 'rgba(124, 77, 255, 0.1)',
-                                color: 'var(--accent-primary)',
-                                border: '1px dashed var(--accent-primary)',
-                                borderRadius: '6px',
-                                padding: '8px 16px',
-                                cursor: 'pointer',
-                                fontSize: '13px'
-                              }}
-                            >
-                              + 支援項目を追加
-                            </button>
-                          </td>
-                        </tr>
                       </tbody>
                     </table>
                   </div>

@@ -346,50 +346,72 @@ function App() {
                 }}>支援対象</span>
               </div>
             </div>
+            {(() => {
+              const schoolTypeLabels: Record<string, string> = {
+                kindergarten: '幼稚園',
+                nursery: '保育園',
+                elementary: '小学校',
+                junior_high: '中学校',
+                high_school: '高等学校',
+                special_needs: '特別支援学校',
+              };
+              const na = <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>データなし</span>;
+              const row = (label: string, value: React.ReactNode) => (
+                <div style={{ display: 'flex', gap: '8px', fontSize: '14px', alignItems: 'baseline' }}>
+                  <span style={{ color: 'var(--text-muted)', minWidth: '90px', flexShrink: 0 }}>{label}:</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{value}</span>
+                </div>
+              );
+              const guardianEntries: Array<{ name: string; relationship: string }> = (() => {
+                if (!selectedSubject.guardians) return [];
+                try {
+                  const g = typeof selectedSubject.guardians === 'string'
+                    ? JSON.parse(selectedSubject.guardians)
+                    : selectedSubject.guardians;
+                  return Object.values(g) as Array<{ name: string; relationship: string }>;
+                } catch { return []; }
+              })();
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
+                  {row('生年月日', selectedSubject.birth_date ? formatDateOnly(selectedSubject.birth_date) : na)}
+                  {row('年齢', selectedSubject.birth_date || selectedSubject.age ? `${calculateAge(selectedSubject.birth_date) ?? selectedSubject.age}歳` : na)}
+                  {row('性別', selectedSubject.gender
+                    ? (selectedSubject.gender === 'male' || selectedSubject.gender === '男性' ? '男性'
+                      : selectedSubject.gender === 'female' || selectedSubject.gender === '女性' ? '女性' : selectedSubject.gender)
+                    : na)}
+                  {row('診断・特性', selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0
+                    ? selectedSubject.diagnosis.join('、') : na)}
+                  {row('所属', selectedSubject.school_name
+                    ? `${selectedSubject.school_name}${selectedSubject.school_type ? `（${schoolTypeLabels[selectedSubject.school_type] || selectedSubject.school_type}）` : ''}`
+                    : na)}
+                  {row('居住地', (selectedSubject.prefecture || selectedSubject.city)
+                    ? `${selectedSubject.prefecture || ''}${selectedSubject.city ? ' ' + selectedSubject.city : ''}`
+                    : na)}
+                  {row('受給者証番号', selectedSubject.recipient_certificate_number || na)}
+                  {row('通所支援利用事業所', selectedSubject.attending_facilities && selectedSubject.attending_facilities.length > 0
+                    ? selectedSubject.attending_facilities.join('、')
+                    : na)}
+                  {row('保護者', guardianEntries.length > 0
+                    ? guardianEntries.map(e => `${e.name}（${e.relationship}）`).join('、')
+                    : na)}
+                </div>
+              );
+            })()}
             <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              padding: '10px 14px',
-              borderRadius: '10px',
-              border: '1px solid var(--border-color)',
-              background: 'var(--bg-secondary)'
+              color: 'var(--text-muted)',
+              fontSize: '13px',
+              lineHeight: '1.6',
+              maxWidth: '850px',
+              whiteSpace: 'pre-wrap',
+              padding: '8px 12px',
+              background: 'var(--bg-tertiary)',
+              borderRadius: '8px'
             }}>
-              <div style={{ display: 'flex', gap: '16px', fontSize: '15px', flexWrap: 'wrap' }}>
-                <div><span style={{ color: 'var(--text-muted)' }}>生年月日:</span> <span style={{ color: 'var(--text-primary)' }}>{formatDateOnly(selectedSubject.birth_date)}</span></div>
-                <div><span style={{ color: 'var(--text-muted)' }}>年齢:</span> <span style={{ color: 'var(--text-primary)' }}>{calculateAge(selectedSubject.birth_date) ?? '---'}歳</span></div>
-                <div><span style={{ color: 'var(--text-muted)' }}>性別:</span> <span style={{ color: 'var(--text-primary)' }}>{
-                  selectedSubject.gender === 'male' || selectedSubject.gender === '男性' ? '男性' :
-                    selectedSubject.gender === 'female' || selectedSubject.gender === '女性' ? '女性' :
-                      'その他'
-                }</span></div>
-              </div>
-              {(selectedSubject.diagnosis && selectedSubject.diagnosis.length > 0) && (
-                <div style={{ fontSize: '14px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>診断・特性:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.diagnosis.join(', ')}</span>
-                </div>
-              )}
-              {selectedSubject.school_name && (
-                <div style={{ fontSize: '14px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>所属:</span> <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.school_name} ({selectedSubject.school_type || '学校'})</span>
-                </div>
-              )}
+              <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>メモ: </span>
+              {selectedSubject.notes
+                ? <span style={{ color: 'var(--text-secondary)' }}>{selectedSubject.notes}</span>
+                : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>データなし</span>}
             </div>
-            {selectedSubject.notes && (
-              <p style={{
-                color: 'var(--text-muted)',
-                margin: '0',
-                fontSize: '13px',
-                lineHeight: '1.6',
-                maxWidth: '850px',
-                whiteSpace: 'pre-wrap',
-                padding: '8px 12px',
-                background: 'var(--bg-tertiary)',
-                borderRadius: '8px'
-              }}>
-                {selectedSubject.notes}
-              </p>
-            )}
           </div>
 
           <SupportPlanCreate initialSubjectId={selectedSubject.id} hideHeader={true} />

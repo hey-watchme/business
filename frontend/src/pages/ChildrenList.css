@@ -408,6 +408,24 @@
   margin-top: 32px;
 }
 
+.delete-subject-link {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: center;
+  opacity: 0.6;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.delete-subject-link:hover {
+  color: #ef4444;
+  opacity: 1;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .children-list {
@@ -502,10 +520,126 @@
 .registration-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
-/* Fix for browser default select styles */
+/* ===== Drawer edit form ===== */
+.drawer-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  align-items: stretch;
+}
+
+.drawer-edit-form .form-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 16px 0 6px;
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
+}
+
+.drawer-edit-form .form-section-title:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.drawer-edit-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.drawer-edit-form .form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.drawer-edit-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* Shared input / select / textarea inside drawer */
+.drawer-edit-form .form-input,
+.drawer-edit-form .form-select,
+.drawer-edit-form .form-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.drawer-edit-form .form-input:focus,
+.drawer-edit-form .form-select:focus,
+.drawer-edit-form .form-textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.12);
+}
+
+.drawer-edit-form .form-input::placeholder,
+.drawer-edit-form .form-textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.drawer-edit-form .form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+.drawer-edit-form .form-textarea {
+  min-height: 100px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+/* Save / cancel bar */
+.drawer-edit-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-secondary);
+  padding-bottom: 4px;
+}
+
+.drawer-edit-actions .primary-button {
+  flex: 1;
+}
+
+.drawer-save-error {
+  font-size: 13px;
+  color: var(--accent-danger, #ef4444);
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 8px;
+  margin-top: -4px;
+}
+
+/* Fix for browser default select styles (registration modal) */
 .form-select {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
